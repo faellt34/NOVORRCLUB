@@ -6,6 +6,9 @@ import AppLayout from "@/components/layout/AppLayout";
 import InfluencerDashboard from "@/pages/InfluencerDashboard";
 import PartnerDashboard from "@/pages/PartnerDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminManage from "@/pages/AdminManage";
+import Statement from "@/pages/Statement";
+import Ebooks from "@/pages/Ebooks";
 import ComingSoon from "@/pages/ComingSoon";
 
 const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
@@ -23,10 +26,12 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<RoleRedirect />} />
             <Route path="/influencer" element={<InfluencerDashboard />} />
+            <Route path="/influencer/extrato" element={<Statement />} />
             <Route path="/parceiro" element={<PartnerDashboard />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/gestao" element={<AdminManage />} />
             <Route path="/mensagens" element={<ComingSoon title="Mensagens" />} />
-            <Route path="/ebooks" element={<ComingSoon title="E-books & Guias Premium" />} />
+            <Route path="/ebooks" element={<Ebooks />} />
             <Route path="*" element={<RoleRedirect />} />
           </Route>
         </Routes>

@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, Users, QrCode, Gift, ChevronsUpDown, Crown, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, Users, QrCode, Gift, ChevronsUpDown, Crown, ShieldCheck, FileText, Settings } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { USERS } from "../../lib/mockData";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { ReferralDialog } from "../ReferralDialog";
 
 const MENUS = {
   influencer: [
     { to: "/influencer", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/influencer#campanhas", icon: Megaphone, label: "Campanhas" },
+    { to: "/influencer/extrato", icon: FileText, label: "Extrato Mensal" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens", badge: 3 },
     { to: "/ebooks", icon: BookOpen, label: "E-books & Guias" },
   ],
@@ -18,6 +21,7 @@ const MENUS = {
   ],
   admin: [
     { to: "/admin", icon: LayoutDashboard, label: "Visão Geral" },
+    { to: "/admin/gestao", icon: Settings, label: "Gestão" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens", badge: 5 },
     { to: "/ebooks", icon: BookOpen, label: "E-books & Guias" },
   ],
@@ -27,6 +31,7 @@ const ROLE_ICONS = { influencer: Crown, partner: QrCode, admin: ShieldCheck };
 
 export const SidebarContent = ({ onNavigate }) => {
   const { role, setRole, user } = useApp();
+  const [referralOpen, setReferralOpen] = useState(false);
   const items = MENUS[role];
 
   return (
@@ -82,7 +87,8 @@ export const SidebarContent = ({ onNavigate }) => {
           <NavLink
             key={item.to + item.label}
             to={item.to}
-            data-testid={`nav-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+            end
+            data-testid={`nav-${item.label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-")}`}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors ${
                 isActive && !item.to.includes("#")
@@ -109,10 +115,11 @@ export const SidebarContent = ({ onNavigate }) => {
           </div>
           <p className="text-sm font-semibold text-white mb-1">Indique um parceiro</p>
           <p className="text-xs text-slate-400 mb-3 leading-relaxed">Conhece um espaço premium? Ganhe bónus por indicação aprovada.</p>
-          <button data-testid="referral-button" className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press">
+          <button data-testid="referral-button" onClick={() => setReferralOpen(true)} className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press">
             Indicar agora
           </button>
         </div>
+        <ReferralDialog open={referralOpen} onOpenChange={setReferralOpen} />
         <p className="text-[10px] text-slate-600 text-center mt-3 flex items-center justify-center gap-1"><Users className="w-3 h-3" /> RBAC simulado · v1 protótipo</p>
       </div>
     </div>

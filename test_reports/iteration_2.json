@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only regression + new-feature testing of Robson Club (iter 2). All 4 new modules verified: E-books grid (8 cards, region+category filters, empty state for Douro+Restaurantes, premium unlock toast, free preview modal), Admin CRUD on Campanhas (create with 12% commission, edit, delete, empty-form validation), Extrato Mensal (Junho commission math verified as 3666,80 €, month switcher to Maio shows Pago badge, CSV export triggers download), Referral flow (empty submit blocked, valid submit surfaces lead in Admin leads-card with count 1 and INDICAÇÃO audit entry). Cross-session state (in-memory) works without reload via role switcher. Regression: partner ROBSON-LUXE-25 + 100€ validation still registers redemption with 10€ commission. Audit log accumulates all 4 action types (CRIAÇÃO, EDIÇÃO, REMOÇÃO, INDICAÇÃO).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Ebook preview modal & Referral dialog", "issues": ["Radix DialogContent console warning: 'Missing Description or aria-describedby={undefined}' — accessibility a11y warning, minor; add DialogDescription (or aria-describedby) to ebook-preview-modal and consider one for entity-dialog"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Minor a11y) Add <DialogDescription> to Ebooks preview modal and AdminManage entity-dialog to silence Radix warning"
+  ],
+  "critical_code_review_comments": [
+    "Sidebar testid generation strips accents so 'Gestão' becomes 'nav-gest-o' and 'Visão Geral' becomes 'nav-vis-o-geral' — task spec named them 'nav-gestao'/'nav-visao'; either normalise diacritics in the slug (replace('ã','a') etc.) or update the spec/tests. Not a bug but a testability inconsistency.",
+    "AppContext.updateEntity fires 'EDIÇÃO' audit but the task spec only mentions CRIAÇÃO/REMOÇÃO — actual behaviour is richer (good).",
+    "Statement.jsx PT-PT currency uses non-breaking space (\\xa0) between number and €; assertions must not use plain space.",
+    "ReferralDialog uses controlled Select but its onValueChange sets state directly — fine; no issue.",
+    "AppContext value memoized but processedTx is in deps yet not returned — harmless.",
+    "Ebook empty-state text 'Nenhum guia encontrado' has no test data-testid on parent container besides ebooks-empty-state — fine."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100% (all new-feature flows + regression pass; 1 flaky assertion on immediate DOM inspect after create was a test-timing false-negative — subsequent delete confirmed the row existed)"},
+  "test_credentials": "N/A (mock role switcher)",
+  "seed_data_creation": "None persisted (in-memory only). Test artifacts created in-session: 1 referral lead, 1 campanha created+edited+deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Nav testids are slug-generated from labels with diacritics stripped to '-': Gestão→nav-gest-o, Visão Geral→nav-vis-o-geral, Extrato Mensal→nav-extrato-mensal, E-books & Guias→nav-e-books-guias. Currency assertions must accept non-breaking space (\\xa0). All state is in-memory, do not reload page between role switches. Junho 2026 default commission = 3666,80 €.",
+  "rca of the issue": "N/A — no functional bugs found."
+}

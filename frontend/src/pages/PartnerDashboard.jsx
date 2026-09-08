@@ -5,7 +5,7 @@ import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
 import { INFLUENCER_LEADERBOARD, eur, num } from "../lib/mockData";
 import { Input } from "../components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 
 export default function PartnerDashboard() {
   const { redemptions, validateCoupon, previewCoupon } = useApp();
@@ -168,7 +168,10 @@ export default function PartnerDashboard() {
 
       <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
         <DialogContent data-testid="scanner-modal" className="max-w-sm">
-          <DialogHeader><DialogTitle>A escanear QR Code...</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>A escanear QR Code...</DialogTitle>
+            <DialogDescription>Aponte a câmara para o QR do cliente</DialogDescription>
+          </DialogHeader>
           <div className="relative aspect-square rounded-2xl bg-slate-950 overflow-hidden flex items-center justify-center">
             <div className="w-2/3 aspect-square border-2 border-purple-400/60 rounded-2xl" />
             <div className="scanner-line absolute left-[10%] right-[10%] h-0.5 bg-purple-400 shadow-[0_0_12px_rgba(167,139,250,0.9)]" />

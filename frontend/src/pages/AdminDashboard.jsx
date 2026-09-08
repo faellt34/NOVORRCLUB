@@ -1,10 +1,10 @@
-import { Euro, HandCoins, Users, Store, Megaphone, ScrollText } from "lucide-react";
+import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox } from "lucide-react";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
 import { CAMPAIGNS, eur } from "../lib/mockData";
 
 export default function AdminDashboard() {
-  const { auditLog } = useApp();
+  const { auditLog, leads } = useApp();
 
   return (
     <div className="space-y-6">
@@ -19,6 +19,31 @@ export default function AdminDashboard() {
         <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" value="24" trend="+4,2%" />
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" value="18" trend="+12,5%" />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" value="31" trend="+8,0%" />
+      </div>
+
+      <div data-testid="admin-leads-card" className="card-soft p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Inbox className="w-5 h-5 text-purple-600" />
+          <h3 className="text-lg font-semibold text-slate-900">Indicações de Parceiros</h3>
+          {leads.length > 0 && (
+            <span data-testid="leads-count-badge" className="min-w-[20px] h-5 px-1.5 rounded-full bg-purple-600 text-white text-[11px] font-bold flex items-center justify-center">{leads.length}</span>
+          )}
+        </div>
+        {leads.length === 0 ? (
+          <p data-testid="leads-empty-state" className="text-sm text-slate-400 py-6 text-center">Sem indicações nesta sessão. Envie uma via "Indicar agora" na sidebar.</p>
+        ) : (
+          <div className="space-y-3">
+            {leads.map((l) => (
+              <div key={l.id} data-testid={`lead-${l.id}`} className="flex items-center justify-between gap-3 pb-3 border-b border-slate-50 last:border-0 fade-up">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{l.nome}</p>
+                  <p className="text-xs text-slate-500">{l.categoria} · {l.cidade} · {l.contacto}{l.nota ? ` — "${l.nota}"` : ""}</p>
+                </div>
+                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-purple-50 text-purple-700 shrink-0">{l.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

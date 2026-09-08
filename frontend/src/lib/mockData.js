@@ -91,6 +91,72 @@ export const PARTNER_COUPONS = {
   "ROBSON-DOURO-10": { influencer: "Robson Oliveira", campaign: "Douro Harvest Tour", discountPct: 10, commissionRate: 0.08, status: "Expirada" },
 };
 
+const IMG = {
+  rooftop: "https://images.unsplash.com/photo-1786520403993-e1dfdc0864b5?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  dish: "https://images.unsplash.com/photo-1786520403836-bbb95ed8904f?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  porto: "https://images.unsplash.com/photo-1634057306449-51bc02166e3d?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+  hotel: "https://images.unsplash.com/photo-1589125753960-3793f25d50dc?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
+};
+
+export const EBOOKS = [
+  { id: "e1", title: "Rooftops Secretos de Lisboa", region: "Lisboa", category: "Rooftops", premium: true, pages: 42, cover: IMG.rooftop, desc: "Os 12 rooftops com as melhores vistas e cocktails de autor da capital." },
+  { id: "e2", title: "Guia Gastronómico Estrelado", region: "Lisboa", category: "Restaurantes", premium: false, pages: 36, cover: IMG.dish, desc: "Menus de degustação imperdíveis, do Chiado a Belém." },
+  { id: "e3", title: "Porto Boutique & Heritage", region: "Porto", category: "Hotéis", premium: true, pages: 54, cover: IMG.porto, desc: "Hotéis-palacete e quartos com vista para o Douro." },
+  { id: "e4", title: "Wine Bars da Ribeira", region: "Porto", category: "Restaurantes", premium: false, pages: 28, cover: IMG.dish, desc: "Onde provar os melhores Vinhos do Porto junto ao rio." },
+  { id: "e5", title: "Resorts Escondidos do Algarve", region: "Algarve", category: "Hotéis", premium: true, pages: 48, cover: IMG.hotel, desc: "Luxo discreto entre falésias, dos Salgados à Ponta da Piedade." },
+  { id: "e6", title: "Sunset Spots do Algarve", region: "Algarve", category: "Rooftops", premium: false, pages: 22, cover: IMG.rooftop, desc: "Terraços e beach clubs para o pôr do sol perfeito." },
+  { id: "e7", title: "Douro: Quintas & Vindimas", region: "Douro", category: "Passeios", premium: true, pages: 60, cover: IMG.porto, desc: "Roteiro completo de quintas, provas e cruzeiros privados." },
+  { id: "e8", title: "Hotéis com Azulejo & História", region: "Lisboa", category: "Hotéis", premium: true, pages: 38, cover: IMG.hotel, desc: "Dormir em fachadas pombalinas restauradas ao detalhe." },
+];
+
+export const EBOOK_REGIONS = ["Todas", "Lisboa", "Porto", "Algarve", "Douro"];
+export const EBOOK_CATEGORIES = ["Todas", "Restaurantes", "Hotéis", "Rooftops", "Passeios"];
+
+export const STATEMENT_MONTHS = [
+  {
+    id: "2026-06", label: "Junho 2026", status: "Pendente",
+    lines: [
+      { campaign: "Sunset Sessions Verão", partner: "Tivoli Sky Bar", uses: 148, revenue: 16240, rate: 0.10 },
+      { campaign: "Menu Degustação Estrela", partner: "Belcanto", uses: 96, revenue: 10480, rate: 0.10 },
+      { campaign: "Wine Escape Porto", partner: "The Yeatman", uses: 71, revenue: 8290, rate: 0.12 },
+    ],
+  },
+  {
+    id: "2026-05", label: "Maio 2026", status: "Pago", paidAt: "2026-06-05",
+    lines: [
+      { campaign: "Sunset Sessions Verão", partner: "Tivoli Sky Bar", uses: 132, revenue: 14380, rate: 0.10 },
+      { campaign: "Menu Degustação Estrela", partner: "Belcanto", uses: 104, revenue: 11120, rate: 0.10 },
+      { campaign: "Algarve Golden Week", partner: "Vila Vita Parc", uses: 88, revenue: 9840, rate: 0.10 },
+      { campaign: "Wine Escape Porto", partner: "The Yeatman", uses: 63, revenue: 7110, rate: 0.12 },
+    ],
+  },
+  {
+    id: "2026-04", label: "Abril 2026", status: "Pago", paidAt: "2026-05-05",
+    lines: [
+      { campaign: "Sunset Sessions Verão", partner: "Tivoli Sky Bar", uses: 112, revenue: 12060, rate: 0.10 },
+      { campaign: "Douro Harvest Tour", partner: "Quinta do Crasto", uses: 58, revenue: 5240, rate: 0.08 },
+      { campaign: "Menu Degustação Estrela", partner: "Belcanto", uses: 91, revenue: 9630, rate: 0.10 },
+    ],
+  },
+];
+
+export const ADMIN_SEED = {
+  usuarios: [
+    { id: "u1", nome: "Robson Oliveira", email: "robson@robson.club", papel: "Influencer", status: "Ativo" },
+    { id: "u2", nome: "Marta Vasconcelos", email: "marta@robson.club", papel: "Influencer", status: "Ativo" },
+    { id: "u3", nome: "Tivoli Sky Bar", email: "gerencia@tivolisky.pt", papel: "Parceiro", status: "Ativo" },
+    { id: "u4", nome: "Admin Geral", email: "admin@robson.club", papel: "Admin", status: "Ativo" },
+  ],
+  influencers: [
+    { id: "if1", nome: "Robson Oliveira", handle: "@robson.luxe", cidade: "Lisboa", status: "Ativo" },
+    { id: "if2", nome: "Marta Vasconcelos", handle: "@marta.lx", cidade: "Lisboa", status: "Ativo" },
+    { id: "if3", nome: "Diogo Fontes", handle: "@diogo.eats", cidade: "Porto", status: "Ativo" },
+    { id: "if4", nome: "Inês Castelo", handle: "@ines.castelo", cidade: "Algarve", status: "Suspenso" },
+  ],
+  parceiros: PARTNERS.map((p) => ({ id: p.id, nome: p.name, categoria: p.category, cidade: p.city, status: "Ativo" })),
+  campanhas: CAMPAIGNS.map((c) => ({ id: c.id, nome: c.name, parceiro: c.partner, cupom: c.coupon, desconto: String(c.discountPct), comissao: String(c.commissionRate * 100), validade: c.validUntil, status: c.status })),
+};
+
 export const eur = (v) =>
   new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", maximumFractionDigits: v % 1 === 0 ? 0 : 2 }).format(v);
 

@@ -17,16 +17,21 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Partner (Tivoli Sky Bar): valida cupons, vê receita atribuída e comissões devidas
 
 ## Implementado (2026-06)
-### Fases 1-2 completas ✅
+### Fases 1-2 completas ✅ (testado: iteration_1.json — 100%)
 - Shell: sidebar escura desktop + drawer mobile, logo, perfil com role switcher, badge Mensagens, card "Indique um parceiro"
 - Influencer Dashboard: saudação, seletor de período (7/30/90 dias, KPIs recalculam), sino de notificações, 4 KPI cards com variação %, gráfico de área roxo "Evolução de Utilizações", Top Parceiros, tabela Campanhas Ativas com busca + filtro de status + empty state, Cupom em Destaque (pílula roxa + QR + copiar/download/partilhar com toasts)
 - Partner Dashboard: 5 KPIs computados live das redenções, leaderboard de influencers, formulário de validação (código ou scanner simulado → preview do cupom → cálculo live de desconto/comissão → validar → recibo + histórico + KPIs atualizam), taxa travada por redenção, idempotência simulada (janela 5s), export CSV real (blob download)
 - Admin (leve): métricas globais, campanhas recentes com badges, Audit Log somente-leitura (recebe entradas REDENÇÃO da sessão)
 - Testado E2E: iteration_1.json — 100% frontend pass
 
+### Fases 3-4 (parcial) ✅ (testado: iteration_2.json — 100%)
+- E-books Premium (`/ebooks`): grid de 8 guias com filtros por região (Lisboa/Porto/Algarve/Douro) e categoria; cards premium bloqueados (capa desfocada + badge + toast de subscrição), gratuitos com modal de preview; empty state
+- Admin CRUD (`/admin/gestao`): tabs Usuários/Influencers/Parceiros/Campanhas, create/edit/delete config-driven com dialog, taxa de comissão definida na campanha, validação de campos, tudo gera entradas no audit log (CRIAÇÃO/EDIÇÃO/REMOÇÃO)
+- Extrato Mensal (`/influencer/extrato`): seletor de mês, KPIs do mês, tabela por campanha com taxa travada, total de comissão, status Pago/Pendente (payout offline), export CSV
+- Indicação funcional: "Indicar agora" abre formulário (nome, categoria, cidade, contacto, nota) → lead aparece no admin (card "Indicações de Parceiros" + badge) + entrada INDICAÇÃO no audit log
+
 ## Backlog priorizado
-- P0 (Fase 3): Admin CRUD completo (Usuários, Influencers, Parceiros, Campanhas), audit log persistente
-- P1 (Fase 4): E-books/Guias premium (tags de local + categorias, preview público + premium bloqueado), hub de mensagens + notificações, formulário de indicação de parceiro funcional, skeletons/estados de erro
+- P1 (Fase 4 restante): hub de mensagens + notificações automáticas, skeletons/estados de erro adicionais
 - P2 (Fase 5): Backend real FastAPI + MongoDB (idempotência/trava de comissão/audit server-side), Stripe Connect payouts, Object Storage e-books, e-mail
 
 ## Notas
