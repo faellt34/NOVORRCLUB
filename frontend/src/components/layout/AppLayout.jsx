@@ -1,18 +1,11 @@
 import { useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { Menu, X, Crown } from "lucide-react";
 import { SidebarContent } from "./Sidebar";
 
-const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
-
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigate = useNavigate();
-
-  const handleRoleNavigate = (role) => {
-    setMobileOpen(false);
-    navigate(ROLE_HOME[role]);
-  };
+  const handleRoleNavigate = () => setMobileOpen(false);
 
   return (
     <div className="min-h-screen bg-[#F8F9FC]">

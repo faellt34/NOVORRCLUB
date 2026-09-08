@@ -1,0 +1,33 @@
+{
+  "summary": "Full E2E of Robson Club SaaS (FastAPI+Mongo backend + React frontend via public URL). 25/25 backend pytest cases pass. Frontend flows tested: login/logout/route guards, RBAC redirect, influencer dashboard (period, featured coupon, campaigns, statement), partner coupon validation (invalid=red / valid=green preview, live calc, POST redemption persists after reload), referral submission, admin lead approval, admin CRUD (create/list campaigns, users no password column, ebooks 12, parceiros grows after approval), messages (admin→influencer new-conversation + send + reply, unread badge=1), ebooks filters (Espanha => 1 card), preview modal, notifications badge.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/mensagens (influencer)", "issues": ["Loading state text 'A carregar...' shown in the conversation list panel is acceptable but there is no data-testid for it; may cause selector races in automation. Consider adding data-testid='conversations-loading'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "seed.py stores ADMIN_PASSWORD in plain env and re-hashes on every startup if password verify fails — OK because seed rehashes; verified idempotent.",
+    "routes_data.py:151 duplicate-guard window is 10s partner+code+amount — user may legitimately re-key same amount within 10s; consider surfacing a clearer 409 message with cool-down time (currently 'Redenção duplicada bloqueada (idempotência).').",
+    "routes_admin.py list_items has no role dependency on the endpoint level — protected via router-level Depends(require_role('admin')). Good.",
+    "public_user strips password_hash; verified by listing /api/admin/usuarios.",
+    "routes_messages.allowed_contacts: partner contacts = admins + users of influencers of partner's campaigns; influencer contacts = admins + users tied to partners of influencer's campaigns. Belcanto (p2) has campaign c2 for if1, so robson can talk to reservas@belcanto.pt as expected.",
+    "Cookie set with SameSite=None+Secure — fine for cross-site preview URL; also token returned in JSON body used by frontend axios (localStorage 'robson_token').",
+    "No CORS_ORIGINS restriction (defaults to '*') combined with allow_credentials=True is unusual; browsers will treat '*' as invalid when credentials=true. Since frontend uses Bearer via header (not cookies), this doesn't break the app, but recommend setting explicit origins for production."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/backend/tests/__init__.py"],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "100% of critical flows"},
+  "test_credentials": "admin@robson.club/admin123, robson@robson.club/robson123, gerencia@tivolisky.pt/tivoli123 — all from /app/memory/test_credentials.md",
+  "seed_data_creation": "During tests: created ephemeral leads/partners/campaigns/users prefixed with random UUIDs. Some test-created campaigns (UI-TEST-*, TEST-*) may remain in DB; no cleanup impacts prod flows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend fully green. Frontend flows all working. Redemptions with same partner+code+amount within 10s are rejected with 409 by design (idempotency guard). Admin demo login = adm-2 (admin@robson.club). Owner admin adm-1 = faellt@gmail.com/Robson2026!. Note CORS_ORIGINS='*' + credentials=true is a latent config smell but does not break current flows since frontend uses Bearer header.",
+  "rca of the issue": "N/A — no bugs found."
+}
