@@ -1,0 +1,136 @@
+{
+  "project_name": "Robson Club — Multi-Tenant Luxury Experience SaaS",
+  "archetype": "LUXURY_PRECISION_HYBRID",
+  "theme_strategy": {
+    "default_mode": "light",
+    "background_canvas": "#F8F9FC",
+    "surface_cards": "#FFFFFF",
+    "sidebar_surface": "#0C0A14",
+    "sidebar_surface_border": "#1E1A2E",
+    "accent_primary": "#7C3AED",
+    "accent_primary_hover": "#6D28D9",
+    "accent_soft_purple": "#F3E8FF",
+    "accent_pill_badge": "#EDE9FE",
+    "positive_trend": "#10B981",
+    "warning_badge": "#F59E0B",
+    "neutral_text_primary": "#0F172A",
+    "neutral_text_secondary": "#64748B",
+    "border_subtle": "#E2E8F0"
+  },
+  "typography": {
+    "font_family_heading": "Cabinet Grotesk, Plus Jakarta Sans, system-ui, sans-serif",
+    "font_family_body": "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "scale": {
+      "h1": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
+      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-slate-900",
+      "h3": "text-lg font-semibold text-slate-900",
+      "kpi_value": "text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900",
+      "kpi_label": "text-xs font-semibold uppercase tracking-wider text-slate-500",
+      "body": "text-sm text-slate-600 leading-relaxed",
+      "badge": "text-xs font-medium px-2.5 py-1 rounded-full",
+      "coupon_pill": "font-mono font-bold tracking-widest text-sm uppercase px-3 py-1.5 rounded-lg"
+    }
+  },
+  "visual_enhancers": {
+    "sidebar": {
+      "background": "bg-[#0C0A14]",
+      "border": "border-r border-[#1E1A2E]",
+      "active_item": "bg-gradient-to-r from-purple-600/20 to-purple-500/10 text-purple-300 border-l-2 border-purple-500 font-medium",
+      "hover_item": "hover:bg-white/5 hover:text-white transition-colors",
+      "user_profile_card": "p-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between",
+      "referral_card": "p-4 rounded-2xl bg-gradient-to-br from-purple-900/40 via-purple-950/30 to-[#120F24] border border-purple-500/20 text-white"
+    },
+    "cards": {
+      "kpi_card": "bg-white rounded-2xl border border-slate-100/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 hover:shadow-[0_8px_30px_-6px_rgba(124,58,237,0.08)] transition-all",
+      "icon_wrapper": "w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-semibold",
+      "badge_growth": "inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md"
+    },
+    "charts": {
+      "area_gradient_id": "purpleGradient",
+      "stroke_color": "#7C3AED",
+      "fill_start": "rgba(124, 58, 237, 0.35)",
+      "fill_end": "rgba(124, 58, 237, 0.0)"
+    }
+  },
+  "roles_and_views": {
+    "role_switcher": {
+      "description": "Simulated multi-tenant selector (Admin, Influencer 'Robson', Partner 'Restaurante Tivoli Lisboa')",
+      "default_role": "influencer"
+    },
+    "influencer_dashboard": {
+      "greeting": "Olá, Robson!",
+      "subheading": "Painel de desempenho e atribuição de parcerias de luxo",
+      "kpis": [
+        {"id": "coupons_used", "label": "Cupons Utilizados", "value": "1.284", "trend": "+18.4%", "period": "vs mês anterior"},
+        {"id": "clients_impacted", "label": "Clientes Impactados", "value": "8.420", "trend": "+12.1%", "period": "vs mês anterior"},
+        {"id": "generated_revenue", "label": "Receita Gerada", "value": "€ 84.350", "trend": "+24.8%", "period": "vs mês anterior"},
+        {"id": "commission", "label": "Sua Comissão (10%)", "value": "€ 8.435", "trend": "+24.8%", "period": "vs mês anterior"}
+      ],
+      "featured_coupon": {
+        "code": "ROBSON-LUXE-25",
+        "discount": "15% OFF em experiências selecionadas",
+        "qr_display": true,
+        "share_actions": ["Copiar Link", "Download QR", "Partilhar WhatsApp"]
+      },
+      "active_campaigns_columns": ["Parceiro / Local", "Cidade", "Categoria", "Comissão", "Cupons", "Receita Gerada", "Status", "Ações"]
+    },
+    "partner_dashboard": {
+      "name": "Tivoli Sky Bar Lisboa",
+      "kpis": [
+        {"id": "attributed_revenue", "label": "Receita Atribuída", "value": "€ 42.180", "trend": "+16.2%"},
+        {"id": "redemptions", "label": "Redenções / Cupons", "value": "392", "trend": "+9.5%"},
+        {"id": "discounts_granted", "label": "Descontos Concedidos", "value": "€ 6.320", "trend": "-2.1%"},
+        {"id": "commission_due", "label": "Comissão Devida a Influencers", "value": "€ 4.218", "trend": "+16.2%"},
+        {"id": "average_ticket", "label": "Ticket Médio", "value": "€ 107,60", "trend": "+6.8%"}
+      ],
+      "validation_tool": {
+        "title": "Validação Rápida de Cupom",
+        "fields": ["Código do Cupom", "Valor da Conta (€)", "Cálculo Dinâmico de Comissão e Desconto", "Botão Validar Venda"],
+        "simulated_scanner_modal": true
+      }
+    }
+  },
+  "image_urls": {
+    "lisbon_rooftop_cocktail": {
+      "url": "https://images.unsplash.com/photo-1786520403993-e1dfdc0864b5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxmaW5lJTIwZGluaW5nJTIwcmVzdGF1cmFudCUyMGNvY2t0YWlsJTIwcm9vZnRvcHxlbnwwfHx8fDE3ODg5MDgxNTB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Rooftop com vista panorâmica ao pôr do sol em Lisboa",
+      "category": "partner_card_cover"
+    },
+    "fine_dining_dish": {
+      "url": "https://images.unsplash.com/photo-1786520403836-bbb95ed8904f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxmaW5lJTIwZGluaW5nJTIwcmVzdGF1cmFudCUyMGNvY2t0YWlsJTIwcm9vZnRvcHxlbnwwfHx8fDE3ODg5MDgxNTB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Prato de alta gastronomia com atum braseado e pimenta rosa",
+      "category": "partner_experience_detail"
+    },
+    "porto_heritage_architecture": {
+      "url": "https://images.unsplash.com/photo-1634057306449-51bc02166e3d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHw0fHxsdXh1cnklMjBob3RlbCUyMGxpc2JvbiUyMHBvcnRvfGVufDB8fHx8MTc4ODkwODE1MHww&ixlib=rb-4.1.0&q=85",
+      "description": "Arquitetura histórica do Porto com telhados e azulejos clássicos",
+      "category": "partner_location_porto"
+    },
+    "lisbon_azulejo_hotel": {
+      "url": "https://images.unsplash.com/photo-1589125753960-3793f25d50dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBob3RlbCUyMGxpc2JvbiUyMHBvcnRvfGVufDB8fHx8MTc4ODkwODE1MHww&ixlib=rb-4.1.0&q=85",
+      "description": "Fachada nobre com azulejos e varandas de ferro forjado",
+      "category": "partner_boutique_hotel"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use JavaScript (.js / .jsx), NOT TypeScript (.tsx), as per project specifications.",
+    "Implement the full Robson Club Multi-Tenant SaaS UI with interactive role switching: 'Influencer (Robson)', 'Parceiro (Tivoli Lisboa)', and 'Admin Geral'.",
+    "Follow the user locked visual direction strictly: Light canvas (#F8F9FC / white cards), rich purple accent (#7C3AED / #6D28D9 / soft #EDE9FE), deep obsidian-purple sidebar (#0C0A14), soft card drop shadows, rounded pill badges.",
+    "Provide responsive drawer / mobile navigation toggle for smaller screens.",
+    "Include high fidelity Recharts AreaChart with purple gradient fill for 'Evolução de Utilizações'.",
+    "Interactive Coupon Redemption validator with live discount calculation, receipt modal, and mock camera scanner modal.",
+    "Ensure every interactive and key informational element contains a clear data-testid attribute in kebab-case (e.g. data-testid='role-switcher-dropdown', data-testid='kpi-revenue-card', data-testid='validate-coupon-button', data-testid='qr-code-featured-card').",
+    "Set language strictly to PT-PT ('Regiões: Lisboa, Porto, Algarve, Douro', 'Partilhar', 'Receita Gerada', 'Comissão Devida', currency '€').",
+    "Export to CSV simulated functionality with Sonner toast feedback."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
+    "tone": "Ultra-clean European luxury SaaS for high-end hospitality & lifestyle creators",
+    "forbidden_colors": ["#7351B7 (flat default AI purple)", "#1B93A4 (teal dashboard cliché)"],
+    "toast_library": "sonner (use Sonner toast for copy link, coupon validation, partner referral actions)",
+    "no_universal_transition": true,
+    "no_centered_app_container": true,
+    "interactive_feedback": "Every button has active press scales and hover tint states with high contrast",
+    "contrast_compliance": "APCA and WCAG AA standard met for all dark sidebar text and light card text"
+  }
+}
