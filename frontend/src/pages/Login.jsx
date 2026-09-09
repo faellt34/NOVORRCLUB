@@ -3,6 +3,8 @@ import { useNavigate, Link } from "react-router-dom";
 import { Crown, Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
+import { useT } from "../context/I18nContext";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
 import { apiError } from "../lib/api";
 import { Input } from "../components/ui/input";
 
@@ -16,6 +18,7 @@ const DEMO = [
 
 export default function Login() {
   const { login } = useApp();
+  const { t } = useT();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +33,7 @@ export default function Login() {
     setLoading(true); setError("");
     try {
       const u = await login(em.trim(), pw);
-      toast.success(`Bem-vindo, ${u.nome.split(" ")[0]}!`);
+      toast.success(`${t("welcome")}, ${u.nome.split(" ")[0]}!`);
       navigate(ROLE_HOME[u.role] || "/");
     } catch (err) {
       setError(apiError(err));
@@ -47,34 +50,35 @@ export default function Login() {
         <div className="relative flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-6 h-6" /></div>
           <div>
-            <p className="font-display font-bold text-xl leading-tight">Robson Club</p>
+            <p className="font-display font-bold text-xl leading-tight">ןןClub</p>
             <p className="text-[11px] uppercase tracking-widest text-purple-300/80">Luxury Experiences</p>
           </div>
         </div>
         <div className="relative max-w-md">
-          <p className="text-purple-300 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Plataforma de parcerias</p>
-          <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">Influência que se converte em receita mensurável.</h1>
-          <p className="text-slate-400 leading-relaxed">Cupões, QR codes, validação em loja e comissões travadas por redenção — tudo com audit log server-side.</p>
+          <p className="text-purple-300 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> {t("heroTag")}</p>
+          <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">{t("heroTitle")}</h1>
+          <p className="text-slate-400 leading-relaxed">{t("heroText")}</p>
         </div>
-        <p className="relative text-xs text-slate-500">© 2026 Robson Club · Lisboa · Porto · Algarve · Douro · Internacional</p>
+        <div className="relative flex items-center justify-between"><p className="text-xs text-slate-500">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md">
+          <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>
-            <p className="font-display font-bold text-lg">Robson Club</p>
+            <p className="font-display font-bold text-lg">ןןClub</p>
           </div>
-          <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Entrar na sua área</h2>
-          <p className="text-sm text-slate-500 mt-1 mb-8">Aceda ao painel de Influencer, Parceiro ou Admin.</p>
+          <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("loginTitle")}</h2>
+          <p className="text-sm text-slate-500 mt-1 mb-8">{t("loginSub")}</p>
 
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Email</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("email")}</label>
               <Input data-testid="login-email-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@robson.club" className="h-11 rounded-xl bg-white" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Palavra-passe</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("password")}</label>
               <div className="relative">
                 <Input data-testid="login-password-input" type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="h-11 rounded-xl bg-white pr-11" />
                 <button type="button" data-testid="toggle-password-visibility" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
@@ -84,15 +88,19 @@ export default function Login() {
             </div>
             {error && <p data-testid="login-error" className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             <div className="flex justify-end">
-              <Link to="/esqueci-password" data-testid="forgot-password-link" className="text-xs font-semibold text-purple-700 hover:underline">Esqueci a palavra-passe</Link>
+              <Link to="/esqueci-password" data-testid="forgot-password-link" className="text-xs font-semibold text-purple-700 hover:underline">{t("forgot")}</Link>
             </div>
             <button type="submit" disabled={loading} data-testid="login-submit-button" className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press">
-              <LogIn className="w-4 h-4" /> {loading ? "A entrar..." : "Entrar"}
+              <LogIn className="w-4 h-4" /> {loading ? t("entering") : t("enter")}
             </button>
           </form>
 
           <div className="mt-8 p-4 rounded-2xl bg-white border border-slate-200">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Contas de demonstração</p>
+            <p className="text-sm text-slate-600 text-center">Ainda não tem conta? <Link to="/registar" data-testid="register-link" className="font-semibold text-purple-700 hover:underline">Criar conta</Link></p>
+          </div>
+
+          <div className="mt-4 p-4 rounded-2xl bg-white border border-slate-200">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{t("demo")}</p>
             <div className="grid grid-cols-3 gap-2">
               {DEMO.map((d) => (
                 <button key={d.label} type="button" data-testid={`demo-login-${d.label.toLowerCase()}`} onClick={(e) => submit(e, d)} className="py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold btn-press">
@@ -100,7 +108,7 @@ export default function Login() {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] text-slate-400 mt-3">Clique para preencher e entrar automaticamente.</p>
+            <p className="text-[11px] text-slate-400 mt-3">{t("demoHint")}</p>
           </div>
         </div>
       </div>

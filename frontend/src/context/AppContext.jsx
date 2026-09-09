@@ -39,7 +39,13 @@ export const AppProvider = ({ children }) => {
     setUser(null);
   };
 
-  const value = useMemo(() => ({ user, role: user?.role, login, logout, unread, refreshUnread }), [user, unread, refreshUnread]);
+  const refreshUser = async () => {
+    const { data } = await api.get("/auth/me");
+    setUser(data);
+    return data;
+  };
+
+  const value = useMemo(() => ({ user, role: user?.role, login, logout, refreshUser, unread, refreshUnread }), [user, unread, refreshUnread]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 

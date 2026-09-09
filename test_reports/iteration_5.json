@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 5 tests: NEW features — Statement PDF (influencer download + 404 empty month + 403 partner), Feedback create+admin status flow (Novo → Em análise, invalid rejected, influencer 403 on admin listing, admin gets 'feedback' notification), Cancel subscription (404 when no active) + GET /payments/subscription, Forgot-password with RESEND_API_KEY vazio (message mentions 'administrador', admin sees pedido de marta with emailed=false), Regression (login 3 roles, /dashboard/partner, /admin/campanhas, /ebooks). Backend: 13/13 pytest passes (test_iter5.py). Frontend: /login mostra language-switcher, lang-en→'Sign in to your area', lang-es→'Entrar en tu área', persiste em localStorage após reload, lang-pt repõe. login-privacy-link → /privacidade (privacy-title 'Política de Privacidade') + privacy-back OK. Influencer: sidebar feedback-button → feedback-dialog → mensagem ≥5 chars → toast 'Obrigado! Sugestão enviada à equipa.' e dialog fecha; sidebar language-switcher lang-en muda nav labels (nav-extrato-mensal='Monthly Statement', nav-e-books-guias='E-books & Guides'); privacy-link visível; statement-pdf-button faz download com resposta /api/statements/{month}/pdf 200 application/pdf (~2937 bytes stub-month, real months >1000 bytes); /ebooks em EN mostra 'Buy for' nos botões e 'Subscribe Premium' no subscribe-button. Admin: /admin mostra admin-feedback-card com a sugestão criada, feedback-status-* é um native <select> — mudar para 'Implementado' persiste após reload; admin-reset-requests-card mostra pedido de Marta Vasconcelos com copy-reset-link-*.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/ebooks (EN)", "issues": ["Language toggle in sidebar traduz cabeçalhos globais (ebooksTitle, subscribe-button, buyFor no botão) mas os textos internos dos cards de ebook — badges como 'Premium', 'PT', tags de tipo (Rooftops, Restaurantes, Hotéis), filtros (Todos/Portugal/Espanha) e infos como 'páginas'/'PDF em breve' — permanecem em Português mesmo com lang=en/es. Não é bloqueante, apenas i18n parcial."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter5.py",
+    "/app/test_reports/pytest/iter5.xml"
+  ],
+  "action_items": [
+    "Opcional: expandir i18n para cobrir os filtros/badges dos cards em /ebooks e outras labels PT-only quando o utilizador escolhe EN/ES (categorias, cidades, 'Premium', 'páginas', 'PDF em breve')."
+  ],
+  "critical_code_review_comments": [
+    "server.py CORS: allow_credentials é definido como '*' not in _origins — com CORS_ORIGINS='*' (valor atual em backend/.env) isto resulta em allow_credentials=False, que é o comportamento seguro. Se em produção quiser cookies via CORS terá de listar origens explícitas (o .env já suporta lista CSV).",
+    "mailer.send_email retorna False silenciosamente quando RESEND_API_KEY está vazio; forgot_password grava o campo emailed=false no token e a UI/mensagem menciona 'administrador'. Correcto para o requisito de que RESEND vazio não deve gerar 500.",
+    "routes_ops.cancel_subscription responde 404 quando não há subscrição activa — bate certo com o pedido. Nota: em caso de sucesso stripe, converte cancel_at_period_end e escreve ends_at; boa prática.",
+    "routes_ops.feedback_status valida whitelist de estados ('Novo'/'Em análise'/'Implementado'/'Rejeitado'). Boa prática.",
+    "AdminDashboard usa native <select> (não shadcn) para feedback-status — funcional e acessível, embora inconsistente com o resto do design system baseado em shadcn.",
+    "Sidebar/Statements usam corretamente os data-testid pedidos (feedback-button, feedback-dialog, feedback-message-input, feedback-submit-button, statement-pdf-button, nav-*, privacy-link, language-switcher, lang-pt/en/es)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter5.py"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% dos flows críticos"},
+  "test_credentials": "Admin admin@robson.club/admin123; Influencer robson@robson.club/robson123; Marta marta@robson.club/marta123 (usada só para forgot-password, não alterada); Parceiro gerencia@tivolisky.pt/tivoli123.",
+  "seed_data_creation": "Foram criados feedback docs (tipo 'Melhoria' com mensagem 'Teste de sugestão automática ...') via API e via UI. Um dos feedbacks ficou com status 'Implementado' no admin panel (persistiu após reload). Foi disparado /auth/forgot-password para marta@robson.club: um novo password_reset_token foi inserido na coleção password_reset_tokens (used=false, emailed=false, expira em 24h) — password NÃO foi alterada.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 5 verde. RESEND_API_KEY continua vazia por design; forgot-password devolve 200 com mensagem sobre 'administrador' e o token fica com emailed=false. Cancel subscription só devolve 404 (sem sub activa) — não foi possível testar o caminho stripe.Subscription.modify porque não há subscrição activa gravada; se main agent quiser testar full path, terá de completar um checkout club_monthly com cartão de teste antes. i18n é apenas parcial em /ebooks (cabeçalhos traduzidos, cards ainda PT).",
+  "rca of the issue": "N/A — nenhum bug funcional detectado nesta iteração."
+}

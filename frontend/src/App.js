@@ -2,6 +2,10 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AppProvider, useApp } from "@/context/AppContext";
+import { I18nProvider } from "@/context/I18nContext";
+import Privacy from "@/pages/Privacy";
+import Register from "@/pages/Register";
+import PublicCoupon from "@/pages/PublicCoupon";
 import AppLayout from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import InfluencerDashboard from "@/pages/InfluencerDashboard";
@@ -46,11 +50,15 @@ const PublicOnly = () => {
 
 function App() {
   return (
+    <I18nProvider>
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/privacidade" element={<Privacy />} />
+          <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
             <Route path="/login" element={<Login />} />
+            <Route path="/registar" element={<Register />} />
             <Route path="/esqueci-password" element={<ForgotPassword />} />
             <Route path="/redefinir-password" element={<ResetPassword />} />
           </Route>
@@ -81,6 +89,7 @@ function App() {
       </BrowserRouter>
       <Toaster position="top-right" richColors />
     </AppProvider>
+    </I18nProvider>
   );
 }
 

@@ -10,7 +10,7 @@ const Shell = ({ title, subtitle, children }) => (
     <div className="w-full max-w-md">
       <div className="flex items-center gap-2.5 mb-8">
         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>
-        <p className="font-display font-bold text-lg">Robson Club</p>
+        <p className="font-display font-bold text-lg">ןןClub</p>
       </div>
       <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{title}</h2>
       <p className="text-sm text-slate-500 mt-1 mb-8">{subtitle}</p>
@@ -34,7 +34,7 @@ export function ForgotPassword() {
   };
 
   return (
-    <Shell title="Recuperar acesso" subtitle="Indique o seu email. O administrador do Robson Club recebe o pedido e envia-lhe o link de recuperação.">
+    <Shell title="Recuperar acesso" subtitle="Indique o seu email. O administrador do ןןClub recebe o pedido e envia-lhe o link de recuperação.">
       {done ? (
         <div data-testid="forgot-success" className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800">Pedido registado. Se o email existir, o administrador irá contactá-lo com o link para definir uma nova palavra-passe (válido 24h).</div>
       ) : (

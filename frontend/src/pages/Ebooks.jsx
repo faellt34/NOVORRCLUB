@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Lock, Eye, Crown, BookOpen, Globe, ShoppingCart, Sparkles, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
+import { useT } from "../context/I18nContext";
 import { api, apiError, slug, eur } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -11,6 +12,8 @@ const CATEGORIES = ["Todas", "Restaurantes", "Hotéis", "Rooftops", "Passeios"];
 
 export default function Ebooks() {
   const { user } = useApp();
+  const { t } = useT();
+  const [sub, setSub] = useState(null);
   const [ebooks, setEbooks] = useState(null);
   const [access, setAccess] = useState({ subscribed: false, owned: [], subscription_price: 9.9 });
   const [country, setCountry] = useState("Todos");
@@ -20,7 +23,7 @@ export default function Ebooks() {
   const [reader, setReader] = useState(null);
   const [buying, setBuying] = useState(null);
 
-  const load = useCallback(() => Promise.all([api.get("/ebooks"), api.get("/payments/access")]).then(([e, a]) => { setEbooks(e.data); setAccess(a.data); }).catch((e) => toast.error(apiError(e))), []);
+  const load = useCallback(() => Promise.all([api.get("/ebooks"), api.get("/payments/access"), api.get("/payments/subscription")]).then(([e, a, s]) => { setEbooks(e.data); setAccess(a.data); setSub(s.data); }).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { load(); }, [load]);
 
   const countries = useMemo(() => ["Todos", ...Array.from(new Set((ebooks || []).map((e) => e.pais)))], [ebooks]);
@@ -34,6 +37,12 @@ export default function Ebooks() {
     } catch (e) { toast.error(apiError(e)); setBuying(null); }
   };
 
+  const cancelSub = async () => {
+    if (!window.confirm("Cancelar a subscrição Premium? Mantém o acesso até ao fim do período já pago.")) return;
+    try { const { data } = await api.post("/payments/subscription/cancel"); toast.success(data.ends_at ? `Subscrição cancelada — acesso até ${new Date(data.ends_at).toLocaleDateString("pt-PT")}` : "Subscrição cancelada"); load(); }
+    catch (e) { toast.error(apiError(e)); }
+  };
+
   if (!ebooks) return <PageSkeleton />;
 
   const filtered = ebooks.filter((e) => (country === "Todos" || e.pais === country) && (region === "Todas" || e.regiao === region) && (category === "Todas" || e.categoria === category));
@@ -43,15 +52,18 @@ export default function Ebooks() {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 data-testid="ebooks-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">E-books & Guias Premium</h1>
-          <p className="text-sm text-slate-500 mt-1">Guias curados de experiências de luxo em Portugal e no mundo — leia online após compra ou subscrição</p>
+          <h1 data-testid="ebooks-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("ebooksTitle")}</h1>
+          <p className="text-sm text-slate-500 mt-1">{t("ebooksSub")}</p>
         </div>
         {user.role !== "admin" && (
           access.subscribed ? (
-            <span data-testid="subscription-active-badge" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold"><CheckCircle2 className="w-4 h-4" /> Subscrição Premium ativa — todos os guias desbloqueados</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span data-testid="subscription-active-badge" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-semibold"><CheckCircle2 className="w-4 h-4" /> {t("subActive")}{sub?.cancel_at_period_end && sub?.ends_at ? ` · ${t("subEnds")} ${new Date(sub.ends_at).toLocaleDateString("pt-PT")}` : ""}</span>
+              {!sub?.cancel_at_period_end && <button data-testid="cancel-subscription-button" onClick={cancelSub} className="px-3 py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-600 text-xs font-semibold btn-press">{t("cancelSub")}</button>}
+            </div>
           ) : (
             <button data-testid="subscribe-button" disabled={!!buying} onClick={() => buy("club_monthly")} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400 disabled:opacity-60 text-white text-xs font-semibold btn-press shadow-lg shadow-purple-600/20">
-              <Sparkles className="w-4 h-4" /> Subscrever Premium · {eur(access.subscription_price)}/mês — todos os guias
+              <Sparkles className="w-4 h-4" /> {t("subscribe")} · {eur(access.subscription_price)}{t("perMonth")}
             </button>
           )
         )}
@@ -84,25 +96,25 @@ export default function Ebooks() {
                   <span data-testid={`ebook-premium-badge-${e.id}`} className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-purple-600 px-3 py-1.5 rounded-full"><Crown className="w-3.5 h-3.5" /> Premium</span>
                 </div>
               )}
-              {e.premium && e.unlocked && <span data-testid={`ebook-owned-badge-${e.id}`} className="absolute bottom-3 left-3 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500 text-white"><CheckCircle2 className="w-3 h-3" /> {e.owned ? "Adquirido" : "Desbloqueado"}</span>}
+              {e.premium && e.unlocked && <span data-testid={`ebook-owned-badge-${e.id}`} className="absolute bottom-3 left-3 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500 text-white"><CheckCircle2 className="w-3 h-3" /> {e.owned ? t("owned") : t("unlocked")}</span>}
             </div>
             <div className="p-4 flex flex-col flex-1">
               <h3 className="text-sm font-bold text-slate-900 mb-1">{e.titulo}</h3>
               <p className="text-xs text-slate-500 leading-relaxed flex-1">{e.descricao}</p>
-              <p className="text-[11px] text-slate-400 mt-2 mb-3 flex items-center gap-1"><BookOpen className="w-3 h-3" /> {e.paginas} páginas{e.premium && e.preco ? ` · ${eur(e.preco)}` : ""}{!e.has_pdf ? " · PDF em breve" : ""}</p>
+              <p className="text-[11px] text-slate-400 mt-2 mb-3 flex items-center gap-1"><BookOpen className="w-3 h-3" /> {e.paginas} {t("pages")}{e.premium && e.preco ? ` · ${eur(e.preco)}` : ""}{!e.has_pdf ? ` · ${t("pdfSoon")}` : ""}</p>
               {e.unlocked ? (
                 <button data-testid={`ebook-read-${e.id}`} onClick={() => (e.has_pdf ? setReader(e) : setPreview(e))} className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 btn-press">
-                  {e.has_pdf ? <><BookOpen className="w-3.5 h-3.5" /> Ler agora</> : <><Eye className="w-3.5 h-3.5" /> Pré-visualizar</>}
+                  {e.has_pdf ? <><BookOpen className="w-3.5 h-3.5" /> {t("readNow")}</> : <><Eye className="w-3.5 h-3.5" /> {t("preview")}</>}
                 </button>
               ) : (
                 <button data-testid={`ebook-unlock-${e.id}`} disabled={!!buying} onClick={() => buy(`ebook_${e.id}`)} className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 btn-press">
-                  {buying === `ebook_${e.id}` ? "A abrir pagamento..." : <><ShoppingCart className="w-3.5 h-3.5" /> Comprar por {eur(e.preco)}</>}
+                  {buying === `ebook_${e.id}` ? "A abrir pagamento..." : <><ShoppingCart className="w-3.5 h-3.5" /> {t("buyFor")} {eur(e.preco)}</>}
                 </button>
               )}
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <p data-testid="ebooks-empty-state" className="col-span-full text-center text-slate-400 py-12">Nenhum guia encontrado para estes filtros.</p>}
+        {filtered.length === 0 && <p data-testid="ebooks-empty-state" className="col-span-full text-center text-slate-400 py-12">{t("noResults")}</p>}
       </div>
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)}>

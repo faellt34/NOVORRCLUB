@@ -18,7 +18,7 @@ const CONFIG = {
       { key: "email", label: "Email" },
       { key: "password", label: "Palavra-passe", hideInTable: true, optional: true, placeholder: "deixe vazio para manter / padrão robson123" },
       { key: "papel", label: "Papel", type: "select", options: ["Influencer", "Parceiro", "Admin"] },
-      { key: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso"] },
+      { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],
   },
   influencers: {
@@ -36,7 +36,7 @@ const CONFIG = {
       { key: "nome", label: "Nome" },
       { key: "categoria", label: "Categoria", type: "select", options: ["Restaurante", "Hotel", "Rooftop", "Passeio"] },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
-      { key: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso"] },
+      { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],
   },
   campanhas: {
@@ -124,7 +124,7 @@ export default function AdminManage() {
 
   const cell = (f, item) => {
     const v = item[f.key];
-    if (f.key === "status") return ["Ativa", "Pausada", "Expirada"].includes(v) ? <StatusBadge status={v} /> : <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v === "Ativo" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-500"}`}>{v}</span>;
+    if (f.key === "status") return ["Ativa", "Pausada", "Expirada"].includes(v) ? <StatusBadge status={v} /> : <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v === "Ativo" ? "bg-emerald-50 text-emerald-600" : v === "Pendente" ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-500"}`}>{v}</span>;
     if (f.key === "cupom") return <span className="font-coupon text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md">{v}</span>;
     if (f.key === "comissao") return <span className="font-semibold text-purple-700">{v}%</span>;
     if (f.key === "premium") return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{v ? "Premium" : "Gratuito"}</span>;

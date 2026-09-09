@@ -32,7 +32,7 @@ export default function InfluencerDashboard() {
     const matchSearch = `${c.nome} ${c.parceiro} ${c.cupom} ${c.cidade}`.toLowerCase().includes(search.toLowerCase());
     return matchSearch && (statusFilter === "todas" || c.status === statusFilter);
   });
-  const link = featured ? `https://robson.club/c/${featured.cupom}` : "";
+  const link = featured ? `${window.location.origin}/c/${featured.cupom}` : "";
 
   const share = (action) => {
     if (action === "copiar") { navigator.clipboard?.writeText(link).catch(() => {}); toast.success("Link copiado para a área de transferência"); }
@@ -70,7 +70,7 @@ export default function InfluencerDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" value={num(kpis.uses)} trend={kpis.trend.uses} />
-        <KpiCard id="clientes-impactados" icon={Users} label="Clientes Impactados" value={num(kpis.customers)} trend={kpis.trend.customers} />
+        <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" value={num(kpis.customers)} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
         <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" value={eur(Math.round(kpis.revenue))} trend={kpis.trend.revenue} />
         <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} value={eur(Math.round(kpis.commission))} trend={kpis.trend.commission} />
       </div>
@@ -164,6 +164,7 @@ export default function InfluencerDashboard() {
                 <tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100">
                   <th className="pb-3 pr-4 font-semibold">Campanha</th>
                   <th className="pb-3 pr-4 font-semibold">Cupom</th>
+                  <th className="pb-3 pr-4 font-semibold">Receberam</th>
                   <th className="pb-3 pr-4 font-semibold">Utilizados</th>
                   <th className="pb-3 pr-4 font-semibold">Comissão</th>
                   <th className="pb-3 pr-4 font-semibold">Validade</th>
@@ -178,6 +179,7 @@ export default function InfluencerDashboard() {
                       <p className="text-xs text-slate-500">{c.parceiro} · {c.cidade}</p>
                     </td>
                     <td className="py-3 pr-4"><span className="font-coupon text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md">{c.cupom}</span></td>
+                    <td className="py-3 pr-4 text-slate-600">{num(c.claims || 0)}</td>
                     <td className="py-3 pr-4 font-semibold text-slate-700">{num(c.uses)}</td>
                     <td className="py-3 pr-4 text-purple-700 font-semibold">{c.comissao}%</td>
                     <td className="py-3 pr-4 text-slate-500">{new Date(c.validade).toLocaleDateString("pt-PT")}</td>
@@ -185,7 +187,7 @@ export default function InfluencerDashboard() {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className="py-8 text-center text-slate-400" data-testid="campaigns-empty-state">Nenhuma campanha encontrada.</td></tr>
+                  <tr><td colSpan={7} className="py-8 text-center text-slate-400" data-testid="campaigns-empty-state">Nenhuma campanha encontrada.</td></tr>
                 )}
               </tbody>
             </table>

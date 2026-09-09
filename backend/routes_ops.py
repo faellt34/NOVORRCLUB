@@ -1,12 +1,16 @@
+import os
 import secrets
+import io
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from core import db, NO_ID, require_role, audit, notify, new_id, now_iso, hash_password
+from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, hash_password
+from mailer import send_email, configured
 
 router = APIRouter()
 
@@ -75,9 +79,13 @@ async def forgot_password(body: ForgotIn):
         await db.password_reset_tokens.insert_one({"id": new_id("prt"), "token": token, "user_id": user["id"], "email": email, "nome": user["nome"],
                                                    "created_at": now_iso(), "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(), "used": False})
         await audit("RECUPERAÇÃO", f"Pedido de recuperação de palavra-passe · {email}", user, token[:8])
+        link = f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/redefinir-password?token={token}"
+        sent = await send_email(email, "ןןClub · Redefinir palavra-passe", "Redefinir a sua palavra-passe",
+                                f"Olá {user['nome'].split(' ')[0]}, recebemos um pedido para redefinir a sua palavra-passe. O link é válido durante 24 horas e só pode ser usado uma vez.", "Definir nova palavra-passe", link)
+        await db.password_reset_tokens.update_one({"token": token}, {"$set": {"emailed": sent}})
         admins = [u["id"] async for u in db.users.find({"role": "admin"}, {"id": 1})]
-        await notify(admins, "reset", "Pedido de recuperação de acesso", f"{user['nome']} ({email}) pediu para redefinir a palavra-passe. Envie-lhe o link no painel.", "/admin")
-    return {"ok": True, "message": "Se o email existir, o pedido foi registado. O administrador irá enviar-lhe o link de recuperação."}
+        await notify(admins, "reset", "Pedido de recuperação de acesso", f"{user['nome']} ({email}) pediu para redefinir a palavra-passe." + (" Email enviado automaticamente." if sent else " Envie-lhe o link no painel."), "/admin")
+    return {"ok": True, "message": "Se o email existir, enviámos as instruções de recuperação." if configured() else "Se o email existir, o pedido foi registado. O administrador irá enviar-lhe o link de recuperação."}
 
 
 @router.get("/admin/reset-requests")
@@ -111,3 +119,108 @@ async def reset_password(body: ResetIn):
     await db.login_attempts.delete_many({"identifier": {"$regex": f":{t['email']}$"}})
     await audit("RECUPERAÇÃO", f"Palavra-passe redefinida · {t['email']}", {"id": t["user_id"], "nome": t["nome"]}, body.token[:8])
     return {"ok": True}
+
+
+MONTHS_PT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+
+@router.get("/statements/{month}/pdf")
+async def statement_pdf(month: str, user: dict = Depends(require_role("influencer"))):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    reds = await db.redemptions.find({"influencer_id": user["influencer_id"], "date": {"$regex": f"^{month}"}}, NO_ID).to_list(50000)
+    if not reds:
+        raise HTTPException(status_code=404, detail="Sem redenções neste mês")
+    pay = await db.payouts.find_one({"influencer_id": user["influencer_id"], "month": month}, NO_ID)
+    lines = defaultdict(lambda: {"uses": 0, "revenue": 0.0, "commission": 0.0})
+    for r in reds:
+        l = lines[(r["campaign"], r["partner"], r["rate"])]
+        l["uses"] += 1; l["revenue"] += r["amount"]; l["commission"] += r["commission"]
+    y, m = month.split("-")
+    label = f"{MONTHS_PT[int(m) - 1]} {y}"
+    purple = colors.HexColor("#7C3AED"); dark = colors.HexColor("#0C0A14")
+    ss = getSampleStyleSheet()
+    h1 = ParagraphStyle("h1", parent=ss["Title"], fontSize=22, textColor=dark, alignment=0, spaceAfter=2)
+    sub = ParagraphStyle("sub", parent=ss["Normal"], fontSize=9, textColor=colors.HexColor("#7C3AED"), spaceAfter=14)
+    body = ParagraphStyle("b", parent=ss["Normal"], fontSize=10, textColor=colors.HexColor("#475569"), leading=14)
+    small = ParagraphStyle("s", parent=ss["Normal"], fontSize=8, textColor=colors.HexColor("#94A3B8"))
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm, title=f"Extrato {label}")
+    el = [Paragraph("ןןCLUB", h1), Paragraph("LUXURY EXPERIENCES · EXTRATO DE COMISSÕES", sub),
+          Paragraph(f"<b>Influencer:</b> {user['nome']} &nbsp;&nbsp; <b>Email:</b> {user['email']}", body),
+          Paragraph(f"<b>Período:</b> {label} &nbsp;&nbsp; <b>Estado:</b> {'Pago em ' + pay['paid_at'] if pay else 'Pendente de pagamento'} &nbsp;&nbsp; <b>Emitido:</b> {datetime.now(timezone.utc).strftime('%d/%m/%Y')}", body), Spacer(1, 12)]
+    data = [["Campanha", "Parceiro", "Utilizações", "Receita (€)", "Taxa", "Comissão (€)"]]
+    tu = tr = tc = 0
+    for (camp, part, rate), v in sorted(lines.items(), key=lambda x: -x[1]["revenue"]):
+        data.append([camp, part, str(v["uses"]), f"{v['revenue']:,.2f}", f"{rate * 100:.0f}%", f"{v['commission']:,.2f}"])
+        tu += v["uses"]; tr += v["revenue"]; tc += v["commission"]
+    data.append(["TOTAL", "", str(tu), f"{tr:,.2f}", "", f"{tc:,.2f}"])
+    t = Table(data, colWidths=[52 * mm, 40 * mm, 22 * mm, 26 * mm, 14 * mm, 26 * mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), dark), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F8F9FC")]), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#EDE9FE")), ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+        ("TEXTCOLOR", (-1, -1), (-1, -1), purple), ("ALIGN", (2, 1), (-1, -1), "RIGHT"), ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    el += [t, Spacer(1, 16), Paragraph(f"<b>Total de comissão a receber: {tc:,.2f} €</b>", ParagraphStyle("tot", parent=body, fontSize=13, textColor=purple)), Spacer(1, 10),
+           Paragraph("A taxa de comissão é travada em cada redenção no momento da validação pelo parceiro. Este documento é gerado automaticamente pela plataforma ןןClub e serve de suporte à faturação/contabilidade. Pagamento por transferência bancária conforme acordo de parceria.", small)]
+    doc.build(el)
+    await audit("EXTRATO", f"PDF do extrato {month} gerado", user, month)
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-robson-club-{month}.pdf"'})
+
+
+class FeedbackIn(BaseModel):
+    tipo: str
+    mensagem: str
+    pagina: Optional[str] = ""
+
+
+@router.post("/feedback")
+async def create_feedback(body: FeedbackIn, user: dict = Depends(get_current_user)):
+    if len(body.mensagem.strip()) < 5:
+        raise HTTPException(status_code=400, detail="Descreva a sugestão com um pouco mais de detalhe.")
+    doc = {"id": new_id("fb"), "user_id": user["id"], "nome": user["nome"], "email": user["email"], "role": user["role"], "tipo": body.tipo, "mensagem": body.mensagem.strip(), "pagina": body.pagina, "status": "Novo", "date": now_iso()}
+    await db.feedback.insert_one(dict(doc))
+    admins = [u["id"] async for u in db.users.find({"role": "admin"}, {"id": 1})]
+    await notify(admins, "feedback", f"Nova sugestão ({body.tipo})", f"{user['nome']}: {body.mensagem[:120]}", "/admin")
+    return doc
+
+
+@router.get("/admin/feedback")
+async def list_feedback(user: dict = Depends(require_role("admin"))):
+    return await db.feedback.find({}, NO_ID).sort("date", -1).to_list(500)
+
+
+@router.post("/admin/feedback/{fb_id}/status")
+async def feedback_status(fb_id: str, body: dict, user: dict = Depends(require_role("admin"))):
+    st = body.get("status")
+    if st not in ("Novo", "Em análise", "Implementado", "Rejeitado"):
+        raise HTTPException(status_code=400, detail="Estado inválido")
+    await db.feedback.update_one({"id": fb_id}, {"$set": {"status": st}})
+    return {"ok": True}
+
+
+@router.post("/payments/subscription/cancel")
+async def cancel_subscription(user: dict = Depends(get_current_user)):
+    import stripe
+    sub = await db.subscriptions.find_one({"user_id": user["id"], "status": "active"}, NO_ID)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Não tem subscrição ativa")
+    ends = None
+    if sub.get("stripe_subscription_id"):
+        try:
+            s = stripe.Subscription.modify(sub["stripe_subscription_id"], cancel_at_period_end=True)
+            ends = datetime.fromtimestamp(s["current_period_end"], tz=timezone.utc).date().isoformat() if s.get("current_period_end") else None
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Stripe: {e}")
+    await db.subscriptions.update_one({"user_id": user["id"], "status": "active"}, {"$set": {"cancel_at_period_end": True, "ends_at": ends, "cancel_requested_at": now_iso()}})
+    await audit("SUBSCRIÇÃO", f"Cancelamento agendado" + (f" · termina {ends}" if ends else ""), user, sub["id"])
+    return {"ok": True, "ends_at": ends}
+
+
+@router.get("/payments/subscription")
+async def my_subscription(user: dict = Depends(get_current_user)):
+    return await db.subscriptions.find_one({"user_id": user["id"]}, NO_ID)

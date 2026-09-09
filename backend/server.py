@@ -30,10 +30,11 @@ for r in (routes_auth.router, routes_ops.router, routes_payments.router, routes_
 
 app.include_router(api_router)
 
+_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials="*" not in _origins,
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

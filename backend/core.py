@@ -90,6 +90,13 @@ async def notify(user_ids, tipo: str, titulo: str, texto: str, link: str = None)
     docs = [{"id": new_id("n"), "user_id": uid, "tipo": tipo, "titulo": titulo, "texto": texto,
              "link": link, "lido": False, "date": now_iso()} for uid in ids]
     await db.notifications.insert_many(docs)
+    if tipo in EMAIL_TYPES:
+        from mailer import email_user
+        for uid in ids:
+            await email_user(uid, f"ןןClub · {titulo}", titulo, texto, "Abrir no ןןClub", link)
+
+
+EMAIL_TYPES = {"lead_aprovada", "lead_rejeitada", "pagamento", "compra", "lead", "reset"}
 
 
 async def admin_ids():

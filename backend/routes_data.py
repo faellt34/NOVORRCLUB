@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
@@ -71,12 +71,21 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
         by_partner[r["partner_id"]]["uses"] += 1; by_partner[r["partner_id"]]["revenue"] += r["amount"]
     parts = {p["id"]: p async for p in db.partners.find({}, NO_ID)}
     top = sorted([{**parts.get(pid, {"id": pid, "nome": "—"}), **v} for pid, v in by_partner.items()], key=lambda x: -x["revenue"])[:5]
+    claim_q = {"influencer_id": inf_id, "date": {"$gte": since(period)}}
+    claims = await db.coupon_claims.count_documents(claim_q)
+    claims_prev = await db.coupon_claims.count_documents({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}})
+    claims_by_campaign = defaultdict(int)
+    async for cl in db.coupon_claims.find(claim_q, {"campaign_id": 1}):
+        claims_by_campaign[cl["campaign_id"]] += 1
+    for c in camps:
+        c["claims"] = claims_by_campaign[c["id"]]
     active = [c for c in camps if c["status"] == "Ativa"]
     featured = max(active, key=lambda c: c["uses"]) if active else None
     avg_rate = (t["commission"] / t["revenue"] * 100) if t["revenue"] else 10
     return {
-        "kpis": {"uses": t["count"], "customers": round(t["count"] * 6.5), "revenue": t["revenue"], "commission": t["commission"], "rate": round(avg_rate),
-                 "trend": {"uses": trend(t["count"], tp["count"]), "revenue": trend(t["revenue"], tp["revenue"]), "commission": trend(t["commission"], tp["commission"]), "customers": trend(t["count"], tp["count"])}},
+        "kpis": {"uses": t["count"], "customers": claims, "revenue": t["revenue"], "commission": t["commission"], "rate": round(avg_rate),
+                 "conversion": round(t["count"] / claims * 100, 1) if claims else None,
+                 "trend": {"uses": trend(t["count"], tp["count"]), "revenue": trend(t["revenue"], tp["revenue"]), "commission": trend(t["commission"], tp["commission"]), "customers": trend(claims, claims_prev)}},
         "chart": daily_series(reds, period), "topPartners": top, "campaigns": camps, "featured": featured,
     }
 
@@ -216,3 +225,22 @@ async def notifications(user: dict = Depends(get_current_user)):
 async def read_notifications(user: dict = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": user["id"], "lido": False}, {"$set": {"lido": True}})
     return {"ok": True}
+
+
+@router.get("/public/coupon/{code}")
+async def public_coupon(code: str, request: Request):
+    c = await db.campaigns.find_one({"cupom": code.strip().upper()}, NO_ID)
+    if not c:
+        raise HTTPException(status_code=404, detail="Cupom não encontrado")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) or {}
+    ip = request.client.host if request.client else "?"
+    ua = request.headers.get("user-agent", "")[:120]
+    key = f"{c['cupom']}:{ip}:{ua}"
+    recent = await db.coupon_claims.find_one({"key": key, "date": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()}})
+    if not recent:
+        await db.coupon_claims.insert_one({"id": new_id("cl"), "key": key, "coupon": c["cupom"], "campaign_id": c["id"], "influencer_id": c.get("influencer_id"), "partner_id": c.get("parceiro_id"), "date": now_iso()})
+    claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
+    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
+            "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
+            "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims}

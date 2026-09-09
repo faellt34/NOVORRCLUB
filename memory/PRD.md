@@ -31,9 +31,20 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Stripe (sandbox reclamável, país PT, tax mode "full"/managed): compra individual `ebook_{id}` (preço do admin) + subscrição `club_monthly` 9,90€/mês; `/payment/success` faz polling com fallback ao Stripe; entitlements/subscriptions no Mongo
 - Upload de PDF pelo admin (Emergent Object Storage) e leitor in-app (blob → iframe) com gating server-side (gratuito/comprado/subscrito/admin)
 
+### 2026-09 · Lançamento: Email, Cancelar subscrição, PDF extrato, i18n, Privacidade, Sugestões, Registo, Cupom público, Rebrand ✅ (iteration_5 13/13 + iteration_6 11/11, 100% frontend; deployment_agent: pass)
+- Email via Resend (`mailer.py`) para reset de password e notificações importantes — ativa quando `RESEND_API_KEY` for preenchida; sem chave o fluxo funciona com link copiado pelo admin
+- Cancelar subscrição Premium (cancel_at_period_end no Stripe) na área de E-books
+- Extrato mensal em PDF (reportlab) `GET /api/statements/{mês}/pdf`
+- i18n PT/EN/ES (`I18nContext`, switcher no login e sidebar; cobre navegação, login, e-books, sugestões — conteúdos de dados continuam PT)
+- Página pública `/privacidade` (PT/EN/ES, RGPD) com link no login/sidebar/registo
+- Sugestões de melhoria: botão na sidebar → `/api/feedback`; admin gere estados no painel
+- Registo no site `/registar`: influencer ativo imediato; parceiro fica Pendente até admin ativar em Gestão › Parceiros (login bloqueado com mensagem; notificações automáticas)
+- Cupom público `/c/:code` (QR aponta para o site) regista "clientes que receberam cupom" (dedup IP+UA/12h) → KPI real no dashboard do influencer + coluna "Receberam"
+- Rebrand visível: "ןןClub" (título, sidebar, login, emails, PDF)
+
 ## Backlog priorizado
-- P1: envio real de email de recuperação (Resend), cancelamento de subscrição pelo utilizador, i18n EN/ES
-- P2: Stripe Connect payouts automáticos, CORS_ORIGINS explícito em produção, relatório PDF do extrato
+- P1: preencher RESEND_API_KEY e domínio verificado; traduzir conteúdos de dados (categorias/cidades) em EN/ES
+- P2: Stripe Connect payouts automáticos, relatórios por parceiro em PDF, app mobile (PWA)
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.

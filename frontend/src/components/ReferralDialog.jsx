@@ -74,7 +74,7 @@ export const ReferralDialog = ({ open, onOpenChange, onCreated }) => {
           </div>
           <div>
             <label className="text-xs font-semibold text-slate-600 mb-1 block">Nota (opcional)</label>
-            <Textarea data-testid="referral-nota-input" value={form.nota} onChange={set("nota")} placeholder="Porque é um bom fit para o Robson Club?" className="rounded-xl bg-slate-50 min-h-[70px]" />
+            <Textarea data-testid="referral-nota-input" value={form.nota} onChange={set("nota")} placeholder="Porque é um bom fit para o ןןClub?" className="rounded-xl bg-slate-50 min-h-[70px]" />
           </div>
           <button type="submit" disabled={loading} data-testid="referral-submit-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press">
             <Send className="w-4 h-4" /> {loading ? "A enviar..." : "Enviar indicação"}

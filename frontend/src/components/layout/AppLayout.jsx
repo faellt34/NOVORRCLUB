@@ -18,7 +18,7 @@ export default function AppLayout() {
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center">
             <Crown className="w-4 h-4" />
           </div>
-          <span className="font-display font-bold">Robson Club</span>
+          <span className="font-display font-bold">ןןClub</span>
         </div>
         <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-white/10 btn-press">
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

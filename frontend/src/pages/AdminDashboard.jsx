@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy } from "lucide-react";
+import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -17,6 +17,7 @@ export default function AdminDashboard() {
   const [audit, setAudit] = useState([]);
   const [leads, setLeads] = useState([]);
   const [resets, setResets] = useState([]);
+  const [feedback, setFeedback] = useState([]);
   const [decision, setDecision] = useState(null);
   const [note, setNote] = useState("");
   const [email, setEmail] = useState("");
@@ -24,8 +25,8 @@ export default function AdminDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [d, a, l, r] = await Promise.all([api.get("/dashboard/admin"), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests")]);
-      setData(d.data); setAudit(a.data); setLeads(l.data); setResets(r.data);
+      const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin"), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
+      setData(d.data); setAudit(a.data); setLeads(l.data); setResets(r.data); setFeedback(f.data);
     } catch (e) { toast.error(apiError(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -52,7 +53,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div>
         <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-        <p className="text-sm text-slate-500 mt-1">Métricas globais do Robson Club — receita, comissões e entidades ativas</p>
+        <p className="text-sm text-slate-500 mt-1">Métricas globais do ןןClub — receita, comissões e entidades ativas</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -121,6 +122,30 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div data-testid="admin-feedback-card" className="card-soft p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+            <h3 className="text-lg font-semibold text-slate-900">Sugestões de Melhoria</h3>
+            {feedback.filter((f) => f.status === "Novo").length > 0 && <span data-testid="feedback-count-badge" className="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center">{feedback.filter((f) => f.status === "Novo").length}</span>}
+          </div>
+          {feedback.length === 0 ? <p data-testid="feedback-empty" className="text-sm text-slate-400 py-6 text-center">Ainda sem sugestões. Os utilizadores podem enviar via "Sugerir melhoria" na sidebar.</p> : (
+            <div className="space-y-3 max-h-[380px] overflow-y-auto">
+              {feedback.map((f) => (
+                <div key={f.id} data-testid={`feedback-${f.id}`} className="pb-3 border-b border-slate-50 last:border-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs text-slate-500"><span className="font-semibold text-slate-800">{f.nome}</span> · {f.role} · {f.tipo} · {new Date(f.date).toLocaleDateString("pt-PT")}</p>
+                    <select data-testid={`feedback-status-${f.id}`} value={f.status} onChange={async (e) => { await api.post(`/admin/feedback/${f.id}/status`, { status: e.target.value }); load(); }} className="text-[11px] font-semibold rounded-lg border border-slate-200 px-2 py-1 bg-white">
+                      {["Novo", "Em análise", "Implementado", "Rejeitado"].map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-sm text-slate-700">{f.mensagem}</p>
+                  {f.pagina && <p className="text-[11px] text-slate-400">Página: {f.pagina}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div data-testid="admin-campaigns-card" className="card-soft p-5">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Campanhas Recentes</h3>
           <div className="space-y-3">

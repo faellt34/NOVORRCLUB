@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, Euro, Ticket, HandCoins, CheckCircle2, Clock } from "lucide-react";
+import { Download, Euro, Ticket, HandCoins, CheckCircle2, Clock, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { api, apiError, eur, num, downloadCsv } from "../lib/api";
@@ -15,6 +15,7 @@ const monthLabel = (id) => {
 export default function Statement() {
   const [months, setMonths] = useState(null);
   const [monthId, setMonthId] = useState(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     api.get("/statements").then((r) => { setMonths(r.data); setMonthId(r.data[0]?.id || null); }).catch((e) => toast.error(apiError(e)));
@@ -26,6 +27,16 @@ export default function Statement() {
 
   const totals = month.lines.reduce((acc, l) => ({ uses: acc.uses + l.uses, revenue: acc.revenue + l.revenue, commission: acc.commission + l.commission }), { uses: 0, revenue: 0, commission: 0 });
   const label = monthLabel(month.id);
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const r = await api.get(`/statements/${month.id}/pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a"); a.href = url; a.download = `extrato-robson-club-${month.id}.pdf`; a.click(); URL.revokeObjectURL(url);
+      toast.success(`PDF do extrato de ${label} descarregado`);
+    } catch (e) { toast.error(apiError(e)); } finally { setPdfBusy(false); }
+  };
 
   const exportCsv = () => {
     downloadCsv(`extrato-${month.id}.csv`, "campanha;parceiro;utilizacoes;receita_eur;taxa;comissao_eur",
@@ -45,6 +56,7 @@ export default function Statement() {
             <SelectTrigger data-testid="statement-month-selector" className="w-[180px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
             <SelectContent>{months.map((m) => <SelectItem key={m.id} value={m.id}>{monthLabel(m.id)}</SelectItem>)}</SelectContent>
           </Select>
+          <button data-testid="statement-pdf-button" disabled={pdfBusy} onClick={downloadPdf} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold btn-press"><FileDown className="w-4 h-4" /> {pdfBusy ? "A gerar..." : "PDF"}</button>
           <button data-testid="statement-export-button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press"><Download className="w-4 h-4" /> Exportar CSV</button>
         </div>
       </div>
