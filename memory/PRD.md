@@ -49,9 +49,15 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - i18n de conteúdos (categorias, países, cidades, estados, badge Premium) em EN/ES via `tc()`
 - Deployment check: pass
 
+### 2026-09 · Pagamento pelo cliente via QR + IBAN do parceiro ✅ (iteration_8 7/7, 100% frontend)
+- `/c/CODIGO`: cliente indica o valor da conta → Stripe Checkout (cartão + MB WAY quando ativo na conta Stripe) cobra o valor já com desconto → redenção criada automaticamente (staff "Pagamento online (QR)", `paid_online`) com comissão travada + notificações
+- Parceiro define IBAN de recebimento no dashboard (`POST /api/partner/iban`); admin edita IBAN em Gestão › Parceiros; KPI "recebido online"
+- Nota: o dinheiro entra na conta Stripe do dono; a transferência ao parceiro (IBAN) é offline/track-only (Stripe Connect fica no backlog)
+- Dados de exemplo em produção: Parceiro Exemplo, @exemplo, campanha CLUB-10 (o admin pode apagar em Gestão)
+
 ## Backlog priorizado
-- P1: preencher chave Resend em Definições; criar utilizadores reais (Gestão › Usuários) e campanhas
-- P2: Stripe Connect payouts automáticos, relatórios por parceiro em PDF, notificações push (PWA)
+- P1: colar chave Resend; reclamar conta Stripe e ativar MB WAY no dashboard Stripe; deploy + domínio próprio (instruções entregues)
+- P2: Stripe Connect (split automático para o IBAN do parceiro), relatórios por parceiro em PDF, push notifications
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.

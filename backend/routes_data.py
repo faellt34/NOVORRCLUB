@@ -103,6 +103,7 @@ async def partner_dashboard(user: dict = Depends(require_role("partner"))):
     infs = {i["id"]: i async for i in db.influencers.find({}, NO_ID)}
     leaderboard = sorted([{**infs.get(k, {"id": k, "nome": "—"}), **{kk: round(vv, 2) for kk, vv in v.items()}} for k, v in board.items()], key=lambda x: -x["revenue"])[:5]
     partner = await db.partners.find_one({"id": pid}, NO_ID)
+    t["online_paid"] = round(sum(r["amount"] - r["discount"] for r in reds if r.get("paid_online")), 2)
     return {"partner": partner, "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "count": trend(tc["count"], tp["count"]), "commission": trend(tc["commission"], tp["commission"])},
             "leaderboard": leaderboard, "redemptions": reds[:100]}
 

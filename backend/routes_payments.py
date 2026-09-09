@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso
+from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
 from storage import put_object, get_object, APP_NAME
 import jwt
 
@@ -101,6 +101,25 @@ async def fulfil(session_id: str, extra: dict):
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
         return
+    if res.get("kind") == "coupon_pay":
+        c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
+        partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
+        inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
+        rate = float(c["comissao"]) / 100 if c else 0
+        gross = float(res["gross_amount"])
+        rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
+               "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
+               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
+        try:
+            await db.redemptions.insert_one(dict(rec))
+        except Exception:
+            return
+        await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
+        targets = await admin_ids()
+        pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
+        targets += [u["id"] for u in (pu, iu) if u]
+        await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
+        return
     if res.get("ebook_id"):
         await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
         eb = await db.ebooks.find_one({"id": res["ebook_id"]}, NO_ID)
@@ -125,7 +144,7 @@ async def payment_status(session_id: str):
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
-    return {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec["lookup_key"]}
+    return {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
 
 
 @router.post("/stripe/webhook")
@@ -206,3 +225,57 @@ async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None), a
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Falha ao obter ficheiro: {e}")
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{eb.get("pdf_name") or ebook_id}.pdf"'})
+
+
+class PublicPayIn(BaseModel):
+    code: str
+    amount: float
+    origin_url: str
+    email: Optional[str] = None
+
+
+@router.post("/public/pay")
+async def public_pay(body: PublicPayIn):
+    code = body.code.strip().upper()
+    c = await db.campaigns.find_one({"cupom": code}, NO_ID)
+    if not c or c["status"] != "Ativa":
+        raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if body.amount < 1 or body.amount > 10000:
+        raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    base = dict(
+        line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
+        mode="payment",
+        success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
+        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id", "")},
+    )
+    if body.email:
+        base["customer_email"] = body.email.strip().lower()
+    session = None
+    for pm in (["card", "mb_way"], ["card"]):
+        try:
+            session = stripe.checkout.Session.create(**base, payment_method_types=pm)
+            break
+        except stripe.error.InvalidRequestError as e:
+            if pm == ["card"]:
+                raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+    await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "created_at": now_iso(), "updated_at": now_iso()})
+    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2)}
+
+
+class IbanIn(BaseModel):
+    iban: str
+    titular: Optional[str] = ""
+
+
+@router.post("/partner/iban")
+async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
+    iban = body.iban.replace(" ", "").upper()
+    if not (15 <= len(iban) <= 34 and iban[:2].isalpha() and iban[2:4].isdigit()):
+        raise HTTPException(status_code=400, detail="IBAN inválido")
+    await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"iban": iban, "iban_titular": body.titular.strip()}})
+    await audit("CONFIGURAÇÃO", f"IBAN de recebimento atualizado · {user['nome']} · ••••{iban[-4:]}", user, user["partner_id"])
+    return {"ok": True, "iban": iban}

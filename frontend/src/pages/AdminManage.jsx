@@ -36,6 +36,7 @@ const CONFIG = {
       { key: "nome", label: "Nome" },
       { key: "categoria", label: "Categoria", type: "select", options: ["Restaurante", "Hotel", "Rooftop", "Passeio"] },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
+      { key: "iban", label: "IBAN (recebimentos)", optional: true, hideInTable: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],
   },

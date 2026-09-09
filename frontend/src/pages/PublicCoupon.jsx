@@ -1,14 +1,38 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Crown, Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Crown, Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { api, apiError, num } from "../lib/api";
+import { api, apiError, num, eur } from "../lib/api";
 
 export default function PublicCoupon() {
   const { code } = useParams();
   const [c, setC] = useState(undefined);
   const [err, setErr] = useState("");
+  const [params] = useSearchParams();
+  const sessionId = params.get("session_id");
+  const [amount, setAmount] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [paid, setPaid] = useState(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    let n = 0;
+    const tick = async () => {
+      try { const { data } = await api.get(`/payments/status/${sessionId}`); if (data.payment_status === "paid") { setPaid(data); return; } if (["failed", "expired"].includes(data.payment_status)) { setPaid({ failed: true }); return; } } catch {}
+      if (++n < 10) setTimeout(tick, 2000); else setPaid({ pending: true });
+    };
+    tick();
+  }, [sessionId]);
+
+  const pay = async () => {
+    const v = parseFloat(String(amount).replace(",", "."));
+    if (!v || v < 1) { toast.error("Indique o valor da conta"); return; }
+    setPaying(true);
+    try { const { data } = await api.post("/public/pay", { code, amount: v, origin_url: window.location.origin }); window.location.href = data.checkout_url; }
+    catch (e) { toast.error(apiError(e)); setPaying(false); }
+  };
+  const parsed = parseFloat(String(amount).replace(",", ".")) || 0;
 
   useEffect(() => {
     api.get(`/public/coupon/${encodeURIComponent(code)}`).then((r) => setC(r.data)).catch((e) => { setErr(apiError(e)); setC(null); });
@@ -64,6 +88,26 @@ export default function PublicCoupon() {
                   <span className="flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Válido até {new Date(c.validade).toLocaleDateString("pt-PT")}</span>
                   <span data-testid="public-coupon-claims" className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {num(c.claims)} pessoas já receberam</span>
                 </div>
+                {active && paid?.payment_status === "paid" && (
+                  <div data-testid="public-pay-success" className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1" />
+                    <p className="text-sm font-bold text-emerald-800">Pagamento confirmado · {eur(paid.amount)}</p>
+                    <p className="text-xs text-emerald-700">Mostre este ecrã ao staff de {c.parceiro}. A redenção já ficou registada.</p>
+                  </div>
+                )}
+                {active && paid?.failed && <p data-testid="public-pay-failed" className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">O pagamento não foi concluído. Pode tentar novamente.</p>}
+                {active && sessionId && !paid && <p data-testid="public-pay-polling" className="text-xs text-purple-700 bg-purple-50 rounded-xl px-3 py-2 animate-pulse">A confirmar o pagamento...</p>}
+                {active && paid?.payment_status !== "paid" && (
+                  <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
+                    <div className="flex gap-2">
+                      <input data-testid="public-pay-amount" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Valor da conta (€)" className="flex-1 h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
+                      <button data-testid="public-pay-button" disabled={paying || parsed < 1} onClick={pay} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold btn-press">{paying ? "A abrir..." : "Pagar"}</button>
+                    </div>
+                    {parsed >= 1 && <p data-testid="public-pay-preview" className="text-xs text-slate-600">Paga <b className="text-purple-700">{eur(+(parsed * (1 - c.desconto / 100)).toFixed(2))}</b> em vez de {eur(parsed)} · poupa {eur(+(parsed * c.desconto / 100).toFixed(2))}</p>}
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1"><Smartphone className="w-3 h-3" /> MB WAY · Cartão de débito/crédito · pagamento seguro via Stripe</p>
+                  </div>
+                )}
                 {active
                   ? <p className="text-xs text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2 flex items-center gap-2" data-testid="public-coupon-active"><CheckCircle2 className="w-4 h-4" /> Mostre este QR ou código ao staff de {c.parceiro} para aplicar o desconto.</p>
                   : <p className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2" data-testid="public-coupon-inactive">Este cupom está {c.status.toLowerCase()} e não pode ser utilizado.</p>}

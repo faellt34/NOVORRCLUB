@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2 } from "lucide-react";
+import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -20,6 +20,14 @@ export default function PartnerDashboard() {
   const [lastReceipt, setLastReceipt] = useState(null);
   const [idemKey, setIdemKey] = useState(newKey);
   const [submitting, setSubmitting] = useState(false);
+  const [iban, setIban] = useState("");
+  const [ibanEdit, setIbanEdit] = useState(false);
+
+  const saveIban = async (e) => {
+    e.preventDefault();
+    try { await api.post("/partner/iban", { iban, titular: user.nome }); toast.success("IBAN guardado — usado para receber os pagamentos online"); setIbanEdit(false); load(); }
+    catch (err) { toast.error(apiError(err)); }
+  };
 
   const load = useCallback(() => api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -77,6 +85,24 @@ export default function PartnerDashboard() {
         <KpiCard id="descontos" icon={BadgePercent} label="Descontos Concedidos" value={eur(Math.round(totals.discounts))} />
         <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão Devida" value={eur(Math.round(totals.commission))} trend={trend.commission} />
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" value={eur(+totals.ticket.toFixed(2))} />
+      </div>
+
+      <div data-testid="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Conta para receber pagamentos online (QR)</p>
+            <p className="text-xs text-slate-500">{data.partner?.iban ? <>IBAN <span className="font-mono" data-testid="partner-iban-value">{data.partner.iban.replace(/(.{4})/g, "$1 ").trim()}</span> · recebido online: <b className="text-emerald-600">{eur(totals.online_paid || 0)}</b></> : "Ainda sem IBAN — adicione para receber as transferências dos pagamentos por MB WAY/cartão."}</p>
+          </div>
+        </div>
+        {ibanEdit ? (
+          <form onSubmit={saveIban} className="flex gap-2">
+            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+            <button type="submit" data-testid="partner-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
+          </form>
+        ) : (
+          <button data-testid="partner-iban-edit" onClick={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press">{data.partner?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

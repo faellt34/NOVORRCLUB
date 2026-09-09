@@ -1,0 +1,22 @@
+{
+  "summary": "Iter 8 — Public coupon pay (Stripe Checkout via /api/public/pay) + partner IBAN self-service + admin IBAN edit. 7/7 backend pytest passed. Frontend: /c/CLUB-10 pay flow (preview 90€/10€ + redirect to checkout.stripe.com), cancel=1 fallback, partner dashboard partner-iban-card save+format, admin Gestão › Parceiros tab hides IBAN column but shows field-iban in the edit dialog. Stripe checkout was NOT completed with 4242 test card (headless browser can't easily fill Stripe iframe with 3DS reliably); fulfil path & redemption creation exercised only via the /api/payments/status pending code path — the paid branch code in routes_payments.fulfil is unchanged from prior verified behavior.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter8.py", "/app/test_reports/pytest/iter8.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_payments.public_pay does not require any auth — good for public QR flow. It falls back from ['card','mb_way'] to ['card'] correctly if MB WAY isn't enabled on the account.",
+    "fulfil() correctly guards against double-processing via find_one_and_update filter payment_status!=paid, and inserts a redemption with idempotency_key=session_id.",
+    "routes_payments.set_iban validates only length + country prefix + 2 check digits; it does NOT validate the mod-97 IBAN checksum. A malformed but well-shaped value like 'PT50000000000000000000000' would pass. Consider adding python-stdnum or manual mod-97 check.",
+    "PUT /api/admin/parceiros/{id} accepts arbitrary fields including 'iban' with no validation on the admin side — intentional per spec ('campo livre'), but a note-worthy trust boundary.",
+    "In PublicCoupon the pay button is disabled when parsed<1 which matches backend 400 boundary (amount<1). Good UX consistency."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter8.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!  ·  partner parceiro.exemplo@test.pt/parceiro123 (created & linked to Parceiro Exemplo during this run)",
+  "seed_data_creation": "Created user parceiro.exemplo@test.pt (Parceiro) and linked to existing 'Parceiro Exemplo' via partner_id. Saved IBAN PT50000201231234567890154 both on the partner via /partner/iban and via admin PUT /admin/parceiros. Created several 'coupon_pay' payment_transactions in pending state (from CLUB-10 100€) — none fulfilled. No redemptions created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All new iter-8 endpoints verified. If retesting the paid branch, use the Stripe CLI or Stripe Dashboard to complete a coupon_pay Checkout session, then GET /api/payments/status/{sid} → payment_status=paid and expect a redemption with staff='Pagamento online (QR)', paid_online=true, amount=<gross>, discount=<gross*desc>, commission=<gross*comm>. Partner user 'parceiro.exemplo@test.pt' is already linked; reuse it. Do NOT call /api/admin/reset-pilot.",
+  "rca of the issue": "N/A — no defects found."
+}
