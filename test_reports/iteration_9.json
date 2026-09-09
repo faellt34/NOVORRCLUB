@@ -1,0 +1,21 @@
+{
+  "summary": "Iter 9 — Stripe Connect (partner onboard/status) + customer receipt email on public coupon pay. 8/8 backend pytest passed. Frontend: partner-connect-card + partner-connect-status + partner-connect-button (click keeps user on /parceiro; informative Stripe/Connect message present). PublicCoupon /c/CLUB-10 with public-pay-email visible, amount 50 → redirects to checkout.stripe.com showing €45.00 (10% desconto), item 'Parceiro Exemplo · Campanha Exemplo · Cupom CLUB-10 · 10% de desconto aplicado sobre 50.00€' and Email field prefilled cliente.test@club.pt. Stripe 3DS not completable headlessly, so paid branch of fulfil() + public-receipt UI not fully E2E; verified via GET /api/payments/status/{sid} that pending returns kind=coupon_pay, gross_amount=50, discount=5, coupon=CLUB-10.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter9.py", "/app/test_reports/pytest/iter9.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_payments.connect_onboard degrades gracefully to 200 {available:false} only when Stripe error text contains 'signed up for Connect'. Any other Stripe error becomes 502. That is acceptable but note that Stripe wording may change; consider matching account.create failure code as well.",
+    "routes_payments.fulfil coupon_pay branch calls send_email inside the transaction lifecycle and only sets receipt_emailed if email is provided. mailer.send_email should return False (not raise) when Resend is not configured — verified indirectly. Not tested E2E in this iteration.",
+    "GET /api/payments/status auto-fulfils from Stripe on demand — good UX for headless webhook environments, but be aware two concurrent status calls could race; the find_one_and_update guard in fulfil() prevents double-insert of redemption which is the important invariant.",
+    "Public /c/CLUB-10 exposes checkout email field with only client-side validation; backend also lowercases + strips. Fine."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter9.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% of scripted flows (excluding real Stripe 3DS card entry)"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!; partner parceiro.exemplo@club.pt/parceiro123 (linked to 'Parceiro Exemplo')",
+  "seed_data_creation": "Ensured user parceiro.exemplo@club.pt (partner) exists and is linked to 'Parceiro Exemplo'. Created several coupon_pay pending payment_transactions for CLUB-10 amounts 30€/50€.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To exercise the paid branch (redemption creation with paid_online true + staff 'Pagamento online (QR)' + receipt_emailed) use Stripe CLI to trigger checkout.session.completed for a coupon_pay session, or manually complete Checkout in a real browser then GET /api/payments/status/{sid}. Partner login parceiro.exemplo@club.pt/parceiro123 works. Do NOT call /api/admin/reset-pilot.",
+  "rca of the issue": "N/A — no defects found."
+}

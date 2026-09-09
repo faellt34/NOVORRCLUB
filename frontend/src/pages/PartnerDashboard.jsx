@@ -22,6 +22,19 @@ export default function PartnerDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
+  const [connect, setConnect] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => { api.get("/partner/connect/status").then((r) => setConnect(r.data)).catch(() => setConnect({ connected: false })); }, []);
+
+  const startConnect = async () => {
+    setConnecting(true);
+    try {
+      const { data: res } = await api.post("/partner/connect/onboard", { origin_url: window.location.origin });
+      if (res.available === false) { toast.info(res.reason, { duration: 9000 }); setConnecting(false); return; }
+      window.location.href = res.url;
+    } catch (err) { toast.error(apiError(err)); setConnecting(false); }
+  };
 
   const saveIban = async (e) => {
     e.preventDefault();
@@ -103,6 +116,19 @@ export default function PartnerDashboard() {
         ) : (
           <button data-testid="partner-iban-edit" onClick={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press">{data.partner?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
         )}
+      </div>
+
+      <div data-testid="partner-connect-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${connect?.charges_enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
+            <p className="text-xs text-slate-500" data-testid="partner-connect-status">
+              {connect === null ? "A verificar..." : connect.charges_enabled ? <>Ativo — cada pagamento é dividido automaticamente: a sua parte vai direta para a sua conta bancária{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+            </p>
+          </div>
+        </div>
+        {!connect?.charges_enabled && <button data-testid="partner-connect-button" disabled={connecting} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

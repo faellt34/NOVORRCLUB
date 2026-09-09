@@ -119,6 +119,15 @@ async def fulfil(session_id: str, extra: dict):
         pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
         targets += [u["id"] for u in (pu, iu) if u]
         await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
+        cust_email = extra.get("customer_email")
+        if cust_email:
+            from mailer import send_email
+            sent = await send_email(cust_email, f"ןןClub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
+                f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
+                "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
+            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"customer_email": cust_email, "receipt_emailed": sent, "redemption_id": rec["id"]}})
+        else:
+            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"redemption_id": rec["id"]}})
         return
     if res.get("ebook_id"):
         await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
@@ -140,11 +149,14 @@ async def payment_status(session_id: str):
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid" or s.status == "complete":
-                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent})
+                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
-    return {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
+    out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
+    if rec.get("kind") == "coupon_pay":
+        out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": rec.get("customer_email"), "paid_at": rec.get("updated_at")})
+    return out
 
 
 @router.post("/stripe/webhook")
@@ -157,7 +169,7 @@ async def stripe_webhook(request: Request):
     obj, t = event["data"]["object"], event["type"]
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if obj.get("payment_status", "paid") == "paid":
-            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent")})
+            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
         await db.payment_transactions.update_one({"session_id": obj["id"]}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
@@ -253,6 +265,11 @@ async def public_pay(body: PublicPayIn):
     )
     if body.email:
         base["customer_email"] = body.email.strip().lower()
+    split = False
+    if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
+        fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
+        base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
+        split = True
     session = None
     for pm in (["card", "mb_way"], ["card"]):
         try:
@@ -262,8 +279,8 @@ async def public_pay(body: PublicPayIn):
             if pm == ["card"]:
                 raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "created_at": now_iso(), "updated_at": now_iso()})
-    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2)}
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
 
 
 class IbanIn(BaseModel):
@@ -279,3 +296,41 @@ async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
     await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"iban": iban, "iban_titular": body.titular.strip()}})
     await audit("CONFIGURAÇÃO", f"IBAN de recebimento atualizado · {user['nome']} · ••••{iban[-4:]}", user, user["partner_id"])
     return {"ok": True, "iban": iban}
+
+
+@router.post("/partner/connect/onboard")
+async def connect_onboard(body: dict, user: dict = Depends(require_role("partner"))):
+    partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
+    origin = (body.get("origin_url") or "").rstrip("/")
+    try:
+        acct_id = partner.get("stripe_account_id")
+        if not acct_id:
+            acct = stripe.Account.create(type="express", country="PT", email=user["email"], business_type="company",
+                                         capabilities={"card_payments": {"requested": True}, "transfers": {"requested": True}},
+                                         business_profile={"name": partner.get("nome", user["nome"])}, metadata={"partner_id": user["partner_id"]})
+            acct_id = acct.id
+            await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
+        link = stripe.AccountLink.create(account=acct_id, refresh_url=f"{origin}/parceiro?connect=refresh", return_url=f"{origin}/parceiro?connect=return", type="account_onboarding")
+    except stripe.error.StripeError as e:
+        msg = e.user_message or str(e)
+        if "signed up for Connect" in msg:
+            return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve reclamar a conta Stripe e ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
+        raise HTTPException(status_code=502, detail=f"Stripe Connect indisponível: {msg}")
+    await audit("CONFIGURAÇÃO", f"Onboarding Stripe Connect iniciado · {partner.get('nome')}", user, acct_id)
+    return {"available": True, "url": link.url, "account_id": acct_id}
+
+
+@router.get("/partner/connect/status")
+async def connect_status(user: dict = Depends(require_role("partner"))):
+    partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
+    acct_id = partner.get("stripe_account_id")
+    if not acct_id:
+        return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
+    try:
+        a = stripe.Account.retrieve(acct_id)
+        info = {"connected": True, "charges_enabled": bool(a.charges_enabled), "payouts_enabled": bool(a.payouts_enabled), "details_submitted": bool(a.details_submitted),
+                "bank_last4": (a.external_accounts.data[0].last4 if getattr(a, "external_accounts", None) and a.external_accounts.data else None)}
+    except stripe.error.StripeError:
+        info = {"connected": True, "charges_enabled": bool(partner.get("stripe_charges_enabled")), "payouts_enabled": False}
+    await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"]}})
+    return info

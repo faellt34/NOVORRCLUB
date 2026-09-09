@@ -55,9 +55,14 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Nota: o dinheiro entra na conta Stripe do dono; a transferência ao parceiro (IBAN) é offline/track-only (Stripe Connect fica no backlog)
 - Dados de exemplo em produção: Parceiro Exemplo, @exemplo, campanha CLUB-10 (o admin pode apagar em Gestão)
 
+### 2026-09 · Stripe Connect (split automático) + Recibo do cliente ✅ (iteration_9 8/8, 100% frontend)
+- Parceiro liga conta bancária via Stripe Connect Express (`POST /api/partner/connect/onboard`, `GET /api/partner/connect/status`); quando `charges_enabled`, o checkout do QR usa destination charge + `application_fee_amount` = comissão → parte do parceiro vai direta ao banco dele
+- Connect só funciona depois do dono reclamar a conta Stripe e ativar Connect (dashboard.stripe.com/connect); até lá o endpoint responde `available:false` com explicação e o fluxo manual (IBAN) continua
+- Recibo: cliente indica email opcional; após pagar vê recibo no ecrã (conta/desconto/pago/ref) com imprimir; email de recibo via Resend quando configurado. SMS não implementado (requer Twilio)
+
 ## Backlog priorizado
-- P1: colar chave Resend; reclamar conta Stripe e ativar MB WAY no dashboard Stripe; deploy + domínio próprio (instruções entregues)
-- P2: Stripe Connect (split automático para o IBAN do parceiro), relatórios por parceiro em PDF, push notifications
+- P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
+- P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.

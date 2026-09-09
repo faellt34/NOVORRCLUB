@@ -14,6 +14,7 @@ export default function PublicCoupon() {
   const [amount, setAmount] = useState("");
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(null);
+  const [email, setEmail] = useState("");
 
   useEffect(() => {
     if (!sessionId) return;
@@ -29,7 +30,7 @@ export default function PublicCoupon() {
     const v = parseFloat(String(amount).replace(",", "."));
     if (!v || v < 1) { toast.error("Indique o valor da conta"); return; }
     setPaying(true);
-    try { const { data } = await api.post("/public/pay", { code, amount: v, origin_url: window.location.origin }); window.location.href = data.checkout_url; }
+    try { const { data } = await api.post("/public/pay", { code, amount: v, origin_url: window.location.origin, email: email || null }); window.location.href = data.checkout_url; }
     catch (e) { toast.error(apiError(e)); setPaying(false); }
   };
   const parsed = parseFloat(String(amount).replace(",", ".")) || 0;
@@ -92,7 +93,15 @@ export default function PublicCoupon() {
                   <div data-testid="public-pay-success" className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-center">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1" />
                     <p className="text-sm font-bold text-emerald-800">Pagamento confirmado · {eur(paid.amount)}</p>
-                    <p className="text-xs text-emerald-700">Mostre este ecrã ao staff de {c.parceiro}. A redenção já ficou registada.</p>
+                    <div data-testid="public-receipt" className="mt-2 text-left text-xs text-emerald-900 bg-white/70 rounded-xl p-3 space-y-0.5">
+                      <p className="font-semibold uppercase tracking-wider text-[10px] text-emerald-700">Recibo</p>
+                      <p>Conta: <b>{eur(paid.gross_amount)}</b></p>
+                      <p>Desconto {c.desconto}%: <b>−{eur(paid.discount)}</b></p>
+                      <p>Pago: <b>{eur(paid.amount)}</b> · Ref. {paid.redemption_id || paid.session_id.slice(-8)}</p>
+                      {paid.customer_email && <p className="text-emerald-700">{paid.receipt_emailed ? `Recibo enviado para ${paid.customer_email}` : `Recibo disponível neste ecrã (${paid.customer_email})`}</p>}
+                    </div>
+                    <button data-testid="public-receipt-print" onClick={() => window.print()} className="mt-2 text-xs font-semibold text-emerald-700 underline">Guardar / imprimir recibo</button>
+                    <p className="text-xs text-emerald-700 mt-1">Mostre este ecrã ao staff de {c.parceiro}. A redenção já ficou registada.</p>
                   </div>
                 )}
                 {active && paid?.failed && <p data-testid="public-pay-failed" className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">O pagamento não foi concluído. Pode tentar novamente.</p>}
@@ -104,6 +113,7 @@ export default function PublicCoupon() {
                       <input data-testid="public-pay-amount" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Valor da conta (€)" className="flex-1 h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
                       <button data-testid="public-pay-button" disabled={paying || parsed < 1} onClick={pay} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold btn-press">{paying ? "A abrir..." : "Pagar"}</button>
                     </div>
+                    <input data-testid="public-pay-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email para receber o recibo (opcional)" className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
                     {parsed >= 1 && <p data-testid="public-pay-preview" className="text-xs text-slate-600">Paga <b className="text-purple-700">{eur(+(parsed * (1 - c.desconto / 100)).toFixed(2))}</b> em vez de {eur(parsed)} · poupa {eur(+(parsed * c.desconto / 100).toFixed(2))}</p>}
                     <p className="text-[11px] text-slate-400 flex items-center gap-1"><Smartphone className="w-3 h-3" /> MB WAY · Cartão de débito/crédito · pagamento seguro via Stripe</p>
                   </div>
