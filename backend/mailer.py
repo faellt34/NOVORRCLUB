@@ -9,8 +9,18 @@ from core import db, NO_ID
 logger = logging.getLogger(__name__)
 
 
+_settings_cache = {"key": None, "sender": None, "loaded": False}
+
+
+async def load_settings():
+    doc = await db.settings.find_one({"id": "email"}, NO_ID) or {}
+    _settings_cache.update({"key": (doc.get("resend_api_key") or os.environ.get("RESEND_API_KEY") or "").strip(),
+                            "sender": (doc.get("sender_email") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev").strip(), "loaded": True})
+    return _settings_cache
+
+
 def configured() -> bool:
-    return bool((os.environ.get("RESEND_API_KEY") or "").strip())
+    return bool(_settings_cache["key"])
 
 
 def _wrap(title: str, body: str, cta_label: str = None, cta_url: str = None) -> str:
@@ -27,10 +37,12 @@ def _wrap(title: str, body: str, cta_label: str = None, cta_url: str = None) -> 
 
 
 async def send_email(to: str, subject: str, title: str, body: str, cta_label: str = None, cta_url: str = None) -> bool:
+    if not _settings_cache["loaded"]:
+        await load_settings()
     if not configured() or not to:
         return False
-    resend.api_key = os.environ["RESEND_API_KEY"]
-    params = {"from": os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev", "to": [to], "subject": subject, "html": _wrap(title, body, cta_label, cta_url)}
+    resend.api_key = _settings_cache["key"]
+    params = {"from": _settings_cache["sender"], "to": [to], "subject": subject, "html": _wrap(title, body, cta_label, cta_url)}
     try:
         await asyncio.to_thread(resend.Emails.send, params)
         return True

@@ -123,7 +123,9 @@ async def ensure_indexes():
 
 async def seed():
     await ensure_indexes()
-    for u in USERS:
+    flags = await db.settings.find_one({"id": "pilot"}, {"_id": 0}) or {}
+    users = USERS[:1] if flags.get("demo_disabled") else USERS
+    for u in users:
         existing = await db.users.find_one({"email": u["email"]})
         doc = {k: v for k, v in u.items() if k != "password"}
         doc["status"] = "Ativo"
@@ -133,6 +135,8 @@ async def seed():
             await db.users.insert_one(doc)
         elif not verify_password(u["password"], existing["password_hash"]):
             await db.users.update_one({"email": u["email"]}, {"$set": {"password_hash": hash_password(u["password"])}})
+    if flags.get("demo_disabled"):
+        return
     if await db.influencers.count_documents({}) == 0:
         await db.influencers.insert_many([dict(i) for i in INFLUENCERS])
     if await db.partners.count_documents({}) == 0:

@@ -12,7 +12,7 @@ const CATEGORIES = ["Todas", "Restaurantes", "Hotéis", "Rooftops", "Passeios"];
 
 export default function Ebooks() {
   const { user } = useApp();
-  const { t } = useT();
+  const { t, tc } = useT();
   const [sub, setSub] = useState(null);
   const [ebooks, setEbooks] = useState(null);
   const [access, setAccess] = useState({ subscribed: false, owned: [], subscription_price: 9.9 });
@@ -72,12 +72,12 @@ export default function Ebooks() {
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <Globe className="w-4 h-4 text-slate-400" />
-          {countries.map((c) => <button key={c} data-testid={`country-filter-${slug(c)}`} onClick={() => { setCountry(c); setRegion("Todas"); }} className={pill(country === c, "bg-purple-600 text-white")}>{c}</button>)}
+          {countries.map((c) => <button key={c} data-testid={`country-filter-${slug(c)}`} onClick={() => { setCountry(c); setRegion("Todas"); }} className={pill(country === c, "bg-purple-600 text-white")}>{tc(c)}</button>)}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {regions.map((r) => <button key={r} data-testid={`region-filter-${slug(r)}`} onClick={() => setRegion(r)} className={pill(region === r, "bg-purple-100 text-purple-800 border border-purple-200")}>{r}</button>)}
+          {regions.map((r) => <button key={r} data-testid={`region-filter-${slug(r)}`} onClick={() => setRegion(r)} className={pill(region === r, "bg-purple-100 text-purple-800 border border-purple-200")}>{tc(r)}</button>)}
           <span className="w-px h-5 bg-slate-200 mx-1" />
-          {CATEGORIES.map((c) => <button key={c} data-testid={`category-filter-${slug(c)}`} onClick={() => setCategory(c)} className={pill(category === c, "bg-slate-900 text-white")}>{c}</button>)}
+          {CATEGORIES.map((c) => <button key={c} data-testid={`category-filter-${slug(c)}`} onClick={() => setCategory(c)} className={pill(category === c, "bg-slate-900 text-white")}>{tc(c)}</button>)}
         </div>
       </div>
 
@@ -87,13 +87,13 @@ export default function Ebooks() {
             <div className="relative h-40">
               <img src={e.capa} alt={e.titulo} className={`w-full h-full object-cover ${e.premium && !e.unlocked ? "blur-[2px] scale-105" : ""}`} />
               <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
-                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/90 text-slate-700">{e.pais} · {e.regiao}</span>
-                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/90 text-slate-700">{e.categoria}</span>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/90 text-slate-700">{tc(e.pais)} · {tc(e.regiao)}</span>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/90 text-slate-700">{tc(e.categoria)}</span>
               </div>
               {e.idioma && <span className="absolute bottom-3 right-3 text-[10px] font-bold px-2 py-1 rounded-full bg-slate-900/70 text-white">{e.idioma}</span>}
               {e.premium && !e.unlocked && (
                 <div className="absolute inset-0 bg-slate-950/40 flex items-center justify-center">
-                  <span data-testid={`ebook-premium-badge-${e.id}`} className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-purple-600 px-3 py-1.5 rounded-full"><Crown className="w-3.5 h-3.5" /> Premium</span>
+                  <span data-testid={`ebook-premium-badge-${e.id}`} className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-purple-600 px-3 py-1.5 rounded-full"><Crown className="w-3.5 h-3.5" /> {t("premium")}</span>
                 </div>
               )}
               {e.premium && e.unlocked && <span data-testid={`ebook-owned-badge-${e.id}`} className="absolute bottom-3 left-3 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-500 text-white"><CheckCircle2 className="w-3 h-3" /> {e.owned ? t("owned") : t("unlocked")}</span>}
@@ -123,7 +123,7 @@ export default function Ebooks() {
             <>
               <DialogHeader>
                 <DialogTitle>{preview.titulo}</DialogTitle>
-                <DialogDescription>{preview.pais} · {preview.regiao} · {preview.categoria}</DialogDescription>
+                <DialogDescription>{tc(preview.pais)} · {tc(preview.regiao)} · {tc(preview.categoria)}</DialogDescription>
               </DialogHeader>
               <img src={preview.capa} alt={preview.titulo} className="w-full h-44 object-cover rounded-xl" />
               <div className="text-sm text-slate-600 space-y-2">

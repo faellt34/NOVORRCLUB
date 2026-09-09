@@ -224,3 +224,65 @@ async def cancel_subscription(user: dict = Depends(get_current_user)):
 @router.get("/payments/subscription")
 async def my_subscription(user: dict = Depends(get_current_user)):
     return await db.subscriptions.find_one({"user_id": user["id"]}, NO_ID)
+
+
+class EmailSettingsIn(BaseModel):
+    resend_api_key: Optional[str] = ""
+    sender_email: Optional[str] = ""
+
+
+@router.get("/admin/settings")
+async def get_settings(user: dict = Depends(require_role("admin"))):
+    from mailer import load_settings
+    st = await load_settings()
+    pilot = await db.settings.find_one({"id": "pilot"}, NO_ID) or {}
+    return {"email_configured": bool(st["key"]), "resend_key_hint": (st["key"][:6] + "•••" + st["key"][-3:]) if st["key"] else "", "sender_email": st["sender"],
+            "demo_disabled": bool(pilot.get("demo_disabled")), "pilot_reset_at": pilot.get("reset_at"), "reset_allowed": os.environ.get("ALLOW_PILOT_RESET", "false").lower() == "true",
+            "counts": {"users": await db.users.count_documents({}), "redemptions": await db.redemptions.count_documents({}), "campaigns": await db.campaigns.count_documents({}), "partners": await db.partners.count_documents({}), "influencers": await db.influencers.count_documents({})}}
+
+
+@router.post("/admin/settings/email")
+async def save_email_settings(body: EmailSettingsIn, user: dict = Depends(require_role("admin"))):
+    from mailer import load_settings, send_email
+    upd = {"id": "email", "sender_email": (body.sender_email or "").strip()}
+    if body.resend_api_key and body.resend_api_key.strip():
+        if not body.resend_api_key.strip().startswith("re_"):
+            raise HTTPException(status_code=400, detail="A chave Resend começa por 're_'")
+        upd["resend_api_key"] = body.resend_api_key.strip()
+    await db.settings.update_one({"id": "email"}, {"$set": upd}, upsert=True)
+    st = await load_settings()
+    await audit("CONFIGURAÇÃO", "Definições de email atualizadas", user, "email")
+    return {"ok": True, "email_configured": bool(st["key"])}
+
+
+@router.post("/admin/settings/email/test")
+async def test_email(user: dict = Depends(require_role("admin"))):
+    from mailer import send_email, load_settings
+    await load_settings()
+    ok = await send_email(user["email"], "ןןClub · Email de teste", "Email configurado com sucesso", f"Olá {user['nome']}, este é um email de teste enviado pela plataforma ןןClub.")
+    if not ok:
+        raise HTTPException(status_code=502, detail="Não foi possível enviar. Verifique a chave Resend e o remetente (em modo teste do Resend só envia para o seu próprio email).")
+    return {"ok": True}
+
+
+class ResetIn2(BaseModel):
+    confirm: str
+
+
+@router.post("/admin/reset-pilot")
+async def reset_pilot(body: ResetIn2, user: dict = Depends(require_role("admin"))):
+    if os.environ.get("ALLOW_PILOT_RESET", "false").lower() != "true":
+        raise HTTPException(status_code=403, detail="Reset desativado em produção. O piloto já foi zerado.")
+    if body.confirm != "ZERAR":
+        raise HTTPException(status_code=400, detail="Escreva ZERAR para confirmar")
+    keep_ids = [user["id"]]
+    owner = await db.users.find_one({"email": os.environ["ADMIN_EMAIL"].lower()}, NO_ID)
+    if owner:
+        keep_ids.append(owner["id"])
+    for c in ("redemptions", "coupon_claims", "leads", "messages", "conversations", "notifications", "feedback", "payouts", "payment_transactions", "entitlements", "subscriptions", "password_reset_tokens", "login_attempts", "campaigns", "partners", "influencers"):
+        await db[c].delete_many({})
+    await db.users.delete_many({"id": {"$nin": keep_ids}})
+    await db.audit_log.delete_many({})
+    await db.settings.update_one({"id": "pilot"}, {"$set": {"id": "pilot", "demo_disabled": True, "reset_at": now_iso(), "by": user["nome"]}}, upsert=True)
+    await audit("SISTEMA", f"Dados piloto zerados por {user['nome']} — plataforma pronta para produção", user, "pilot")
+    return {"ok": True, "kept_admins": len(keep_ids)}

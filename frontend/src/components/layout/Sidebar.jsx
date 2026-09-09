@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { useT } from "../../context/I18nContext";
@@ -8,6 +8,7 @@ import { slug } from "../../lib/api";
 import { ReferralDialog } from "../ReferralDialog";
 import { FeedbackDialog } from "../FeedbackDialog";
 import { LanguageSwitcher } from "../LanguageSwitcher";
+import { InstallAppButton } from "../InstallAppButton";
 
 const MENUS = {
   influencer: [
@@ -28,6 +29,7 @@ const MENUS = {
     { to: "/admin", icon: LayoutDashboard, key: "overview", id: "visao-geral" },
     { to: "/admin/gestao", icon: Settings, key: "manage", id: "gestao" },
     { to: "/admin/pagamentos", icon: Wallet, key: "payouts", id: "pagamentos" },
+    { to: "/admin/definicoes", icon: SlidersHorizontal, key: "settings", id: "definicoes" },
     { to: "/mensagens", icon: MessageSquare, key: "messages", id: "mensagens", badge: "messages" },
     { to: "/notificacoes", icon: Bell, key: "notifications", id: "notificacoes", badge: "notifications" },
     { to: "/ebooks", icon: BookOpen, key: "ebooks", id: "e-books-guias" },
@@ -86,6 +88,7 @@ export const SidebarContent = ({ onNavigate }) => {
             </NavLink>
           );
         })}
+        <InstallAppButton />
         <button data-testid="feedback-button" onClick={() => setFeedbackOpen(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-white/5 hover:text-white transition-colors text-left">
           <Lightbulb className="w-[18px] h-[18px] text-amber-400" /><span className="flex-1">{t("suggest")}</span>
         </button>

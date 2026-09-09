@@ -42,9 +42,16 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Cupom público `/c/:code` (QR aponta para o site) regista "clientes que receberam cupom" (dedup IP+UA/12h) → KPI real no dashboard do influencer + coluna "Receberam"
 - Rebrand visível: "ןןClub" (título, sidebar, login, emails, PDF)
 
+### 2026-09 · Produção: Definições admin, Zerar piloto, PWA, i18n de conteúdos ✅ (iteration_7 13/13, 100% frontend)
+- `/admin/definicoes`: configurar chave Resend + remetente pela UI (guardado em `settings`, sem redeploy), testar email, zerar dados piloto (confirmação "ZERAR")
+- **Piloto zerado em 2026-09-09**: só o admin dono existe; seed de demo desativada (`settings.pilot.demo_disabled`); botões de demo removidos do login
+- PWA: manifest, ícones 192/512, service worker (só em produção), meta iOS, botão "Instalar app" na sidebar; atalho "Validar Cupom"
+- i18n de conteúdos (categorias, países, cidades, estados, badge Premium) em EN/ES via `tc()`
+- Deployment check: pass
+
 ## Backlog priorizado
-- P1: preencher RESEND_API_KEY e domínio verificado; traduzir conteúdos de dados (categorias/cidades) em EN/ES
-- P2: Stripe Connect payouts automáticos, relatórios por parceiro em PDF, app mobile (PWA)
+- P1: preencher chave Resend em Definições; criar utilizadores reais (Gestão › Usuários) e campanhas
+- P2: Stripe Connect payouts automáticos, relatórios por parceiro em PDF, notificações push (PWA)
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.

@@ -10,11 +10,6 @@ import { Input } from "../components/ui/input";
 
 const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
 
-const DEMO = [
-  { label: "Admin", email: "admin@robson.club", password: "admin123" },
-  { label: "Influencer", email: "robson@robson.club", password: "robson123" },
-  { label: "Parceiro", email: "gerencia@tivolisky.pt", password: "tivoli123" },
-];
 
 export default function Login() {
   const { login } = useApp();
@@ -99,17 +94,6 @@ export default function Login() {
             <p className="text-sm text-slate-600 text-center">Ainda não tem conta? <Link to="/registar" data-testid="register-link" className="font-semibold text-purple-700 hover:underline">Criar conta</Link></p>
           </div>
 
-          <div className="mt-4 p-4 rounded-2xl bg-white border border-slate-200">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">{t("demo")}</p>
-            <div className="grid grid-cols-3 gap-2">
-              {DEMO.map((d) => (
-                <button key={d.label} type="button" data-testid={`demo-login-${d.label.toLowerCase()}`} onClick={(e) => submit(e, d)} className="py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold btn-press">
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-3">{t("demoHint")}</p>
-          </div>
         </div>
       </div>
     </div>
