@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileUp, FileCheck2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { StatusBadge } from "../components/KpiCard";
@@ -77,6 +77,19 @@ export default function AdminManage() {
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({});
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(null);
+
+  const uploadPdf = async (item, file) => {
+    if (!file) return;
+    setUploading(item.id);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      await api.post(`/admin/ebooks/${item.id}/pdf`, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(`PDF de "${item.titulo}" carregado`);
+      load("ebooks");
+    } catch (e) { toast.error(apiError(e)); } finally { setUploading(null); }
+  };
 
   const load = useCallback((kind) => api.get(`/admin/${kind}`).then((r) => setDb((p) => ({ ...p, [kind]: r.data }))).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { if (!db[tab]) load(tab); }, [tab, db, load]);
@@ -156,6 +169,12 @@ export default function AdminManage() {
                         <tr key={item.id} data-testid={`row-${item.id}`} className="border-b border-slate-50 last:border-0 hover:bg-purple-50/40 transition-colors">
                           {cols.map((f) => <td key={f.key} className="py-3 pr-4">{cell(f, item)}</td>)}
                           <td className="py-3 text-right whitespace-nowrap">
+                            {key === "ebooks" && (
+                              <label data-testid={`upload-pdf-${item.id}`} title={item.pdf_name ? `PDF: ${item.pdf_name}` : "Carregar PDF"} className={`inline-flex p-2 rounded-lg cursor-pointer btn-press ${item.pdf_path || item.pdf_name ? "text-emerald-600 hover:bg-emerald-50" : "text-slate-500 hover:bg-purple-50 hover:text-purple-600"} ${uploading === item.id ? "opacity-50 pointer-events-none" : ""}`}>
+                                {item.pdf_name ? <FileCheck2 className="w-4 h-4" /> : <FileUp className="w-4 h-4" />}
+                                <input type="file" accept="application/pdf" className="hidden" data-testid={`upload-pdf-input-${item.id}`} onChange={(e) => { uploadPdf(item, e.target.files?.[0]); e.target.value = ""; }} />
+                              </label>
+                            )}
                             <button data-testid={`edit-${item.id}`} onClick={() => openEdit(item)} className="p-2 rounded-lg text-slate-500 hover:bg-purple-50 hover:text-purple-600 btn-press"><Pencil className="w-4 h-4" /></button>
                             <button data-testid={`delete-${item.id}`} onClick={() => remove(item)} className="p-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 btn-press"><Trash2 className="w-4 h-4" /></button>
                           </td>

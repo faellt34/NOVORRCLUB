@@ -5,8 +5,8 @@ import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
 import { api, apiError, eur, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { QrScannerDialog } from "../components/QrScannerDialog";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -53,10 +53,7 @@ export default function PartnerDashboard() {
     }
   };
 
-  const simulateScan = () => {
-    setScannerOpen(true);
-    setTimeout(() => { setCode("ROBSON-LUXE-25"); setScannerOpen(false); toast.success("QR detetado: ROBSON-LUXE-25"); }, 2200);
-  };
+  const onDetected = useCallback((c) => { setCode(c); toast.success(`QR detetado: ${c}`); }, []);
 
   const exportCsv = () => {
     downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor_eur;desconto_eur;comissao_eur;taxa;data;staff",
@@ -89,7 +86,7 @@ export default function PartnerDashboard() {
           <form onSubmit={handleValidate} className="space-y-3">
             <div className="flex gap-2">
               <Input data-testid="coupon-code-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
-              <button type="button" data-testid="open-scanner-button" onClick={simulateScan} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
+              <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
                 <ScanLine className="w-[18px] h-[18px]" />
               </button>
             </div>
@@ -172,19 +169,7 @@ export default function PartnerDashboard() {
         </div>
       </div>
 
-      <Dialog open={scannerOpen} onOpenChange={setScannerOpen}>
-        <DialogContent data-testid="scanner-modal" className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>A escanear QR Code...</DialogTitle>
-            <DialogDescription>Aponte a câmara para o QR do cliente</DialogDescription>
-          </DialogHeader>
-          <div className="relative aspect-square rounded-2xl bg-slate-950 overflow-hidden flex items-center justify-center">
-            <div className="w-2/3 aspect-square border-2 border-purple-400/60 rounded-2xl" />
-            <div className="scanner-line absolute left-[10%] right-[10%] h-0.5 bg-purple-400 shadow-[0_0_12px_rgba(167,139,250,0.9)]" />
-            <p className="absolute bottom-4 text-xs text-slate-400">Câmera simulada · a detetar cupom</p>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} />
     </div>
   );
 }

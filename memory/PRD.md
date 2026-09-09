@@ -24,9 +24,16 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Hub de mensagens: contactos permitidos por papel, conversas 1:1, unread, polling 8s; badges na sidebar
 - Notificações: página + badge; e-books com país/idioma/preço (12 guias: PT, Espanha, Itália, França, Emirados)
 
+### 2026-09 · Scanner real + Pagamentos + Recuperação de password + Stripe e-books ✅ (iteration_4.json — 100% backend 19/19, 100% frontend)
+- Scanner QR com câmara real (html5-qrcode), extrai código de links `/c/CODE`, fallback amigável sem câmara
+- Admin `/admin/pagamentos`: marca extrato mensal como pago / reverte → influencer vê "Pago em" no extrato + notificação
+- Recuperação de password sem email: `/esqueci-password` → admin vê pedidos no painel e copia link `/redefinir-password?token=` (24h, uso único)
+- Stripe (sandbox reclamável, país PT, tax mode "full"/managed): compra individual `ebook_{id}` (preço do admin) + subscrição `club_monthly` 9,90€/mês; `/payment/success` faz polling com fallback ao Stripe; entitlements/subscriptions no Mongo
+- Upload de PDF pelo admin (Emergent Object Storage) e leitor in-app (blob → iframe) com gating server-side (gratuito/comprado/subscrito/admin)
+
 ## Backlog priorizado
-- P1: recuperação de password por email (Resend), scanner de câmara real (QR), marcar mês como pago (admin) no extrato
-- P2: subscrição premium dos e-books (Stripe), upload de PDF de e-books (Object Storage), Stripe Connect payouts, CORS_ORIGINS explícito em produção, i18n EN/ES
+- P1: envio real de email de recuperação (Resend), cancelamento de subscrição pelo utilizador, i18n EN/ES
+- P2: Stripe Connect payouts automáticos, CORS_ORIGINS explícito em produção, relatório PDF do extrato
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.

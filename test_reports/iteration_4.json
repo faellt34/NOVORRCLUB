@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 4 focused on the NEW features: admin payouts (mark paid/revert + notification), password recovery (forgot / admin approves / reset), Stripe checkout (ebook_* / club_monthly / access), PDF upload+read with premium gating, QR scanner dialog, and routing regression. Backend: 19/19 new pytest cases pass (test_new_features.py). Frontend: forgot-password link → /esqueci-password → success toast; admin sees reset-requests-card and can copy link; /redefinir-password?token=... with invalid token shows reset-invalid, with valid token accepts new password and redirects to /login; admin payouts page shows 15 rows, mark-paid → status flips to 'Pago em ...' with revert-paid visible, revert works; influencer /ebooks shows subscribe-button and unlock buttons; checkout API returns a real https://checkout.stripe.com URL for ebook_e1 and club_monthly; /payment/cancel shows payment-cancelled; admin uploads PDF via upload-pdf-input-e2 (toast 'PDF de ... carregado' appears, ebooks API reflects has_pdf=true); influencer opens pdf-reader and pdf-iframe renders, close works; partner scanner-modal opens with qr-reader (no crash) and manual coupon validation still works (last-receipt shown).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/parceiro scanner-modal (headless / no camera)", "issues": ["When html5-qrcode fails to acquire a camera in a headless/no-permission environment, the modal keeps showing 'A iniciar câmara...' state (scanner-starting) instead of transitioning to the friendly [data-testid=scanner-error] message. The dialog does NOT crash, but the promised error UI never appears in that environment. Consider adding a timeout (e.g. 4–6s) that flips to scanner-error if the html5-qrcode start promise doesn't resolve, so users on desktops without a camera still see actionable feedback."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/new_features.xml"
+  ],
+  "action_items": [
+    "Optional: in QrScannerDialog.jsx, add a fallback timeout that surfaces the scanner-error state when no camera device is available (currently the 'A iniciar câmara...' overlay stays forever)."
+  ],
+  "critical_code_review_comments": [
+    "Router order in server.py is correct: routes_ops (payouts, reset) is registered BEFORE routes_admin whose generic /admin/{kind} would otherwise shadow /admin/payouts and /admin/reset-requests. Regression tests confirm this.",
+    "routes_payments.checkout uses managed_payments with a graceful fallback to automatic_tax when the account is ineligible — good defensive coding.",
+    "routes_payments.payment_status has a Stripe-side fallback (retrieves session and calls fulfil) when the webhook doesn't reach the preview — verified live.",
+    "routes_ops.forgot_password wisely returns 200 regardless of email existence (no user enumeration) and still stores no token for unknown emails.",
+    "routes_ops.reset_password invalidates login_attempts rows for that email — good, avoids lingering lockout after recovery.",
+    "read_pdf accepts token via ?auth= query param to power blob iframes; make sure this token is short-lived. Current tokens live for the whole session (JWT). Acceptable for MVP.",
+    "storage.put_object is called synchronously in an async handler via UploadFile.read + blocking put; for larger files consider asyncio.to_thread. Not a blocker at 40MB cap."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py"
+  ],
+  "success_rate": {"backend": "100% (19/19 new + 25/25 previous)", "frontend": "100% of critical new flows"},
+  "test_credentials": "Admin admin@robson.club/admin123; influencers robson@robson.club/robson123 (restored via reset flow), marta@robson.club/marta123, diogo@robson.club/diogo123 (restored to diogo123 at end of test as required); partner gerencia@tivolisky.pt/tivoli123.",
+  "seed_data_creation": "Tests uploaded small stub PDFs for e2 (Gratuito) and e1 (Premium) via /api/admin/ebooks/{id}/pdf. Created and consumed multiple password_reset_tokens for diogo and robson. Marked and immediately reverted payout for if2 to leave state unchanged. Stripe: created a few pending Checkout Sessions (never completed with card) for ebook_e1 and club_monthly — they remain in Stripe test sandbox but do not affect prod.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iteration-4 features are green. The only non-blocking observation is the QR scanner dialog on headless/no-camera devices remains stuck on 'A iniciar câmara...' instead of showing scanner-error. Password of diogo was correctly restored to diogo123 at end of the reset test. Backend router order confirmed OK. Live Stripe test-mode credentials are configured; a real card checkout completion could be done manually in a browser to further verify /payment/success → payment-paid → ebook-owned-badge-e1, but the API path (/api/payments/status → fulfil) is already exercised by unit tests and the front-end pages exist.",
+  "rca of the issue": "N/A — no functional bugs. The single UX concern (scanner spinner) is likely due to html5-qrcode not rejecting its start() promise fast enough when no camera is present in a Chromium headless context."
+}

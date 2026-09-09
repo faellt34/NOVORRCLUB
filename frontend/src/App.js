@@ -12,6 +12,9 @@ import Statement from "@/pages/Statement";
 import Ebooks from "@/pages/Ebooks";
 import Messages from "@/pages/Messages";
 import Notifications from "@/pages/Notifications";
+import PaymentResult from "@/pages/PaymentResult";
+import AdminPayouts from "@/pages/AdminPayouts";
+import { ForgotPassword, ResetPassword } from "@/pages/PasswordRecovery";
 
 const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
 
@@ -48,10 +51,14 @@ function App() {
         <Routes>
           <Route element={<PublicOnly />}>
             <Route path="/login" element={<Login />} />
+            <Route path="/esqueci-password" element={<ForgotPassword />} />
+            <Route path="/redefinir-password" element={<ResetPassword />} />
           </Route>
           <Route element={<Protected />}>
             <Route element={<AppLayout />}>
               <Route path="/" element={<RoleRedirect />} />
+              <Route path="/payment/success" element={<PaymentResult />} />
+              <Route path="/payment/cancel" element={<PaymentResult cancelled />} />
               <Route path="/mensagens" element={<Messages />} />
               <Route path="/notificacoes" element={<Notifications />} />
               <Route path="/ebooks" element={<Ebooks />} />
@@ -65,6 +72,7 @@ function App() {
               <Route element={<Protected roles={["admin"]} />}>
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/gestao" element={<AdminManage />} />
+                <Route path="/admin/pagamentos" element={<AdminPayouts />} />
               </Route>
               <Route path="*" element={<RoleRedirect />} />
             </Route>

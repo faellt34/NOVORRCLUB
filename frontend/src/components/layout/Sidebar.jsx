@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { slug } from "../../lib/api";
@@ -24,6 +24,7 @@ const MENUS = {
   admin: [
     { to: "/admin", icon: LayoutDashboard, label: "Visão Geral" },
     { to: "/admin/gestao", icon: Settings, label: "Gestão" },
+    { to: "/admin/pagamentos", icon: Wallet, label: "Pagamentos" },
     { to: "/mensagens", icon: MessageSquare, label: "Mensagens", badge: "messages" },
     { to: "/notificacoes", icon: Bell, label: "Notificações", badge: "notifications" },
     { to: "/ebooks", icon: BookOpen, label: "E-books & Guias" },

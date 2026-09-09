@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Crown, Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -83,6 +83,9 @@ export default function Login() {
               </div>
             </div>
             {error && <p data-testid="login-error" className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            <div className="flex justify-end">
+              <Link to="/esqueci-password" data-testid="forgot-password-link" className="text-xs font-semibold text-purple-700 hover:underline">Esqueci a palavra-passe</Link>
+            </div>
             <button type="submit" disabled={loading} data-testid="login-submit-button" className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press">
               <LogIn className="w-4 h-4" /> {loading ? "A entrar..." : "Entrar"}
             </button>

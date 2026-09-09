@@ -195,7 +195,15 @@ async def statements(user: dict = Depends(require_role("influencer"))):
 
 @router.get("/ebooks")
 async def ebooks(user: dict = Depends(get_current_user)):
-    return await db.ebooks.find({}, NO_ID).to_list(500)
+    items = await db.ebooks.find({}, NO_ID).to_list(500)
+    sub = await db.subscriptions.find_one({"user_id": user["id"], "status": "active"}, NO_ID)
+    owned = {e["ebook_id"] async for e in db.entitlements.find({"user_id": user["id"]}, NO_ID)}
+    for e in items:
+        e["has_pdf"] = bool(e.get("pdf_path"))
+        e["owned"] = e["id"] in owned
+        e["unlocked"] = (not e.get("premium")) or user["role"] == "admin" or bool(sub) or e["id"] in owned
+        e.pop("pdf_path", None)
+    return items
 
 
 @router.get("/notifications")

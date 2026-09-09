@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X } from "lucide-react";
+import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState(null);
   const [audit, setAudit] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [resets, setResets] = useState([]);
   const [decision, setDecision] = useState(null);
   const [note, setNote] = useState("");
   const [email, setEmail] = useState("");
@@ -23,8 +24,8 @@ export default function AdminDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [d, a, l] = await Promise.all([api.get("/dashboard/admin"), api.get("/audit"), api.get("/leads")]);
-      setData(d.data); setAudit(a.data); setLeads(l.data);
+      const [d, a, l, r] = await Promise.all([api.get("/dashboard/admin"), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests")]);
+      setData(d.data); setAudit(a.data); setLeads(l.data); setResets(r.data);
     } catch (e) { toast.error(apiError(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -61,6 +62,31 @@ export default function AdminDashboard() {
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" value={String(data.counts.partners)} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" value={String(data.counts.campaigns)} />
       </div>
+
+      {resets.length > 0 && (
+        <div data-testid="admin-reset-requests-card" className="card-soft p-5 border-l-4 border-amber-400">
+          <div className="flex items-center gap-2 mb-3">
+            <KeyRound className="w-5 h-5 text-amber-500" />
+            <h3 className="text-lg font-semibold text-slate-900">Pedidos de recuperação de acesso</h3>
+            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center">{resets.length}</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">Copie o link e envie-o ao utilizador (WhatsApp/email). Cada link é válido 24h e só pode ser usado uma vez.</p>
+          <div className="space-y-2">
+            {resets.map((r) => {
+              const link = `${window.location.origin}/redefinir-password?token=${r.token}`;
+              return (
+                <div key={r.id} data-testid={`reset-request-${r.id}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-amber-50/50">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">{r.nome} <span className="font-normal text-slate-500">· {r.email}</span></p>
+                    <p className="text-[11px] text-slate-400">Pedido em {new Date(r.created_at).toLocaleString("pt-PT")}</p>
+                  </div>
+                  <button data-testid={`copy-reset-link-${r.id}`} onClick={() => { navigator.clipboard?.writeText(link).catch(() => {}); toast.success("Link de recuperação copiado"); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold btn-press shrink-0"><Copy className="w-3.5 h-3.5" /> Copiar link</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div data-testid="admin-leads-card" className="card-soft p-5">
         <div className="flex items-center gap-2 mb-4">
