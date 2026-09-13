@@ -60,6 +60,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Connect só funciona depois do dono reclamar a conta Stripe e ativar Connect (dashboard.stripe.com/connect); até lá o endpoint responde `available:false` com explicação e o fluxo manual (IBAN) continua
 - Recibo: cliente indica email opcional; após pagar vê recibo no ecrã (conta/desconto/pago/ref) com imprimir; email de recibo via Resend quando configurado. SMS não implementado (requer Twilio)
 
+### 2026-09 · Capa com globo animado + IBAN da plataforma + domínio theclub.pt ✅
+- Login hero: globo de pontos a girar com arcos de ligação animados (canvas, `GlobeCanvas.jsx`, inspirado na referência Cloudflare); também no fundo da página pública do cupom
+- Admin › Definições: IBAN + titular da plataforma (`/api/admin/settings/iban`, `GET /api/public/bank`) para receber comissões/pagamentos por transferência manual
+- Domínio escolhido: **theclub.pt** — `FRONTEND_URL`, remetente `noreply@theclub.pt` e placeholders atualizados (ligar em Publish › Domain)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

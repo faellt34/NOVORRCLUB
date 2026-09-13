@@ -236,7 +236,8 @@ async def get_settings(user: dict = Depends(require_role("admin"))):
     from mailer import load_settings
     st = await load_settings()
     pilot = await db.settings.find_one({"id": "pilot"}, NO_ID) or {}
-    return {"email_configured": bool(st["key"]), "resend_key_hint": (st["key"][:6] + "•••" + st["key"][-3:]) if st["key"] else "", "sender_email": st["sender"],
+    bank = await db.settings.find_one({"id": "bank"}, NO_ID) or {}
+    return {"iban": bank.get("iban", ""), "iban_titular": bank.get("titular", ""), "email_configured": bool(st["key"]), "resend_key_hint": (st["key"][:6] + "•••" + st["key"][-3:]) if st["key"] else "", "sender_email": st["sender"],
             "demo_disabled": bool(pilot.get("demo_disabled")), "pilot_reset_at": pilot.get("reset_at"), "reset_allowed": os.environ.get("ALLOW_PILOT_RESET", "false").lower() == "true",
             "counts": {"users": await db.users.count_documents({}), "redemptions": await db.redemptions.count_documents({}), "campaigns": await db.campaigns.count_documents({}), "partners": await db.partners.count_documents({}), "influencers": await db.influencers.count_documents({})}}
 
@@ -286,3 +287,24 @@ async def reset_pilot(body: ResetIn2, user: dict = Depends(require_role("admin")
     await db.settings.update_one({"id": "pilot"}, {"$set": {"id": "pilot", "demo_disabled": True, "reset_at": now_iso(), "by": user["nome"]}}, upsert=True)
     await audit("SISTEMA", f"Dados piloto zerados por {user['nome']} — plataforma pronta para produção", user, "pilot")
     return {"ok": True, "kept_admins": len(keep_ids)}
+
+
+class PlatformIbanIn(BaseModel):
+    iban: str
+    titular: Optional[str] = ""
+
+
+@router.post("/admin/settings/iban")
+async def save_platform_iban(body: PlatformIbanIn, user: dict = Depends(require_role("admin"))):
+    iban = body.iban.replace(" ", "").upper()
+    if iban and not (15 <= len(iban) <= 34 and iban[:2].isalpha() and iban[2:4].isdigit()):
+        raise HTTPException(status_code=400, detail="IBAN inválido")
+    await db.settings.update_one({"id": "bank"}, {"$set": {"id": "bank", "iban": iban, "titular": body.titular.strip()}}, upsert=True)
+    await audit("CONFIGURAÇÃO", f"IBAN da plataforma atualizado · ••••{iban[-4:] if iban else ''}", user, "bank")
+    return {"ok": True, "iban": iban}
+
+
+@router.get("/public/bank")
+async def public_bank(user: dict = Depends(get_current_user)):
+    bank = await db.settings.find_one({"id": "bank"}, NO_ID) or {}
+    return {"iban": bank.get("iban", ""), "titular": bank.get("titular", "")}

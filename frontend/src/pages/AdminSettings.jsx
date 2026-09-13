@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Mail, Send, Trash2, ShieldAlert, CheckCircle2, Smartphone } from "lucide-react";
+import { Mail, Send, Trash2, ShieldAlert, CheckCircle2, Smartphone, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { Input } from "../components/ui/input";
@@ -10,9 +10,16 @@ export default function AdminSettings() {
   const [key, setKey] = useState("");
   const [sender, setSender] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [iban, setIban] = useState("");
+  const [titular, setTitular] = useState("");
+  const saveIban = async (e) => {
+    e.preventDefault(); setBusy("iban");
+    try { await api.post("/admin/settings/iban", { iban, titular }); toast.success("IBAN da plataforma guardado"); load(); }
+    catch (err) { toast.error(apiError(err)); } finally { setBusy(""); }
+  };
   const [busy, setBusy] = useState("");
 
-  const load = useCallback(() => api.get("/admin/settings").then((r) => { setS(r.data); setSender(r.data.sender_email || ""); }).catch((e) => toast.error(apiError(e))), []);
+  const load = useCallback(() => api.get("/admin/settings").then((r) => { setS(r.data); setSender(r.data.sender_email || ""); setIban(r.data.iban || ""); setTitular(r.data.iban_titular || ""); }).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { load(); }, [load]);
 
   const saveEmail = async (e) => {
@@ -39,6 +46,16 @@ export default function AdminSettings() {
         <h1 data-testid="settings-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Definições</h1>
         <p className="text-sm text-slate-500 mt-1">Controle total sem código: email automático, dados piloto e instalação no telemóvel</p>
       </div>
+
+      <form onSubmit={saveIban} className="card-soft p-5 space-y-3" data-testid="settings-iban-card">
+        <div className="flex items-center gap-2"><Landmark className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">IBAN da plataforma (conta para receber dinheiro)</h3></div>
+        <p className="text-xs text-slate-500">Conta bancária da ןןClub onde recebe as comissões e os pagamentos por QR (quando o Stripe Connect não está ativo). Aparece nos extratos e no rodapé dos recibos para transferências manuais.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-slate-600 mb-1 block">IBAN</label><Input data-testid="settings-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono" /></div>
+          <div><label className="text-xs font-semibold text-slate-600 mb-1 block">Titular</label><Input data-testid="settings-iban-titular" value={titular} onChange={(e) => setTitular(e.target.value)} placeholder="Nome do titular" className="rounded-xl bg-slate-50" /></div>
+        </div>
+        <button type="submit" disabled={busy === "iban"} data-testid="settings-iban-save" className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">Guardar IBAN</button>
+      </form>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <form onSubmit={saveEmail} className="card-soft p-5 space-y-3" data-testid="settings-email-card">

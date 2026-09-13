@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
 import { useT } from "../context/I18nContext";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { GlobeCanvas } from "../components/GlobeCanvas";
 import { apiError } from "../lib/api";
 import { Input } from "../components/ui/input";
 
@@ -39,22 +40,21 @@ export default function Login() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC]">
-      <div className="hidden lg:flex flex-col justify-between p-12 bg-[#0C0A14] text-white relative overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-[480px] h-[480px] rounded-full bg-purple-700/30 blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-[380px] h-[380px] rounded-full bg-purple-500/20 blur-3xl" />
+      <div className="hidden lg:flex flex-col justify-between p-12 bg-[#5B21B6] text-white relative overflow-hidden" data-testid="login-hero">
+        <GlobeCanvas />
         <div className="relative flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-6 h-6" /></div>
           <div>
             <p className="font-display font-bold text-xl leading-tight">ןןClub</p>
-            <p className="text-[11px] uppercase tracking-widest text-purple-300/80">Luxury Experiences</p>
+            <p className="text-[11px] uppercase tracking-widest text-purple-200/80">Luxury Experiences</p>
           </div>
         </div>
         <div className="relative max-w-md">
-          <p className="text-purple-300 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> {t("heroTag")}</p>
+          <p className="text-purple-200 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2 font-coupon"><Sparkles className="w-4 h-4" /> {t("heroTag")}</p>
           <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">{t("heroTitle")}</h1>
-          <p className="text-slate-400 leading-relaxed">{t("heroText")}</p>
+          <p className="text-purple-100/90 leading-relaxed">{t("heroText")}</p>
         </div>
-        <div className="relative flex items-center justify-between"><p className="text-xs text-slate-500">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
+        <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-12">
