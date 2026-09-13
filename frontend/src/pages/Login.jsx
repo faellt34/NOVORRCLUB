@@ -42,7 +42,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC]">
-      <div className="hidden lg:flex flex-col justify-between p-12 bg-[#5B21B6] text-white relative overflow-hidden" data-testid="login-hero">
+      <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" data-testid="login-hero" style={{ background: "radial-gradient(ellipse 85% 120% at 15% 45%, #5B21B6 0%, #5B21B6 48%, #2A1064 62%, #08061A 78%, #08061A 100%)" }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 60% 80%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 90% 85%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 75% 40%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 40% 10%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 95% 15%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1px 1px at 82% 70%, rgba(255,255,255,.6) 50%, transparent 51%), radial-gradient(1.2px 1.2px at 65% 60%, rgba(255,255,255,.8) 50%, transparent 51%)", backgroundSize: "100% 100%", animation: "twinkle 4s ease-in-out infinite alternate" }} />
         <GlobeCanvas interactive={false} />
         <div className="relative flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-6 h-6" /></div>

@@ -69,6 +69,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `GlobeCanvas` reage ao rato (velocidade e inclinação), marca as cidades dos parceiros ativos (`GET /api/public/cities`, coords em `CITY_COORDS`) com pulso âmbar e etiqueta "Cidade · nº parceiros"
 - Globo estilo Cloudflare (sem etiquetas/interação por pedido do utilizador); IBAN também para influencers (extrato + Gestão + visível em Pagamentos). GIF do globo (600×600, 72 frames, PIL) em `/globe.gif` para redes sociais/apresentações
 
+### 2026-09 · Capa noturna yin-yang + vídeo story ✅
+- Login hero: metade roxo #5B21B6 → metade céu noturno #08061A com estrelas a piscar (`@keyframes twinkle`), globo por cima
+- Vídeo MP4 para stories (1080×1920, 5s, 30fps, logótipo ||Club, slogan, theclub.pt) em `/globe-story.mp4`; gerado por `/tmp/story.py` (PIL + ffmpeg) — não persistente, regenerar se necessário
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

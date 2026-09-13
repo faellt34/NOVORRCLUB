@@ -1,3 +1,5 @@
 .App {
   min-height: 100vh;
 }
+
+@keyframes twinkle { from { opacity: .55; } to { opacity: 1; } }
