@@ -328,3 +328,22 @@ async def influencer_iban(body: InfIbanIn, user: dict = Depends(require_role("in
     await db.influencers.update_one({"id": user["influencer_id"]}, {"$set": {"iban": iban}})
     await audit("CONFIGURAÇÃO", f"IBAN de comissões atualizado · {user['nome']} · ••••{iban[-4:]}", user, user["influencer_id"])
     return {"ok": True, "iban": iban}
+
+
+@router.get("/influencer/story-video/{campaign_id}")
+async def story_video(campaign_id: str, user: dict = Depends(require_role("influencer"))):
+    import asyncio, hashlib, re as _re
+    from fastapi.responses import FileResponse
+    from story_video import render_story, MEDIA_DIR
+    c = await db.campaigns.find_one({"id": campaign_id, "influencer_id": user["influencer_id"]}, NO_ID)
+    if not c:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    inf = await db.influencers.find_one({"id": user["influencer_id"]}, NO_ID) or {}
+    site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "theclub.pt")).rstrip("/")
+    key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v2".encode()).hexdigest()[:12]
+    out = MEDIA_DIR / f"story-{c['cupom']}-{key}.mp4"
+    if not out.exists():
+        await asyncio.to_thread(render_story, out, user["nome"], inf.get("handle", ""), c["cupom"], float(c["desconto"]), partner.get("nome", ""), site)
+        await audit("VÍDEO", f"Story personalizado gerado · {c['cupom']}", user, campaign_id)
+    return FileResponse(str(out), media_type="video/mp4", filename=f"story-{c['cupom']}.mp4")

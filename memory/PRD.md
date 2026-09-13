@@ -73,6 +73,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Login hero: metade roxo #5B21B6 → metade céu noturno #08061A com estrelas a piscar (`@keyframes twinkle`), globo por cima
 - Vídeo MP4 para stories (1080×1920, 5s, 30fps, logótipo ||Club, slogan, theclub.pt) em `/globe-story.mp4`; gerado por `/tmp/story.py` (PIL + ffmpeg) — não persistente, regenerar se necessário
 
+### 2026-09 · Vídeo story personalizado por influencer ✅
+- `GET /api/influencer/story-video/{campaign_id}` gera MP4 720×1280 (3 s, 30 fps, ~8 s de render, cache em `backend/media/`) com nome, handle, cupom, desconto/parceiro e `theclub.pt/c/CUPOM` (`story_video.py`, PIL + ffmpeg)
+- Botão "Vídeo Story personalizado (MP4)" no cartão do cupom em destaque do dashboard do influencer
+- Contas de exemplo em produção: influencer.exemplo@club.pt / influencer123 e parceiro.exemplo@club.pt / parceiro123 (apagar quando quiser)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
