@@ -27,7 +27,7 @@ const CONFIG = {
       { key: "nome", label: "Nome" },
       { key: "handle", label: "Handle" },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
-      { key: "iban", label: "IBAN (receber comissões)", optional: true, hideInTable: true },
+      { key: "iban", label: "IBAN (receber comissões)", optional: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso"] },
     ],
   },
@@ -37,7 +37,7 @@ const CONFIG = {
       { key: "nome", label: "Nome" },
       { key: "categoria", label: "Categoria", type: "select", options: ["Restaurante", "Hotel", "Rooftop", "Passeio"] },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
-      { key: "iban", label: "IBAN (recebimentos)", optional: true, hideInTable: true },
+      { key: "iban", label: "IBAN (recebimentos)", optional: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],
   },
@@ -130,6 +130,7 @@ export default function AdminManage() {
     if (f.key === "cupom") return <span className="font-coupon text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md">{v}</span>;
     if (f.key === "comissao") return <span className="font-semibold text-purple-700">{v}%</span>;
     if (f.key === "premium") return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{v ? "Premium" : "Gratuito"}</span>;
+    if (f.key === "iban") return v ? <span className="font-mono text-xs text-slate-700">{String(v).replace(/(.{4})/g, "$1 ").trim()}</span> : <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Sem IBAN</span>;
     if (f.key === "preco") return <span className="text-slate-600">{v ? `${v}€` : "—"}</span>;
     return <span className={["nome", "titulo"].includes(f.key) ? "font-semibold text-slate-900" : "text-slate-600"}>{v}{f.key === "desconto" ? "%" : ""}</span>;
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard } from "lucide-react";
+import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
@@ -18,6 +18,15 @@ export default function InfluencerDashboard() {
   const [statusFilter, setStatusFilter] = useState("todas");
   const [data, setData] = useState(null);
   const [videoBusy, setVideoBusy] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [iban, setIban] = useState("");
+  const [ibanEdit, setIbanEdit] = useState(false);
+  useEffect(() => { api.get("/influencer/me").then((r) => setProfile(r.data)).catch(() => {}); }, []);
+  const saveIban = async (e) => {
+    e.preventDefault();
+    try { const { data: res } = await api.post("/influencer/iban", { iban }); setProfile((p) => ({ ...p, iban: res.iban })); setIbanEdit(false); toast.success("IBAN guardado — as comissões serão transferidas para esta conta"); }
+    catch (err) { toast.error(apiError(err)); }
+  };
 
   const downloadStory = async () => {
     setVideoBusy(true);
@@ -77,6 +86,24 @@ export default function InfluencerDashboard() {
             {unread.notifications > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
           </Link>
         </div>
+      </div>
+
+      <div data-testid="influencer-iban-card" className={`card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${profile && !profile.iban ? "border-l-4 border-amber-400" : ""}`}>
+        <div className="flex items-center gap-3">
+          <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">IBAN para receber as comissões</p>
+            <p className="text-xs text-slate-500">{profile?.iban ? <span className="font-mono" data-testid="influencer-iban-value">{profile.iban.replace(/(.{4})/g, "$1 ").trim()}</span> : "Ainda sem IBAN — adicione a sua conta bancária para receber os pagamentos mensais."}</p>
+          </div>
+        </div>
+        {ibanEdit ? (
+          <form onSubmit={saveIban} className="flex gap-2">
+            <Input data-testid="influencer-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+            <button type="submit" data-testid="influencer-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
+          </form>
+        ) : (
+          <button data-testid="influencer-iban-edit" onClick={() => { setIban(profile?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press">{profile?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
