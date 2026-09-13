@@ -84,7 +84,7 @@ export default function AdminPayouts() {
                 return (
                   <tr key={key} data-testid={`payout-row-${key}`} className="border-b border-slate-50 last:border-0 hover:bg-purple-50/40 transition-colors">
                     <td className="py-3 pr-4 font-semibold text-slate-900">{monthLabel(r.month)}</td>
-                    <td className="py-3 pr-4 text-slate-700">{r.influencer}</td>
+                    <td className="py-3 pr-4 text-slate-700">{r.influencer}{r.iban && <p className="text-[11px] font-mono text-slate-400">{r.iban}</p>}</td>
                     <td className="py-3 pr-4 text-slate-600">{num(r.count)}</td>
                     <td className="py-3 pr-4 font-bold text-purple-700">{eur(r.commission)}</td>
                     <td className="py-3 pr-4">

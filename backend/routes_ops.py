@@ -25,11 +25,12 @@ async def payouts_overview(user: dict = Depends(require_role("admin"))):
         agg[k]["commission"] += r["commission"]; agg[k]["count"] += 1
         names[r["influencer_id"]] = r["influencer"]
     paid = {(p["influencer_id"], p["month"]): p async for p in db.payouts.find({}, NO_ID)}
+    ibans = {i["id"]: i.get("iban") async for i in db.influencers.find({}, {"id": 1, "iban": 1, "_id": 0})}
     rows = []
     for (inf, month), v in agg.items():
         p = paid.get((inf, month))
         rows.append({"influencer_id": inf, "influencer": names[inf], "month": month, "commission": round(v["commission"], 2), "count": v["count"],
-                     "status": "Pago" if p else "Pendente", "paid_at": p["paid_at"] if p else None, "note": p.get("note") if p else None})
+                     "status": "Pago" if p else "Pendente", "paid_at": p["paid_at"] if p else None, "note": p.get("note") if p else None, "iban": ibans.get(inf)})
     rows.sort(key=lambda r: (r["month"], r["influencer"]), reverse=True)
     return rows
 
@@ -308,3 +309,22 @@ async def save_platform_iban(body: PlatformIbanIn, user: dict = Depends(require_
 async def public_bank(user: dict = Depends(get_current_user)):
     bank = await db.settings.find_one({"id": "bank"}, NO_ID) or {}
     return {"iban": bank.get("iban", ""), "titular": bank.get("titular", "")}
+
+
+@router.get("/influencer/me")
+async def influencer_me(user: dict = Depends(require_role("influencer"))):
+    return await db.influencers.find_one({"id": user["influencer_id"]}, NO_ID) or {}
+
+
+class InfIbanIn(BaseModel):
+    iban: str
+
+
+@router.post("/influencer/iban")
+async def influencer_iban(body: InfIbanIn, user: dict = Depends(require_role("influencer"))):
+    iban = body.iban.replace(" ", "").upper()
+    if not (15 <= len(iban) <= 34 and iban[:2].isalpha() and iban[2:4].isdigit()):
+        raise HTTPException(status_code=400, detail="IBAN inválido")
+    await db.influencers.update_one({"id": user["influencer_id"]}, {"$set": {"iban": iban}})
+    await audit("CONFIGURAÇÃO", f"IBAN de comissões atualizado · {user['nome']} · ••••{iban[-4:]}", user, user["influencer_id"])
+    return {"ok": True, "iban": iban}

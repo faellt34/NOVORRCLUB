@@ -67,7 +67,7 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ### 2026-09 · Globo interativo + GIF ✅
 - `GlobeCanvas` reage ao rato (velocidade e inclinação), marca as cidades dos parceiros ativos (`GET /api/public/cities`, coords em `CITY_COORDS`) com pulso âmbar e etiqueta "Cidade · nº parceiros"
-- GIF do globo (600×600, 72 frames, gerado com PIL) em `/globe.gif` para redes sociais/apresentações
+- Globo estilo Cloudflare (sem etiquetas/interação por pedido do utilizador); IBAN também para influencers (extrato + Gestão + visível em Pagamentos). GIF do globo (600×600, 72 frames, PIL) em `/globe.gif` para redes sociais/apresentações
 
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

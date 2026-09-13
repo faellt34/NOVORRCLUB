@@ -43,7 +43,7 @@ export default function Login() {
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC]">
       <div className="hidden lg:flex flex-col justify-between p-12 bg-[#5B21B6] text-white relative overflow-hidden" data-testid="login-hero">
-        <GlobeCanvas cities={cities} />
+        <GlobeCanvas interactive={false} />
         <div className="relative flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-6 h-6" /></div>
           <div>
@@ -55,7 +55,6 @@ export default function Login() {
           <p className="text-purple-200 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2 font-coupon"><Sparkles className="w-4 h-4" /> {t("heroTag")}</p>
           <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">{t("heroTitle")}</h1>
           <p className="text-purple-100/90 leading-relaxed">{t("heroText")}</p>
-          {cities.length > 0 && <p data-testid="hero-cities" className="mt-4 text-xs text-amber-300/90 font-semibold uppercase tracking-widest">● {cities.map((c) => c.name).join(" · ")}</p>}
         </div>
         <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>

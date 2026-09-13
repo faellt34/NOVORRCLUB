@@ -27,6 +27,7 @@ const CONFIG = {
       { key: "nome", label: "Nome" },
       { key: "handle", label: "Handle" },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
+      { key: "iban", label: "IBAN (receber comissões)", optional: true, hideInTable: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso"] },
     ],
   },

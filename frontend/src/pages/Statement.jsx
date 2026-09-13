@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Download, Euro, Ticket, HandCoins, CheckCircle2, Clock, FileDown } from "lucide-react";
+import { Download, Euro, Ticket, HandCoins, CheckCircle2, Clock, FileDown, Landmark } from "lucide-react";
+import { Input } from "../components/ui/input";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { api, apiError, eur, num, downloadCsv } from "../lib/api";
@@ -16,6 +17,15 @@ export default function Statement() {
   const [months, setMonths] = useState(null);
   const [monthId, setMonthId] = useState(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [iban, setIban] = useState("");
+  const [ibanEdit, setIbanEdit] = useState(false);
+  useEffect(() => { api.get("/influencer/me").then((r) => setProfile(r.data)).catch(() => {}); }, []);
+  const saveIban = async (e) => {
+    e.preventDefault();
+    try { const { data } = await api.post("/influencer/iban", { iban }); setProfile((p) => ({ ...p, iban: data.iban })); setIbanEdit(false); toast.success("IBAN guardado — as comissões serão transferidas para esta conta"); }
+    catch (err) { toast.error(apiError(err)); }
+  };
 
   useEffect(() => {
     api.get("/statements").then((r) => { setMonths(r.data); setMonthId(r.data[0]?.id || null); }).catch((e) => toast.error(apiError(e)));
@@ -59,6 +69,24 @@ export default function Statement() {
           <button data-testid="statement-pdf-button" disabled={pdfBusy} onClick={downloadPdf} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white text-xs font-semibold btn-press"><FileDown className="w-4 h-4" /> {pdfBusy ? "A gerar..." : "PDF"}</button>
           <button data-testid="statement-export-button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press"><Download className="w-4 h-4" /> Exportar CSV</button>
         </div>
+      </div>
+
+      <div data-testid="influencer-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Conta para receber as comissões</p>
+            <p className="text-xs text-slate-500">{profile?.iban ? <>IBAN <span className="font-mono" data-testid="influencer-iban-value">{profile.iban.replace(/(.{4})/g, "$1 ").trim()}</span></> : "Adicione o seu IBAN para receber os pagamentos mensais das comissões."}</p>
+          </div>
+        </div>
+        {ibanEdit ? (
+          <form onSubmit={saveIban} className="flex gap-2">
+            <Input data-testid="influencer-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+            <button type="submit" data-testid="influencer-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
+          </form>
+        ) : (
+          <button data-testid="influencer-iban-edit" onClick={() => { setIban(profile?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press">{profile?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
