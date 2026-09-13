@@ -65,6 +65,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Admin › Definições: IBAN + titular da plataforma (`/api/admin/settings/iban`, `GET /api/public/bank`) para receber comissões/pagamentos por transferência manual
 - Domínio escolhido: **theclub.pt** — `FRONTEND_URL`, remetente `noreply@theclub.pt` e placeholders atualizados (ligar em Publish › Domain)
 
+### 2026-09 · Globo interativo + GIF ✅
+- `GlobeCanvas` reage ao rato (velocidade e inclinação), marca as cidades dos parceiros ativos (`GET /api/public/cities`, coords em `CITY_COORDS`) com pulso âmbar e etiqueta "Cidade · nº parceiros"
+- GIF do globo (600×600, 72 frames, gerado com PIL) em `/globe.gif` para redes sociais/apresentações
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

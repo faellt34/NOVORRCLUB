@@ -245,3 +245,19 @@ async def public_coupon(code: str, request: Request):
     return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims}
+
+
+CITY_COORDS = {"Lisboa": (38.72, -9.14), "Porto": (41.15, -8.61), "Algarve": (37.02, -7.93), "Douro": (41.16, -7.79), "Madrid": (40.42, -3.70), "Barcelona": (41.39, 2.17),
+               "Paris": (48.86, 2.35), "Roma": (41.90, 12.50), "Amalfi": (40.63, 14.60), "Dubai": (25.20, 55.27), "Londres": (51.51, -0.13), "Nova Iorque": (40.71, -74.01), "São Paulo": (-23.55, -46.63), "Rio de Janeiro": (-22.91, -43.17)}
+
+
+@router.get("/public/cities")
+async def public_cities():
+    out = {}
+    async for p in db.partners.find({"status": "Ativo"}, {"cidade": 1, "_id": 0}):
+        c = p.get("cidade")
+        if c in CITY_COORDS:
+            out[c] = out.get(c, 0) + 1
+    if not out:
+        out = {"Lisboa": 0, "Porto": 0, "Algarve": 0}
+    return [{"name": k, "lat": CITY_COORDS[k][0], "lon": CITY_COORDS[k][1], "partners": v} for k, v in out.items()]
