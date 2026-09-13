@@ -70,7 +70,7 @@ export default function Login() {
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("email")}</label>
-              <Input data-testid="login-email-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@robson.club" className="h-11 rounded-xl bg-white" />
+              <Input data-testid="login-email-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@theclub.pt" className="h-11 rounded-xl bg-white" />
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("password")}</label>

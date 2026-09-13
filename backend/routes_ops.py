@@ -169,7 +169,7 @@ async def statement_pdf(month: str, user: dict = Depends(require_role("influence
            Paragraph("A taxa de comissão é travada em cada redenção no momento da validação pelo parceiro. Este documento é gerado automaticamente pela plataforma ןןClub e serve de suporte à faturação/contabilidade. Pagamento por transferência bancária conforme acordo de parceria.", small)]
     doc.build(el)
     await audit("EXTRATO", f"PDF do extrato {month} gerado", user, month)
-    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-robson-club-{month}.pdf"'})
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-theclub-{month}.pdf"'})
 
 
 class FeedbackIn(BaseModel):
