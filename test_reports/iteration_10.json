@@ -1,0 +1,30 @@
+{
+  "summary": "Iter 10 — Full E2E QR coupon flow tested (influencer + admin + partner + backend). 5/5 backend pytest passed (public/coupon/CLUB-10 + case-insensitive + 404 + partner /redemptions with idempotency + invalid code 404). Frontend: Influencer dashboard shows CLUB-10 in table with data-testid=campaign-qr-<id>, opens coupon-qr-dialog with QR canvas + link ending /c/CLUB-10 + coupon-qr-copy/download/share/print buttons; download triggers PNG file 'cupao-CLUB-10.png'; share (no navigator.share in headless) opens wa.me tab. Featured card coupon-download-qr PNG works + coupon-share-whatsapp opens wa.me + coupon-copy-link toasts. Admin /admin/gestao > tab-campanhas has qr-<id> button; created a new campaign 'QR Test Campaign' TESTQR-20 via add-campanhas-button, verified QR dialog link /c/TESTQR-20, deleted it. Partner scanner-modal opens; uploading a PNG QR encoding https://x/c/CLUB-10 via scanner-upload-input auto-fills coupon-code-input='CLUB-10', preview shows 'Ativa · 10% desconto · comissão 10%', validated 50€ → success toast + last-receipt 'r-90183a6631 · 50 € · comissão 5 €'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "QrScannerDialog", "issue": "Fixed by testing agent: 'Cannot stop, scanner is not running or paused' — html5-qrcode Html5Qrcode.stop() throws synchronously when scanner state != SCANNING (e.g. after scanFile or on unmount with a never-started camera). Wrapped stop() calls with getState()===2 check + try/catch to prevent React error boundary triggering the CRA red overlay in dev.", "selector": "[data-testid=scanner-modal]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter10_qr.py", "/app/test_reports/pytest/iter10.xml"],
+  "action_items": [
+    "Review QrScannerDialog.jsx fix (guarded s.stop() with getState()===2). Consider using Html5Qrcode.Html5QrcodeScannerState.SCANNING constant instead of magic number 2, or upgrade html5-qrcode if newer versions handle this internally.",
+    "Seed/reset partner+influencer example passwords was needed at start: parceiro.exemplo@club.pt=parceiro123 and influencer.exemplo@club.pt=influencer123 were 401. Testing agent PUT /api/admin/usuarios/<id> {password} to restore them. Consider making seed idempotent on password (or expose a fixture endpoint) so subsequent test runs don't need this recovery step."
+  ],
+  "critical_code_review_comments": [
+    "QrScannerDialog: html5-qrcode's stop() has state-dependent throw behaviour (synchronous throw when NOT_STARTED). Using magic number 2 for SCANNING state is fragile; prefer Html5QrcodeScannerState.SCANNING import.",
+    "CouponQrDialog.download uses canvas.toBlob without a mimetype and relies on the returned blob's default; explicit 'image/png' + quality is safer for consistency.",
+    "PartnerDashboard shows a soft-warning preview ('Cupom não encontrado para este parceiro') even when input is < 4 chars would be cleaner UX, but current gating on length>=4 already handles that.",
+    "Backend /api/redemptions rejects idempotency_key duplicates via find_one and DuplicateKeyError — good; ensure a unique index exists on idempotency_key (not verified in this iteration)."
+  ],
+  "updated_files": ["/app/frontend/src/components/QrScannerDialog.jsx", "/app/backend/tests/test_iter10_qr.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of scripted flows (influencer + admin + partner)"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!; partner parceiro.exemplo@club.pt/parceiro123; influencer influencer.exemplo@club.pt/influencer123 (both restored via admin PUT during this iteration).",
+  "seed_data_creation": "Reset partner+influencer example passwords via /api/admin/usuarios PUT. Created and then deleted an admin campaign 'QR Test Campaign' TESTQR-20 during the flow. Created 2 CLUB-10 redemptions (50€ each) via partner.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The QrScannerDialog fix uses getState()===2 (SCANNING). If html5-qrcode is upgraded, verify state enum values still match, or import Html5QrcodeScannerState.SCANNING. Do NOT call /api/admin/reset-pilot. Partner/influencer demo passwords may drift again after redeploys — restore via PUT /api/admin/usuarios/{id} {password:'parceiro123'|'influencer123'}.",
+  "rca of the issue": "Bug: React error overlay 'Cannot stop, scanner is not running or paused' when using scanner file-upload fallback. Repro: open Partner dashboard > click open-scanner-button > (camera never started, e.g. no camera or NotFoundError) > upload a QR image. Root cause: QrScannerDialog.scanFile called await scannerRef.current.stop() unconditionally; html5-qrcode throws synchronously from stop() when internal state is NOT_STARTED, bypassing the .catch on the promise chain in cleanup. Fix: only call stop() when getState()===SCANNING(2) and wrap in try/catch; also hardened dialog unmount cleanup similarly."
+}

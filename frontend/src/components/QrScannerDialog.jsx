@@ -55,7 +55,12 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected }) => {
       clearTimeout(fallback);
       const s = scannerRef.current;
       scannerRef.current = null;
-      if (s) s.stop().then(() => s.clear()).catch(() => {});
+      if (s) {
+        try {
+          const p = s.getState && s.getState() === 2 ? s.stop() : Promise.resolve();
+          p.then(() => { try { s.clear(); } catch {} }).catch(() => {});
+        } catch { try { s.clear(); } catch {} }
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -63,7 +68,11 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected }) => {
   const scanFile = async (file) => {
     if (!file) return;
     const s = scannerRef.current;
-    if (s) { try { await s.stop(); } catch {} }
+    if (s) {
+      try {
+        if (s.getState && s.getState() === 2) await s.stop();
+      } catch {}
+    }
     const reader = new Html5Qrcode("qr-file-reader", { verbose: false });
     try { finish(await reader.scanFile(file, false)); }
     catch { setError("Não foi possível ler um QR nesta foto. Tente aproximar ou digite o código."); }

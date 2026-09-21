@@ -78,6 +78,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Botão "Vídeo Story personalizado (MP4)" no cartão do cupom em destaque do dashboard do influencer
 - Contas de exemplo em produção: influencer.exemplo@club.pt / influencer123 e parceiro.exemplo@club.pt / parceiro123 (apagar quando quiser)
 
+### 2026-06 · QR finalizado: imagem PNG, partilha nativa, QR por campanha, scanner com foto ✅ (iteration_10: 5/5 backend, frontend 100%)
+- `CouponQrDialog.jsx`: cartão PNG 1080×1350 com marca ||Club + QR + código + desconto/parceiro + link; botões Copiar / PNG / Partilhar (Web Share API com ficheiro → fallback WhatsApp) / Imprimir
+- Botão QR em cada linha da tabela de campanhas do influencer e em Admin › Gestão › Campanhas (`qr-<id>`); cartão em destaque descarrega PNG em vez de SVG
+- Scanner: mensagens de erro específicas (permissão / sem câmara / em uso / HTTPS), qrbox responsivo, fallback "Usar foto do QR" (`scanFile`, `capture=environment`) — validado E2E com upload de imagem
+- Câmara real ainda por confirmar pelo utilizador num telemóvel (requer HTTPS + permissão)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
