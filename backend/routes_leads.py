@@ -59,7 +59,7 @@ async def approve_lead(lead_id: str, body: DecisionIn, user: dict = Depends(requ
     await db.partners.insert_one(dict(partner))
     await db.leads.update_one({"id": lead_id}, {"$set": {"status": "Aprovada", "decision_note": body.note, "decided_at": now_iso(), "decided_by": user["nome"], "partner_id": partner["id"]}})
     await audit("APROVAÇÃO", f"Indicação {lead['nome']} aprovada → parceiro {partner['id']} criado" + (f" · acesso {email}" if created_user else ""), user, lead_id)
-    await notify([lead["referrer_id"]], "lead_aprovada", "Indicação aprovada 🎉", f"{lead['nome']} foi aprovado e já é parceiro ןןClub. O seu bónus será processado no próximo extrato.", "/influencer")
+    await notify([lead["referrer_id"]], "lead_aprovada", "Indicação aprovada 🎉", f"{lead['nome']} foi aprovado e já é parceiro RRclub. O seu bónus será processado no próximo extrato.", "/influencer")
     return {"lead": await db.leads.find_one({"id": lead_id}, NO_ID), "partner": partner, "access_email": email if created_user else None}
 
 

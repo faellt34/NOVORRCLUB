@@ -65,8 +65,9 @@ def render_story(out_path: Path, name: str, handle: str, coupon: str, discount: 
             if len(seg) > 1:
                 d.line(seg, fill=(c, c, c), width=3)
             d.ellipse([ax - 4, ay - 4, ax + 4, ay + 4], fill=(c, c, c))
-        d.rounded_rectangle([W / 2 - 52, 110, W / 2 + 52, 214], radius=26, fill=(124, 58, 237)); d.text((W / 2, 162), "||", font=fbig, fill="white", anchor="mm")
-        d.text((W / 2, 272), "||Club", font=flogo, fill="white", anchor="mm"); d.text((W / 2, 322), "L U X U R Y   E X P E R I E N C E S", font=ftag, fill=(216, 180, 254), anchor="mm")
+        from brand import brand_mark
+        mk = brand_mark(104, bg=(124, 58, 237)); img.paste(mk, (int(W / 2 - 52), 110), mk)
+        d.text((W / 2, 272), "RRclub", font=flogo, fill="white", anchor="mm"); d.text((W / 2, 322), "L U X U R Y   E X P E R I E N C E S", font=ftag, fill=(216, 180, 254), anchor="mm")
         d.text((W / 2, H - 330), name, font=fname, fill="white", anchor="mm")
         if handle:
             d.text((W / 2, H - 288), handle, font=fsm, fill=(216, 180, 254), anchor="mm")

@@ -15,7 +15,7 @@ import jwt
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
 WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 TAX_CODE_DIGITAL = "txcd_10302000"
-SUBSCRIPTION = {"lookup_key": "club_monthly", "name": "ןןClub Premium (mensal)", "amount": 990, "interval": "month", "emergent_product_id": "club_monthly"}
+SUBSCRIPTION = {"lookup_key": "club_monthly", "name": "RRclub Premium (mensal)", "amount": 990, "interval": "month", "emergent_product_id": "club_monthly"}
 
 router = APIRouter()
 
@@ -122,7 +122,7 @@ async def fulfil(session_id: str, extra: dict):
         cust_email = extra.get("customer_email")
         if cust_email:
             from mailer import send_email
-            sent = await send_email(cust_email, f"ןןClub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
+            sent = await send_email(cust_email, f"RRclub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
                 f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
                 "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
             await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"customer_email": cust_email, "receipt_emailed": sent, "redemption_id": rec["id"]}})
@@ -136,7 +136,7 @@ async def fulfil(session_id: str, extra: dict):
         await notify([res["user_id"]], "compra", "Compra confirmada", f"Já pode ler '{eb['titulo']}' na área de E-books.", "/ebooks")
     else:
         await db.subscriptions.update_one({"user_id": res["user_id"]}, {"$set": {"id": new_id("sub"), "status": "active", "stripe_subscription_id": extra.get("stripe_subscription_id"), "started_at": now_iso(), "session_id": session_id}}, upsert=True)
-        await audit("SUBSCRIÇÃO", f"ןןClub Premium mensal · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
+        await audit("SUBSCRIÇÃO", f"RRclub Premium mensal · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
         await notify([res["user_id"]], "compra", "Subscrição Premium ativa", "Todos os guias premium estão desbloqueados.", "/ebooks")
 
 
@@ -231,7 +231,7 @@ async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None), a
     if eb.get("premium") and user["role"] != "admin":
         acc = await access_info(user)
         if not acc["subscribed"] and ebook_id not in acc["owned"]:
-            raise HTTPException(status_code=403, detail="Conteúdo premium — compre o guia ou subscreva o ןןClub")
+            raise HTTPException(status_code=403, detail="Conteúdo premium — compre o guia ou subscreva o RRclub")
     try:
         data, ct = get_object(eb["pdf_path"])
     except Exception as e:

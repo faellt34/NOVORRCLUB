@@ -93,7 +93,7 @@ async def notify(user_ids, tipo: str, titulo: str, texto: str, link: str = None)
     if tipo in EMAIL_TYPES:
         from mailer import email_user
         for uid in ids:
-            await email_user(uid, f"ןןClub · {titulo}", titulo, texto, "Abrir no ןןClub", link)
+            await email_user(uid, f"RRclub · {titulo}", titulo, texto, "Abrir no RRclub", link)
 
 
 EMAIL_TYPES = {"lead_aprovada", "lead_rejeitada", "pagamento", "compra", "lead", "reset"}

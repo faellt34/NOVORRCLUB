@@ -32,7 +32,7 @@ async def login(body: LoginIn, request: Request, response: Response):
     if user.get("status") == "Suspenso":
         raise HTTPException(status_code=403, detail="Conta suspensa. Contacte o administrador.")
     if user.get("status") == "Pendente":
-        raise HTTPException(status_code=403, detail="A sua conta de parceiro aguarda aprovação da equipa ןןClub. Será notificado quando estiver ativa.")
+        raise HTTPException(status_code=403, detail="A sua conta de parceiro aguarda aprovação da equipa RRclub. Será notificado quando estiver ativa.")
     await db.login_attempts.delete_one({"identifier": ident})
     token = create_access_token(user["id"], user["email"], user["role"])
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=7 * 86400, path="/")
@@ -100,7 +100,7 @@ async def register(body: RegisterIn, response: Response):
     await notify(await admin_ids(), "registo", "Novo registo" + (" de parceiro (aprovação necessária)" if body.role == "partner" else " de influencer"),
                  f"{user['nome']} ({email}) criou conta como {'parceiro' if body.role == 'partner' else 'influencer'}" + (f" · {body.categoria}, {body.cidade}. Ative-o em Gestão › Parceiros." if body.role == "partner" else "."), "/admin/gestao")
     if body.role == "partner":
-        return {"pending": True, "user": pub, "message": "Conta criada! A equipa ןןClub vai verificar o seu espaço e ativar o acesso em breve. Receberá uma notificação."}
+        return {"pending": True, "user": pub, "message": "Conta criada! A equipa RRclub vai verificar o seu espaço e ativar o acesso em breve. Receberá uma notificação."}
     token = create_access_token(uid, email, body.role)
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=7 * 86400, path="/")
     return {"pending": False, "token": token, "user": pub}

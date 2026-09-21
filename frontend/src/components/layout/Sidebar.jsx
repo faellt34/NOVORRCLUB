@@ -37,6 +37,7 @@ const MENUS = {
 };
 
 const ROLE_LABEL = { influencer: "Influencer", partner: "Parceiro", admin: "Admin" };
+import { BrandMark } from "../BrandLogo";
 const ROLE_ICONS = { influencer: Crown, partner: QrCode, admin: ShieldCheck };
 
 export const SidebarContent = ({ onNavigate }) => {
@@ -58,9 +59,9 @@ export const SidebarContent = ({ onNavigate }) => {
     <div className="flex flex-col h-full bg-[#0C0A14] text-slate-300">
       <div className="px-5 pt-6 pb-4">
         <div className="flex items-center gap-2.5" data-testid="sidebar-logo">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>
+          <BrandMark className="w-9 h-9" />
           <div>
-            <p className="font-display font-bold text-white leading-tight">ןןClub</p>
+            <p className="font-display font-extrabold text-white leading-tight"><span className="text-purple-400">RR</span>club</p>
             <p className="text-[10px] uppercase tracking-widest text-purple-400/80">Luxury Experiences</p>
           </div>
         </div>

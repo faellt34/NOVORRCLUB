@@ -150,7 +150,7 @@ export default function Messages() {
         <DialogContent data-testid="new-conversation-dialog" className="max-w-md">
           <DialogHeader>
             <DialogTitle>Nova conversa</DialogTitle>
-            <DialogDescription>Escolha com quem quer falar. {user.role === "admin" ? "Como admin pode contactar qualquer utilizador." : "Pode contactar a equipa ןןClub e os seus parceiros de campanha."}</DialogDescription>
+            <DialogDescription>Escolha com quem quer falar. {user.role === "admin" ? "Como admin pode contactar qualquer utilizador." : "Pode contactar a equipa RRclub e os seus parceiros de campanha."}</DialogDescription>
           </DialogHeader>
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
             {contacts.length === 0 && <p className="text-sm text-slate-400 py-6 text-center">Sem contactos disponíveis.</p>}

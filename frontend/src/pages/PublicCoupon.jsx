@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Crown, Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone } from "lucide-react";
+import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { api, apiError, num, eur } from "../lib/api";
@@ -46,10 +47,7 @@ export default function PublicCoupon() {
   return (
     <div className="min-h-screen bg-[#0C0A14] text-white flex flex-col relative overflow-hidden"><div className="absolute inset-0 opacity-30"><GlobeCanvas color="167,139,250" /></div>
       <div className="px-6 pt-6 flex items-center justify-between relative">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5" /></div>
-          <div><p className="font-display font-bold leading-tight">ןןClub</p><p className="text-[10px] uppercase tracking-widest text-purple-400/80">Luxury Experiences</p></div>
-        </div>
+        <BrandLogo tagline />
         <Link to="/login" data-testid="coupon-login-link" className="text-xs text-slate-400 hover:text-white">Área de membros</Link>
       </div>
 

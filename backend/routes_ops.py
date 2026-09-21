@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -81,7 +81,7 @@ async def forgot_password(body: ForgotIn):
                                                    "created_at": now_iso(), "expires_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(), "used": False})
         await audit("RECUPERAÇÃO", f"Pedido de recuperação de palavra-passe · {email}", user, token[:8])
         link = f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/redefinir-password?token={token}"
-        sent = await send_email(email, "ןןClub · Redefinir palavra-passe", "Redefinir a sua palavra-passe",
+        sent = await send_email(email, "RRclub · Redefinir palavra-passe", "Redefinir a sua palavra-passe",
                                 f"Olá {user['nome'].split(' ')[0]}, recebemos um pedido para redefinir a sua palavra-passe. O link é válido durante 24 horas e só pode ser usado uma vez.", "Definir nova palavra-passe", link)
         await db.password_reset_tokens.update_one({"token": token}, {"$set": {"emailed": sent}})
         admins = [u["id"] async for u in db.users.find({"role": "admin"}, {"id": 1})]
@@ -167,7 +167,7 @@ async def statement_pdf(month: str, user: dict = Depends(require_role("influence
         ("TEXTCOLOR", (-1, -1), (-1, -1), purple), ("ALIGN", (2, 1), (-1, -1), "RIGHT"), ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#E2E8F0")), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     el += [t, Spacer(1, 16), Paragraph(f"<b>Total de comissão a receber: {tc:,.2f} €</b>", ParagraphStyle("tot", parent=body, fontSize=13, textColor=purple)), Spacer(1, 10),
-           Paragraph("A taxa de comissão é travada em cada redenção no momento da validação pelo parceiro. Este documento é gerado automaticamente pela plataforma ןןClub e serve de suporte à faturação/contabilidade. Pagamento por transferência bancária conforme acordo de parceria.", small)]
+           Paragraph("A taxa de comissão é travada em cada redenção no momento da validação pelo parceiro. Este documento é gerado automaticamente pela plataforma RRclub e serve de suporte à faturação/contabilidade. Pagamento por transferência bancária conforme acordo de parceria.", small)]
     doc.build(el)
     await audit("EXTRATO", f"PDF do extrato {month} gerado", user, month)
     return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-theclub-{month}.pdf"'})
@@ -232,6 +232,45 @@ class EmailSettingsIn(BaseModel):
     sender_email: Optional[str] = ""
 
 
+@router.get("/admin/launch-check")
+async def launch_check(request: Request, user: dict = Depends(require_role("admin"))):
+    import httpx
+    from mailer import configured as mail_ok
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    fe = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    on_domain = "theclub.pt" in host
+    admins = await db.users.count_documents({"role": "admin", "status": "Ativo"})
+    camp = await db.campaigns.find_one({"status": "Ativa"}, NO_ID)
+    partners_iban = await db.partners.count_documents({"iban": {"$exists": True, "$ne": ""}})
+    partners = await db.partners.count_documents({})
+    iban_pf = await db.settings.find_one({"id": "bank"}, NO_ID)
+    stripe_live = (os.environ.get("STRIPE_SECRET_KEY") or "").startswith("sk_live")
+    coupon_ok, coupon_url = False, None
+    if camp and fe:
+        coupon_url = f"{fe}/c/{camp['cupom']}"
+        try:
+            async with httpx.AsyncClient(timeout=6, follow_redirects=True) as cl:
+                r = await cl.get(f"{fe}/api/public/coupon/{camp['cupom']}")
+                coupon_ok = r.status_code == 200
+        except Exception:
+            coupon_ok = False
+    items = [
+        {"id": "domain", "ok": on_domain, "label": "Site publicado no domínio theclub.pt", "hint": f"A aceder por: {host or '?'}" if not on_domain else "Domínio ativo", "action": "Clique Publish na plataforma e ligue o domínio em Publish › Domain."},
+        {"id": "https", "ok": request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https", "label": "HTTPS ativo (necessário para câmara e PWA)", "action": "Automático após ligar o domínio."},
+        {"id": "login", "ok": admins > 0, "label": "Login Admin funciona", "hint": f"{admins} admin(s) ativos"},
+        {"id": "campaign", "ok": bool(camp), "label": "Existe pelo menos uma campanha/cupão ativo", "hint": camp["cupom"] if camp else "Nenhuma", "action": "Crie em Gestão › Campanhas."},
+        {"id": "coupon_public", "ok": coupon_ok, "label": "Cupão público responde no domínio final", "hint": coupon_url or "—", "action": "Abra o link do cupão no telemóvel e confirme que carrega."},
+        {"id": "scanner", "ok": None, "label": "Scanner QR testado num telemóvel real", "hint": "Teste manual: Parceiro › Validar Cupom › ícone câmara", "action": "Autorize a câmara; se falhar use 'Usar foto do QR'."},
+        {"id": "share", "ok": None, "label": "Partilha do QR (imagem) testada no telemóvel", "hint": "Influencer › cupão › Partilhar"},
+        {"id": "email", "ok": bool(mail_ok()), "label": "Email (Resend) configurado", "action": "Definições › Email: cole a chave Resend e verifique o domínio theclub.pt no Resend."},
+        {"id": "iban", "ok": bool(iban_pf and iban_pf.get("iban")), "label": "IBAN da plataforma definido", "action": "Definições › IBAN da plataforma."},
+        {"id": "partners_iban", "ok": partners > 0 and partners_iban == partners, "label": "Todos os parceiros com IBAN", "hint": f"{partners_iban}/{partners}"},
+        {"id": "stripe", "ok": stripe_live, "label": "Stripe em modo live (pagamentos reais)", "hint": "Chave de teste em uso" if not stripe_live else "Live", "action": "Reclame a conta Stripe, conclua o KYC e coloque a chave live nos secrets de produção."},
+    ]
+    done = sum(1 for i in items if i["ok"] is True)
+    return {"items": items, "done": done, "total": len(items), "host": host, "frontend_url": fe}
+
+
 @router.get("/admin/settings")
 async def get_settings(user: dict = Depends(require_role("admin"))):
     from mailer import load_settings
@@ -261,7 +300,7 @@ async def save_email_settings(body: EmailSettingsIn, user: dict = Depends(requir
 async def test_email(user: dict = Depends(require_role("admin"))):
     from mailer import send_email, load_settings
     await load_settings()
-    ok = await send_email(user["email"], "ןןClub · Email de teste", "Email configurado com sucesso", f"Olá {user['nome']}, este é um email de teste enviado pela plataforma ןןClub.")
+    ok = await send_email(user["email"], "RRclub · Email de teste", "Email configurado com sucesso", f"Olá {user['nome']}, este é um email de teste enviado pela plataforma RRclub.")
     if not ok:
         raise HTTPException(status_code=502, detail="Não foi possível enviar. Verifique a chave Resend e o remetente (em modo teste do Resend só envia para o seu próprio email).")
     return {"ok": True}

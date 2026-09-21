@@ -10,7 +10,7 @@ export const InstallAppButton = () => {
 
   useEffect(() => {
     const onPrompt = (e) => { e.preventDefault(); setPrompt(e); };
-    const onInstalled = () => { setInstalled(true); setPrompt(null); toast.success("ןןClub instalada no seu dispositivo"); };
+    const onInstalled = () => { setInstalled(true); setPrompt(null); toast.success("RRclub instalada no seu dispositivo"); };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
     return () => { window.removeEventListener("beforeinstallprompt", onPrompt); window.removeEventListener("appinstalled", onInstalled); };

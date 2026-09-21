@@ -55,7 +55,7 @@ def test_admin_settings_email_invalid_key(admin_token):
 
 def test_admin_settings_email_sender_only_ok(admin_token):
     r = requests.post(f"{API}/admin/settings/email",
-                      json={"resend_api_key": "", "sender_email": "ןןClub <x@y.com>"},
+                      json={"resend_api_key": "", "sender_email": "RRclub <x@y.com>"},
                       headers=auth(admin_token), timeout=15)
     assert r.status_code == 200, r.text
     d = r.json()
@@ -64,7 +64,7 @@ def test_admin_settings_email_sender_only_ok(admin_token):
     r2 = requests.get(f"{API}/admin/settings", headers=auth(admin_token), timeout=15)
     assert r2.status_code == 200
     assert r2.json()["email_configured"] is False
-    assert r2.json()["sender_email"] == "ןןClub <x@y.com>"
+    assert r2.json()["sender_email"] == "RRclub <x@y.com>"
 
 
 def test_admin_settings_test_email_502_without_key(admin_token):
@@ -89,7 +89,7 @@ def test_manifest_json():
     r = requests.get(f"{BASE}/manifest.json", timeout=15)
     assert r.status_code == 200, r.status_code
     d = r.json()
-    assert d["short_name"] == "ןןClub"
+    assert d["short_name"] == "RRclub"
     assert isinstance(d.get("icons"), list) and len(d["icons"]) >= 2
     sizes = {i.get("sizes") for i in d["icons"]}
     assert "192x192" in sizes and "512x512" in sizes

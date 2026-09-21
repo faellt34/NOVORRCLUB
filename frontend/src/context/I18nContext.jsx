@@ -13,7 +13,7 @@ const D = {
     ebooksTitle: "E-books & Guias Premium", ebooksSub: "Guias curados de experiências de luxo em Portugal e no mundo — leia online após compra ou subscrição",
     subscribe: "Subscrever Premium", perMonth: "/mês — todos os guias", subActive: "Subscrição Premium ativa — todos os guias desbloqueados", cancelSub: "Cancelar subscrição", subEnds: "Termina em",
     buyFor: "Comprar por", readNow: "Ler agora", preview: "Pré-visualizar", pages: "páginas", pdfSoon: "PDF em breve", owned: "Adquirido", unlocked: "Desbloqueado", all: "Todas", allM: "Todos", noResults: "Nenhum guia encontrado para estes filtros.",
-    downloadPdf: "Descarregar PDF", exportCsv: "Exportar CSV", suggestTitle: "Sugerir uma melhoria", suggestText: "A sua opinião ajuda a evoluir o ןןClub. Diga-nos o que melhorar.", type: "Tipo", message: "Mensagem", send: "Enviar", sent: "Obrigado! Sugestão enviada à equipa.",
+    downloadPdf: "Descarregar PDF", exportCsv: "Exportar CSV", suggestTitle: "Sugerir uma melhoria", suggestText: "A sua opinião ajuda a evoluir o RRclub. Diga-nos o que melhorar.", type: "Tipo", message: "Mensagem", send: "Enviar", sent: "Obrigado! Sugestão enviada à equipa.",
     language: "Idioma", installApp: "Instalar app", settings: "Definições", premium: "Premium", free: "Gratuito", region: "Região", country: "País",
   },
   en: {
@@ -26,7 +26,7 @@ const D = {
     ebooksTitle: "Premium E-books & Guides", ebooksSub: "Curated luxury experience guides in Portugal and worldwide — read online after purchase or subscription",
     subscribe: "Subscribe Premium", perMonth: "/month — all guides", subActive: "Premium subscription active — all guides unlocked", cancelSub: "Cancel subscription", subEnds: "Ends on",
     buyFor: "Buy for", readNow: "Read now", preview: "Preview", pages: "pages", pdfSoon: "PDF coming soon", owned: "Purchased", unlocked: "Unlocked", all: "All", allM: "All", noResults: "No guides found for these filters.",
-    downloadPdf: "Download PDF", exportCsv: "Export CSV", suggestTitle: "Suggest an improvement", suggestText: "Your feedback helps ןןClub evolve. Tell us what to improve.", type: "Type", message: "Message", send: "Send", sent: "Thank you! Suggestion sent to the team.",
+    downloadPdf: "Download PDF", exportCsv: "Export CSV", suggestTitle: "Suggest an improvement", suggestText: "Your feedback helps RRclub evolve. Tell us what to improve.", type: "Type", message: "Message", send: "Send", sent: "Thank you! Suggestion sent to the team.",
     language: "Language", installApp: "Install app", settings: "Settings", premium: "Premium", free: "Free", region: "Region", country: "Country",
   },
   es: {
@@ -39,7 +39,7 @@ const D = {
     ebooksTitle: "E-books & Guías Premium", ebooksSub: "Guías seleccionadas de experiencias de lujo en Portugal y el mundo — lee online tras la compra o suscripción",
     subscribe: "Suscribirse Premium", perMonth: "/mes — todas las guías", subActive: "Suscripción Premium activa — todas las guías desbloqueadas", cancelSub: "Cancelar suscripción", subEnds: "Termina el",
     buyFor: "Comprar por", readNow: "Leer ahora", preview: "Vista previa", pages: "páginas", pdfSoon: "PDF próximamente", owned: "Adquirido", unlocked: "Desbloqueado", all: "Todas", allM: "Todos", noResults: "No se encontraron guías para estos filtros.",
-    downloadPdf: "Descargar PDF", exportCsv: "Exportar CSV", suggestTitle: "Sugerir una mejora", suggestText: "Tu opinión ayuda a que ןןClub evolucione. Dinos qué mejorar.", type: "Tipo", message: "Mensaje", send: "Enviar", sent: "¡Gracias! Sugerencia enviada al equipo.",
+    downloadPdf: "Descargar PDF", exportCsv: "Exportar CSV", suggestTitle: "Sugerir una mejora", suggestText: "Tu opinión ayuda a que RRclub evolucione. Dinos qué mejorar.", type: "Tipo", message: "Mensaje", send: "Enviar", sent: "¡Gracias! Sugerencia enviada al equipo.",
     language: "Idioma", installApp: "Instalar app", settings: "Ajustes", premium: "Premium", free: "Gratis", region: "Región", country: "País",
   },
 };

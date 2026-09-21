@@ -19,8 +19,10 @@ def render_poster(cupom: str, desconto: float, parceiro: str, influencer: str, l
         c.setFillColor(col)
         c.rect(0, H - (i + 1) * H / steps, W, H / steps + 1, stroke=0, fill=1)
     c.setFillColor(white)
-    c.setFont("Times-Bold", 34)
-    c.drawCentredString(W / 2, H - 22 * mm, "||Club")
+    from brand import brand_mark
+    c.drawImage(ImageReader(brand_mark(256, fg=(255, 255, 255), bg=(124, 58, 237))), W / 2 - 24 * mm, H - 27 * mm, 13 * mm, 13 * mm, mask="auto")
+    c.setFont("Helvetica-Bold", 30)
+    c.drawString(W / 2 - 9 * mm, H - 23.5 * mm, "RRclub")
     c.setFont("Helvetica-Bold", 8.5)
     c.setFillColor(HexColor("#DDD6FE"))
     c.drawCentredString(W / 2, H - 28 * mm, "EXPERIÊNCIAS PREMIUM  ·  THECLUB.PT")

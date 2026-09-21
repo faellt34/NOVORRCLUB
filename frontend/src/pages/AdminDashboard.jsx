@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     <div className="space-y-6">
       <div>
         <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-        <p className="text-sm text-slate-500 mt-1">Métricas globais do ןןClub — receita, comissões e entidades ativas</p>
+        <p className="text-sm text-slate-500 mt-1">Métricas globais do RRclub — receita, comissões e entidades ativas</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Crown, UserPlus, ArrowLeft, Store, CheckCircle2 } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
 import { api, apiError, setToken } from "../lib/api";
@@ -44,10 +45,7 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-[#F8F9FC] flex items-center justify-center p-6">
       <div className="w-full max-w-lg">
-        <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>
-          <p className="font-display font-bold text-lg">ןןClub</p>
-        </div>
+        <BrandLogo dark className="mb-8" />
         {pending ? (
           <div className="card-soft p-8 text-center" data-testid="register-pending">
             <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Crown, Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import { Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import { BrandLogo } from "../components/BrandLogo";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
 import { useT } from "../context/I18nContext";
@@ -48,28 +49,19 @@ export default function Login() {
       <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" data-testid="login-hero" style={{ background: "radial-gradient(ellipse 85% 120% at 15% 45%, #5B21B6 0%, #5B21B6 48%, #2A1064 62%, #08061A 78%, #08061A 100%)" }}>
         <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 60% 80%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 90% 85%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 75% 40%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 40% 10%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 95% 15%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1px 1px at 82% 70%, rgba(255,255,255,.6) 50%, transparent 51%), radial-gradient(1.2px 1.2px at 65% 60%, rgba(255,255,255,.8) 50%, transparent 51%)", backgroundSize: "100% 100%", animation: "twinkle 4s ease-in-out infinite alternate" }} />
         <GlobeCanvas interactive={false} />
-        <div className="relative flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-6 h-6" /></div>
-          <div>
-            <p className="font-display font-bold text-xl leading-tight">ןןClub</p>
-            <p className="text-[11px] uppercase tracking-widest text-purple-200/80">Luxury Experiences</p>
-          </div>
-        </div>
+        <BrandLogo size="lg" tagline className="relative" />
         <div className="relative max-w-md">
           <p className="text-purple-200 text-sm font-semibold uppercase tracking-widest mb-4 flex items-center gap-2 font-coupon"><Sparkles className="w-4 h-4" /> {t("heroTag")}</p>
           <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">{t("heroTitle")}</h1>
           <p className="text-purple-100/90 leading-relaxed">{t("heroText")}</p>
         </div>
-        <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
+        <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 RRclub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-12 relative">
         <div className="w-full max-w-md bg-white/85 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none rounded-3xl lg:rounded-none p-6 lg:p-0 shadow-2xl lg:shadow-none mt-24 lg:mt-0" data-testid="login-panel">
           <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
-          <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>
-            <p className="font-display font-bold text-lg">ןןClub</p>
-          </div>
+          <BrandLogo dark className="lg:hidden mb-8" />
           <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("loginTitle")}</h2>
           <p className="text-sm text-slate-500 mt-1 mb-8">{t("loginSub")}</p>
 

@@ -113,7 +113,7 @@ async def update_item(kind: str, item_id: str, data: dict, user: dict = Depends(
     if kind in ("parceiros", "influencers") and "status" in data and doc.get("user_id"):
         await db.users.update_one({"id": doc["user_id"]}, {"$set": {"status": data["status"]}})
         if data["status"] == "Ativo" and existing.get("status") == "Pendente":
-            await notify([doc["user_id"]], "lead_aprovada", "Conta ativada 🎉", f"A sua conta {doc['nome']} foi aprovada. Já pode entrar na plataforma ןןClub.", "/login")
+            await notify([doc["user_id"]], "lead_aprovada", "Conta ativada 🎉", f"A sua conta {doc['nome']} foi aprovada. Já pode entrar na plataforma RRclub.", "/login")
     await audit("EDIÇÃO", f"{kind} · {doc.get('nome') or doc.get('titulo') or item_id}", user, item_id)
     return out_user(doc) if kind == "usuarios" else doc
 
