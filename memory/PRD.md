@@ -84,6 +84,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Scanner: mensagens de erro específicas (permissão / sem câmara / em uso / HTTPS), qrbox responsivo, fallback "Usar foto do QR" (`scanFile`, `capture=environment`) — validado E2E com upload de imagem
 - Câmara real ainda por confirmar pelo utilizador num telemóvel (requer HTTPS + permissão)
 
+### 2026-06 · Globo no telemóvel + Cartaz A5 ✅ (self-tested: curl PDF 200 + screenshots)
+- Login mobile (<lg): fundo roxo/noite com `GlobeCanvas` centrado (modo portrait no canvas) atrás do painel de login em vidro (`login-hero-mobile`, `login-panel`)
+- `GET /api/campaigns/{id}/poster.pdf?site=` (influencer/parceiro/admin, `poster.py` reportlab+qrcode): cartaz A5 com marca, desconto, QR, código, link; botão "Cartaz A5 para mesa / balcão" no diálogo QR (`coupon-qr-poster`)
+- Publish + teste de câmara/partilha em telemóvel real: **ação do utilizador** (só possível após Publish no domínio HTTPS)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

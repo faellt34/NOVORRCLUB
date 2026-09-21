@@ -41,7 +41,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC]">
+    <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC] relative">
+      <div className="lg:hidden absolute inset-0 overflow-hidden" data-testid="login-hero-mobile" style={{ background: "radial-gradient(ellipse 120% 90% at 50% 20%, #5B21B6 0%, #5B21B6 40%, #2A1064 60%, #08061A 80%, #08061A 100%)" }}>
+        <GlobeCanvas interactive={false} />
+      </div>
       <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" data-testid="login-hero" style={{ background: "radial-gradient(ellipse 85% 120% at 15% 45%, #5B21B6 0%, #5B21B6 48%, #2A1064 62%, #08061A 78%, #08061A 100%)" }}>
         <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: "radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 60% 80%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 90% 85%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1.5px 1.5px at 75% 40%, rgba(255,255,255,.9) 50%, transparent 51%), radial-gradient(1px 1px at 40% 10%, rgba(255,255,255,.7) 50%, transparent 51%), radial-gradient(1px 1px at 95% 15%, rgba(255,255,255,.8) 50%, transparent 51%), radial-gradient(1px 1px at 82% 70%, rgba(255,255,255,.6) 50%, transparent 51%), radial-gradient(1.2px 1.2px at 65% 60%, rgba(255,255,255,.8) 50%, transparent 51%)", backgroundSize: "100% 100%", animation: "twinkle 4s ease-in-out infinite alternate" }} />
         <GlobeCanvas interactive={false} />
@@ -60,8 +63,8 @@ export default function Login() {
         <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 ןןClub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
-      <div className="flex items-center justify-center p-6 sm:p-12">
-        <div className="w-full max-w-md">
+      <div className="flex items-center justify-center p-6 sm:p-12 relative">
+        <div className="w-full max-w-md bg-white/85 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none rounded-3xl lg:rounded-none p-6 lg:p-0 shadow-2xl lg:shadow-none mt-24 lg:mt-0" data-testid="login-panel">
           <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center"><Crown className="w-5 h-5 text-white" /></div>

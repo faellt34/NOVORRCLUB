@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { Copy, Download, Share2, Printer } from "lucide-react";
+import { Copy, Download, Share2, Printer, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { api, apiError } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 
 const round = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
@@ -55,6 +56,14 @@ export const CouponQrDialog = ({ campaign: c, open, onOpenChange }) => {
 
   const copy = () => { navigator.clipboard?.writeText(link).catch(() => {}); toast.success("Link copiado"); };
   const print = () => { const w = window.open("", "_blank"); png().then((b) => { const u = URL.createObjectURL(b); w.document.write(`<img src="${u}" style="width:100%;max-width:600px" onload="window.print()">`); }); };
+  const poster = async () => {
+    setBusy(true);
+    try {
+      const r = await api.get(`/campaigns/${c.id}/poster.pdf`, { params: { site: window.location.origin }, responseType: "blob", timeout: 60000 });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(r.data); a.download = `cartaz-${c.cupom}.pdf`; a.click(); URL.revokeObjectURL(a.href);
+      toast.success("Cartaz A5 descarregado — imprima e coloque na mesa/balcão");
+    } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,6 +89,9 @@ export const CouponQrDialog = ({ campaign: c, open, onOpenChange }) => {
               </button>
             ))}
           </div>
+          <button data-testid="coupon-qr-poster" disabled={busy} onClick={poster} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
+            <FileText className="w-4 h-4" /> {busy ? "A preparar..." : "Cartaz A5 para mesa / balcão (PDF)"}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

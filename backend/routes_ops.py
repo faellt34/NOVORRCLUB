@@ -330,6 +330,25 @@ async def influencer_iban(body: InfIbanIn, user: dict = Depends(require_role("in
     return {"ok": True, "iban": iban}
 
 
+@router.get("/campaigns/{campaign_id}/poster.pdf")
+async def campaign_poster(campaign_id: str, site: str = "", user: dict = Depends(get_current_user)):
+    from poster import render_poster
+    q = {"id": campaign_id}
+    if user["role"] == "influencer":
+        q["influencer_id"] = user.get("influencer_id")
+    elif user["role"] == "partner":
+        q["parceiro_id"] = user.get("partner_id")
+    c = await db.campaigns.find_one(q, NO_ID)
+    if not c:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) or {}
+    base = (site or os.environ.get("FRONTEND_URL", "")).rstrip("/")
+    pdf = render_poster(c["cupom"], float(c["desconto"]), partner.get("nome", ""), inf.get("handle") or inf.get("nome", ""), f"{base}/c/{c['cupom']}", partner.get("cidade", ""))
+    await audit("CARTAZ", f"Cartaz A5 gerado · {c['cupom']}", user, campaign_id)
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="cartaz-{c["cupom"]}.pdf"'})
+
+
 @router.get("/influencer/story-video/{campaign_id}")
 async def story_video(campaign_id: str, user: dict = Depends(require_role("influencer"))):
     import asyncio, hashlib, re as _re

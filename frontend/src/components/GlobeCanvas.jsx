@@ -37,8 +37,9 @@ export const GlobeCanvas = ({ color = "255,255,255", cities = [], interactive = 
     const proj = (p) => {
       const x0 = p[0] * Math.cos(t) - p[2] * Math.sin(t), z0 = p[0] * Math.sin(t) + p[2] * Math.cos(t);
       const y = p[1] * Math.cos(tilt) - z0 * Math.sin(tilt), z = p[1] * Math.sin(tilt) + z0 * Math.cos(tilt);
-      const R = Math.min(w, h) * 0.62, s = 1 / (1.7 - z * 0.45);
-      return [w * 0.72 + x0 * R * s, h * 0.5 + y * R * s, z, s];
+      const portrait = h > w;
+      const R = Math.min(w, h) * (portrait ? 0.9 : 0.62), s = 1 / (1.7 - z * 0.45);
+      return [w * (portrait ? 0.5 : 0.72) + x0 * R * s, h * (portrait ? 0.42 : 0.5) + y * R * s, z, s];
     };
     const draw = () => {
       t += speed; tilt += (targetTilt - tilt) * 0.05; ctx.clearRect(0, 0, w, h);
