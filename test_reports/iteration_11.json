@@ -1,0 +1,18 @@
+{
+  "summary": "Iter 11 — Brand rebrand to RRclub + admin launch-checklist + A5 poster PDF verified end-to-end. Backend 7/7 passing (test_iter11_brand_launch_poster.py): GET /api/admin/launch-check returns 11 items with expected ids {domain,https,login,campaign,coupon_public,scanner,share,email,iban,partners_iban,stripe} and 403 for influencer; GET /api/campaigns/{id}/poster.pdf returns application/pdf > 5KB starting with %PDF for both influencer and partner tokens; unknown id returns 404; /manifest.json short_name is 'RRclub'; /icon-192.png loads. Frontend: /login shows data-testid=brand-logo with brand-mark svg and 'RRclub' text (no ןן/ןןClub anywhere); at 390x844 login-hero-mobile + globe-canvas + login-panel are all present; Admin /admin/definicoes shows launch-checklist-card with score '6/11 prontos' and all 10 launch-item-* testids present + launch-check-refresh works; sidebar-logo renders on /admin at 1280px; mobile header brand-logo present at 390px; /registar, /privacidade, /esqueci-password, /c/CLUB-10 all show brand-logo with no old brand text; Influencer dashboard campaign-qr-<id> opens coupon-qr-dialog, coupon-qr-poster triggers download 'cartaz-CLUB-10.pdf'. As noted by main agent, launch-item-domain and coupon_public are red on preview (FRONTEND_URL not on theclub.pt) — expected, not a bug.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter11_brand_launch_poster.py", "/app/test_reports/pytest/iter11.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routes_ops.py:154 (statement_pdf) still emits legacy 'ןןCLUB' as the heading in the influencer monthly statement PDF. Should be 'RRclub' to match the rebrand for consistency in downloaded documents.",
+    "launch-check 'share' item has ok=None (manual check) and is not counted toward done — that's fine, but 'total' still counts it (11), making the score cap at 9 automated. Consider excluding manual items from total or exposing 'auto_total' alongside 'total' to avoid user confusion when they see e.g. 9/11 with two greys they can't fix."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter11_brand_launch_poster.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!; influencer influencer.exemplo@club.pt/influencer123; partner parceiro.exemplo@club.pt/parceiro123 (all live, no reseed needed this iteration).",
+  "seed_data_creation": "None. Test creates no persistent data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter11_brand_launch_poster.py reuses admin credential to fetch /api/admin/campanhas to locate the partner's campaign id (partner dashboard doesn't expose campaigns). If auth for demo partner/influencer breaks after redeploy, the fixtures auto-restore via PUT /api/admin/usuarios/{id} {password:...}. statement_pdf still contains old 'ןןCLUB' brand string (backend/routes_ops.py:154) — flag as follow-up for main agent if brand consistency matters."
+}

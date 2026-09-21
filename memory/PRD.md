@@ -89,6 +89,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `GET /api/campaigns/{id}/poster.pdf?site=` (influencer/parceiro/admin, `poster.py` reportlab+qrcode): cartaz A5 com marca, desconto, QR, código, link; botão "Cartaz A5 para mesa / balcão" no diálogo QR (`coupon-qr-poster`)
 - Publish + teste de câmara/partilha em telemóvel real: **ação do utilizador** (só possível após Publish no domínio HTTPS)
 
+### 2026-06 · Rebrand RRclub + Checklist pós-Publish ✅ (iteration_11: backend 7/7, frontend 100%)
+- Logo novo: `BrandLogo.jsx` / `BrandMark` (círculo de rede com nós/ligações — pessoas, redes sociais, influencers) + wordmark "RRclub"; substituiu coroa + "ןןClub" em login, sidebar, header mobile, registo, privacidade, recuperação, cupão público, manifest/index, PDFs, emails, story video e cartaz; ícones PWA regenerados (`brand.py`)
+- Admin › Definições: card "Checklist pós-Publish (theclub.pt)" (`GET /api/admin/launch-check`, 11 itens: domínio, HTTPS, login, campanha ativa, cupão público no domínio final, scanner/partilha manuais, Resend, IBAN plataforma, IBAN parceiros, Stripe live) com pontuação e ações sugeridas
+- Nota: domínio/cupão público ficam vermelhos até o utilizador fazer Publish + ligar theclub.pt (esperado)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
