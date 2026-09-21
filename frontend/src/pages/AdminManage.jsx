@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, FileUp, FileCheck2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileUp, FileCheck2, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { StatusBadge } from "../components/KpiCard";
+import { CouponQrDialog } from "../components/CouponQrDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -80,6 +81,7 @@ export default function AdminManage() {
   const [form, setForm] = useState({});
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(null);
+  const [qrCampaign, setQrCampaign] = useState(null);
 
   const uploadPdf = async (item, file) => {
     if (!file) return;
@@ -178,6 +180,9 @@ export default function AdminManage() {
                                 <input type="file" accept="application/pdf" className="hidden" data-testid={`upload-pdf-input-${item.id}`} onChange={(e) => { uploadPdf(item, e.target.files?.[0]); e.target.value = ""; }} />
                               </label>
                             )}
+                            {key === "campanhas" && (
+                              <button data-testid={`qr-${item.id}`} title="QR do cupão" onClick={() => setQrCampaign(item)} className="p-2 rounded-lg text-purple-600 hover:bg-purple-50 btn-press"><QrCode className="w-4 h-4" /></button>
+                            )}
                             <button data-testid={`edit-${item.id}`} onClick={() => openEdit(item)} className="p-2 rounded-lg text-slate-500 hover:bg-purple-50 hover:text-purple-600 btn-press"><Pencil className="w-4 h-4" /></button>
                             <button data-testid={`delete-${item.id}`} onClick={() => remove(item)} className="p-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 btn-press"><Trash2 className="w-4 h-4" /></button>
                           </td>
@@ -192,6 +197,8 @@ export default function AdminManage() {
           );
         })}
       </Tabs>
+
+      <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
 
       <Dialog open={!!dialog} onOpenChange={() => setDialog(null)}>
         <DialogContent data-testid="entity-dialog" className="max-w-md max-h-[90vh] overflow-y-auto">

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark } from "lucide-react";
+import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark, QrCode } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
+import { CouponQrDialog, renderCouponPng } from "../components/CouponQrDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -21,6 +22,7 @@ export default function InfluencerDashboard() {
   const [profile, setProfile] = useState(null);
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
+  const [qrCampaign, setQrCampaign] = useState(null);
   useEffect(() => { api.get("/influencer/me").then((r) => setProfile(r.data)).catch(() => {}); }, []);
   const saveIban = async (e) => {
     e.preventDefault();
@@ -54,15 +56,25 @@ export default function InfluencerDashboard() {
   });
   const link = featured ? `${window.location.origin}/c/${featured.cupom}` : "";
 
-  const share = (action) => {
+  const share = async (action) => {
     if (action === "copiar") { navigator.clipboard?.writeText(link).catch(() => {}); toast.success("Link copiado para a área de transferência"); }
     else if (action === "download") {
       const svg = document.querySelector("[data-testid=qr-code-featured-card] svg");
       if (!svg) return;
-      const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `qr-${featured.cupom}.svg`; a.click();
-      toast.success("QR Code descarregado");
-    } else window.open(`https://wa.me/?text=${encodeURIComponent(`${featured.desconto}% OFF em ${featured.parceiro} com o meu cupão ${featured.cupom}: ${link}`)}`, "_blank");
+      const img = new Image();
+      img.onload = async () => {
+        const cv = document.createElement("canvas"); cv.width = cv.height = 700; const ctx = cv.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 700, 700); ctx.drawImage(img, 0, 0, 700, 700);
+        const blob = await renderCouponPng(cv, featured, link);
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `cupao-${featured.cupom}.png`; a.click();
+        toast.success("Imagem do cupão descarregada (PNG)");
+      };
+      img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg))));
+    } else {
+      const text = `${featured.desconto}% OFF em ${featured.parceiro} com o meu cupão ${featured.cupom}: ${link}`;
+      if (navigator.share) { navigator.share({ text, title: `Cupão ${featured.cupom}`, url: link }).catch(() => {}); return; }
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    }
   };
 
   return (
@@ -209,7 +221,8 @@ export default function InfluencerDashboard() {
                   <th className="pb-3 pr-4 font-semibold">Utilizados</th>
                   <th className="pb-3 pr-4 font-semibold">Comissão</th>
                   <th className="pb-3 pr-4 font-semibold">Validade</th>
-                  <th className="pb-3 font-semibold">Status</th>
+                  <th className="pb-3 pr-4 font-semibold">Status</th>
+                  <th className="pb-3 font-semibold text-right">QR</th>
                 </tr>
               </thead>
               <tbody>
@@ -224,17 +237,19 @@ export default function InfluencerDashboard() {
                     <td className="py-3 pr-4 font-semibold text-slate-700">{num(c.uses)}</td>
                     <td className="py-3 pr-4 text-purple-700 font-semibold">{c.comissao}%</td>
                     <td className="py-3 pr-4 text-slate-500">{new Date(c.validade).toLocaleDateString("pt-PT")}</td>
-                    <td className="py-3"><StatusBadge status={c.status} /></td>
+                    <td className="py-3 pr-4"><StatusBadge status={c.status} /></td>
+                    <td className="py-3 text-right"><button data-testid={`campaign-qr-${c.id}`} onClick={() => setQrCampaign(c)} title="Ver / descarregar QR" className="p-2 rounded-lg text-purple-600 hover:bg-purple-50 btn-press"><QrCode className="w-4 h-4" /></button></td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-slate-400" data-testid="campaigns-empty-state">Nenhuma campanha encontrada.</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-slate-400" data-testid="campaigns-empty-state">Nenhuma campanha encontrada.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+      <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
     </div>
   );
 }
