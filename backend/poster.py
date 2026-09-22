@@ -20,7 +20,7 @@ def render_poster(cupom: str, desconto: float, parceiro: str, influencer: str, l
         c.rect(0, H - (i + 1) * H / steps, W, H / steps + 1, stroke=0, fill=1)
     c.setFillColor(white)
     from brand import brand_mark
-    c.drawImage(ImageReader(brand_mark(256, fg=(255, 255, 255), bg=(124, 58, 237))), W / 2 - 24 * mm, H - 27 * mm, 13 * mm, 13 * mm, mask="auto")
+    c.drawImage(ImageReader(brand_mark(256)), W / 2 - 24 * mm, H - 27 * mm, 13 * mm, 13 * mm, mask="auto")
     c.setFont("Helvetica-Bold", 30)
     c.drawString(W / 2 - 9 * mm, H - 23.5 * mm, "RRclub")
     c.setFont("Helvetica-Bold", 8.5)
