@@ -235,7 +235,8 @@ class EmailSettingsIn(BaseModel):
 @router.get("/admin/launch-check")
 async def launch_check(request: Request, user: dict = Depends(require_role("admin"))):
     import httpx
-    from mailer import configured as mail_ok
+    from mailer import configured as mail_ok, load_settings as _load_mail
+    await _load_mail()
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
     fe = os.environ.get("FRONTEND_URL", "").rstrip("/")
     fe_host = fe.replace("https://", "").replace("http://", "")

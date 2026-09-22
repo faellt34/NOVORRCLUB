@@ -15,7 +15,7 @@ _settings_cache = {"key": None, "sender": None, "loaded": False}
 async def load_settings():
     doc = await db.settings.find_one({"id": "email"}, NO_ID) or {}
     _settings_cache.update({"key": (doc.get("resend_api_key") or os.environ.get("RESEND_API_KEY") or "").strip(),
-                            "sender": (doc.get("sender_email") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev").strip(), "loaded": True})
+                            "sender": (doc.get("sender_email") or os.environ.get("RESEND_FROM") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev").strip(), "loaded": True})
     return _settings_cache
 
 
