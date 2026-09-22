@@ -238,13 +238,20 @@ async def launch_check(request: Request, user: dict = Depends(require_role("admi
     from mailer import configured as mail_ok
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
     fe = os.environ.get("FRONTEND_URL", "").rstrip("/")
-    on_domain = "theclub.pt" in host
+    on_domain = "rrclub.online" in host
     admins = await db.users.count_documents({"role": "admin", "status": "Ativo"})
     camp = await db.campaigns.find_one({"status": "Ativa"}, NO_ID)
     partners_iban = await db.partners.count_documents({"iban": {"$exists": True, "$ne": ""}})
     partners = await db.partners.count_documents({})
     iban_pf = await db.settings.find_one({"id": "bank"}, NO_ID)
     stripe_live = (os.environ.get("STRIPE_SECRET_KEY") or "").startswith("sk_live")
+    connect_ok = False
+    try:
+        import stripe as _stripe
+        _stripe.Account.list(limit=1)
+        connect_ok = True
+    except Exception:
+        connect_ok = False
     coupon_ok, coupon_url = False, None
     if camp and fe:
         coupon_url = f"{fe}/c/{camp['cupom']}"
@@ -255,16 +262,17 @@ async def launch_check(request: Request, user: dict = Depends(require_role("admi
         except Exception:
             coupon_ok = False
     items = [
-        {"id": "domain", "ok": on_domain, "label": "Site publicado no domínio theclub.pt", "hint": f"A aceder por: {host or '?'}" if not on_domain else "Domínio ativo", "action": "Clique Publish na plataforma e ligue o domínio em Publish › Domain."},
+        {"id": "domain", "ok": on_domain, "label": "Site publicado no domínio rrclub.online", "hint": f"A aceder por: {host or '?'}" if not on_domain else "Domínio ativo", "action": "Clique Publish na plataforma e ligue o domínio em Publish › Domain."},
         {"id": "https", "ok": request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https", "label": "HTTPS ativo (necessário para câmara e PWA)", "action": "Automático após ligar o domínio."},
         {"id": "login", "ok": admins > 0, "label": "Login Admin funciona", "hint": f"{admins} admin(s) ativos"},
         {"id": "campaign", "ok": bool(camp), "label": "Existe pelo menos uma campanha/cupão ativo", "hint": camp["cupom"] if camp else "Nenhuma", "action": "Crie em Gestão › Campanhas."},
         {"id": "coupon_public", "ok": coupon_ok, "label": "Cupão público responde no domínio final", "hint": coupon_url or "—", "action": "Abra o link do cupão no telemóvel e confirme que carrega."},
         {"id": "scanner", "ok": None, "label": "Scanner QR testado num telemóvel real", "hint": "Teste manual: Parceiro › Validar Cupom › ícone câmara", "action": "Autorize a câmara; se falhar use 'Usar foto do QR'."},
         {"id": "share", "ok": None, "label": "Partilha do QR (imagem) testada no telemóvel", "hint": "Influencer › cupão › Partilhar"},
-        {"id": "email", "ok": bool(mail_ok()), "label": "Email (Resend) configurado", "action": "Definições › Email: cole a chave Resend e verifique o domínio theclub.pt no Resend."},
+        {"id": "email", "ok": bool(mail_ok()), "label": "Email (Resend) configurado", "action": "Definições › Email: cole a chave Resend e verifique o domínio rrclub.online no Resend."},
         {"id": "iban", "ok": bool(iban_pf and iban_pf.get("iban")), "label": "IBAN da plataforma definido", "action": "Definições › IBAN da plataforma."},
         {"id": "partners_iban", "ok": partners > 0 and partners_iban == partners, "label": "Todos os parceiros com IBAN", "hint": f"{partners_iban}/{partners}"},
+        {"id": "connect", "ok": connect_ok, "label": "Stripe Connect ativo (split automático para parceiros)", "hint": "Conta Stripe da plataforma sem Connect" if not connect_ok else "Connect ativo", "action": "Em dashboard.stripe.com › Connect › Get started, ative Connect na conta ligada a este projeto (a mesma da chave em uso)."},
         {"id": "stripe", "ok": stripe_live, "label": "Stripe em modo live (pagamentos reais)", "hint": "Chave de teste em uso" if not stripe_live else "Live", "action": "Reclame a conta Stripe, conclua o KYC e coloque a chave live nos secrets de produção."},
     ]
     done = sum(1 for i in items if i["ok"] is True)
@@ -398,7 +406,7 @@ async def story_video(campaign_id: str, user: dict = Depends(require_role("influ
         raise HTTPException(status_code=404, detail="Campanha não encontrada")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
     inf = await db.influencers.find_one({"id": user["influencer_id"]}, NO_ID) or {}
-    site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "theclub.pt")).rstrip("/")
+    site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "rrclub.online")).rstrip("/")
     key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v2".encode()).hexdigest()[:12]
     out = MEDIA_DIR / f"story-{c['cupom']}-{key}.mp4"
     if not out.exists():

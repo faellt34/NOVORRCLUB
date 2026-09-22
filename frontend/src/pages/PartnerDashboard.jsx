@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark } from "lucide-react";
+import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -7,6 +7,9 @@ import { api, apiError, eur, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { QrScannerDialog } from "../components/QrScannerDialog";
+import { PartnerOnboarding } from "../components/PartnerOnboarding";
+import { CouponQrDialog } from "../components/CouponQrDialog";
+import { StatusBadge } from "../components/KpiCard";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -24,6 +27,13 @@ export default function PartnerDashboard() {
   const [ibanEdit, setIbanEdit] = useState(false);
   const [connect, setConnect] = useState(null);
   const [connecting, setConnecting] = useState(false);
+  const [qrCampaign, setQrCampaign] = useState(null);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("connect");
+    if (p === "return") toast.success("Dados Stripe submetidos — a verificar o estado da ligação...");
+    if (p === "refresh") toast.info("O link do Stripe expirou. Clique em 'Continuar onboarding' para retomar.");
+  }, []);
 
   useEffect(() => { api.get("/partner/connect/status").then((r) => setConnect(r.data)).catch(() => setConnect({ connected: false })); }, []);
 
@@ -31,7 +41,7 @@ export default function PartnerDashboard() {
     setConnecting(true);
     try {
       const { data: res } = await api.post("/partner/connect/onboard", { origin_url: window.location.origin });
-      if (res.available === false) { toast.info(res.reason, { duration: 9000 }); setConnecting(false); return; }
+      if (res.available === false) { toast.info(res.reason, { duration: 9000 }); setConnect((c) => ({ ...(c || {}), available: false })); setConnecting(false); return; }
       window.location.href = res.url;
     } catch (err) { toast.error(apiError(err)); setConnecting(false); }
   };
@@ -83,7 +93,7 @@ export default function PartnerDashboard() {
   };
 
   if (!data) return <PageSkeleton />;
-  const { totals, trend, leaderboard, redemptions } = data;
+  const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
   return (
     <div className="space-y-6">
@@ -91,6 +101,8 @@ export default function PartnerDashboard() {
         <h1 data-testid="partner-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{user.nome}</h1>
         <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers</p>
       </div>
+
+      <PartnerOnboarding hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" value={eur(Math.round(totals.revenue))} trend={trend.revenue} />
@@ -100,7 +112,7 @@ export default function PartnerDashboard() {
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" value={eur(+totals.ticket.toFixed(2))} />
       </div>
 
-      <div data-testid="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
           <div>
@@ -222,6 +234,30 @@ export default function PartnerDashboard() {
       </div>
 
       <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} />
+      <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
+
+      <div data-testid="partner-campaigns-card" className="card-soft p-5">
+        <h3 className="text-lg font-semibold text-slate-900 mb-1">Os seus cupões QR</h3>
+        <p className="text-xs text-slate-500 mb-4">Descarregue o QR ou o cartaz A5 para colocar na mesa / balcão</p>
+        <div className="overflow-x-auto -mx-5 px-5">
+          <table className="w-full text-sm" data-testid="partner-campaigns-table">
+            <thead><tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100"><th className="pb-3 pr-4 font-semibold">Campanha</th><th className="pb-3 pr-4 font-semibold">Cupom</th><th className="pb-3 pr-4 font-semibold">Influencer</th><th className="pb-3 pr-4 font-semibold">Desconto</th><th className="pb-3 pr-4 font-semibold">Status</th><th className="pb-3 font-semibold text-right">QR / Cartaz</th></tr></thead>
+            <tbody>
+              {campaigns.map((c) => (
+                <tr key={c.id} data-testid={`partner-campaign-row-${c.id}`} className="border-b border-slate-50 last:border-0 hover:bg-purple-50/40">
+                  <td className="py-3 pr-4 font-semibold text-slate-900">{c.nome}</td>
+                  <td className="py-3 pr-4"><span className="font-coupon text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md">{c.cupom}</span></td>
+                  <td className="py-3 pr-4 text-slate-600">{c.influencer}</td>
+                  <td className="py-3 pr-4 text-slate-600">{c.desconto}%</td>
+                  <td className="py-3 pr-4"><StatusBadge status={c.status} /></td>
+                  <td className="py-3 text-right"><button data-testid={`partner-campaign-qr-${c.id}`} onClick={() => setQrCampaign(c)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg btn-press"><QrCode className="w-3.5 h-3.5" /> QR / Cartaz</button></td>
+                </tr>
+              ))}
+              {campaigns.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-slate-400" data-testid="partner-campaigns-empty">Ainda sem cupões — o admin cria a campanha com o seu influencer.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

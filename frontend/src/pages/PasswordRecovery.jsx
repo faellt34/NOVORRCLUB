@@ -39,7 +39,7 @@ export function ForgotPassword() {
         <form onSubmit={submit} className="space-y-4" data-testid="forgot-form">
           <div>
             <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Email</label>
-            <Input data-testid="forgot-email-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@theclub.pt" className="h-11 rounded-xl bg-white" />
+            <Input data-testid="forgot-email-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@rrclub.online" className="h-11 rounded-xl bg-white" />
           </div>
           <button type="submit" disabled={loading} data-testid="forgot-submit-button" className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press"><KeyRound className="w-4 h-4" /> {loading ? "A enviar..." : "Pedir recuperação"}</button>
         </form>

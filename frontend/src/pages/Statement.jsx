@@ -43,7 +43,7 @@ export default function Statement() {
     try {
       const r = await api.get(`/statements/${month.id}/pdf`, { responseType: "blob" });
       const url = URL.createObjectURL(r.data);
-      const a = document.createElement("a"); a.href = url; a.download = `extrato-theclub-${month.id}.pdf`; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement("a"); a.href = url; a.download = `extrato-rrclub-${month.id}.pdf`; a.click(); URL.revokeObjectURL(url);
       toast.success(`PDF do extrato de ${label} descarregado`);
     } catch (e) { toast.error(apiError(e)); } finally { setPdfBusy(false); }
   };

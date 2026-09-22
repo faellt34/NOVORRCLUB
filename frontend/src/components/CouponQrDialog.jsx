@@ -15,7 +15,7 @@ export const renderCouponPng = (qrCanvas, c, link) => {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "#fff"; ctx.textAlign = "center";
   ctx.font = "bold 92px Georgia, serif"; ctx.fillText("RRclub", W / 2, 150);
-  ctx.font = "600 34px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText("EXPERIÊNCIAS PREMIUM · theclub.pt", W / 2, 205);
+  ctx.font = "600 34px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText("EXPERIÊNCIAS PREMIUM · rrclub.online", W / 2, 205);
   ctx.fillStyle = "#fff"; round(ctx, 140, 270, 800, 800, 48);
   ctx.drawImage(qrCanvas, 190, 320, 700, 700);
   ctx.fillStyle = "#7C3AED"; round(ctx, 190, 1110, 700, 96, 24);

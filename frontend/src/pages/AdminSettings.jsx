@@ -52,7 +52,7 @@ export default function AdminSettings() {
 
       <div className="card-soft p-5 space-y-3" data-testid="launch-checklist-card">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><Rocket className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">Checklist pós-Publish (theclub.pt)</h3></div>
+          <div className="flex items-center gap-2"><Rocket className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">Checklist pós-Publish (rrclub.online)</h3></div>
           <div className="flex items-center gap-3">
             {check && <span data-testid="launch-check-score" className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">{check.done}/{check.total} prontos</span>}
             <button data-testid="launch-check-refresh" onClick={runCheck} className="p-2 rounded-lg text-slate-500 hover:bg-purple-50 hover:text-purple-600 btn-press" title="Verificar novamente"><RefreshCw className="w-4 h-4" /></button>
