@@ -1,0 +1,27 @@
+{
+  "summary": "Iter 12 — Partner 3-step onboarding + partner campaigns list + admin launch-check with 'connect' item + rrclub.online rebrand verified end-to-end. Backend 5/5 passing (test_iter12_partner_onboarding.py): GET /api/dashboard/partner returns campaigns[] with CLUB-10 (cupom/influencer/status); GET /api/admin/launch-check returns 12 items incl id 'connect' and 403 for partner; POST /api/partner/connect/onboard returns available:false with reason string; GET /api/campaigns/{id}/poster.pdf is a valid PDF and does NOT contain literal 'theclub.pt'. Frontend (Playwright, 1920x1080): partner login shows data-testid=partner-onboarding, partner-onboarding-progress='2/3', onboarding-step-iban-done & onboarding-step-campaign-done present, onboarding-step-iban-cta absent (IBAN exists — not modified); clicking onboarding-step-connect-cta ('Ativar') shows toast about Stripe Connect not active, step becomes 'Indisponível por agora' and CTA becomes disabled. partner-campaigns-card lists partner-campaign-row-<id> with CLUB-10; partner-campaign-qr-<id> opens coupon-qr-dialog; coupon-qr-poster downloads exactly 'cartaz-CLUB-10.pdf'; coupon-qr-download downloads exactly 'cupao-CLUB-10.png'. Admin /admin/definicoes shows launch-checklist-card labeled 'Checklist pós-Publish (rrclub.online)' with score '7/12 prontos' and launch-item-connect present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/launch-check", "issue": "launch-item 'connect' returns ok=true ('Connect ativo') because heuristic in routes_ops.py:249-254 just calls stripe.Account.list(limit=1) which succeeds even when Connect is NOT enabled for creating express accounts. Meanwhile POST /api/partner/connect/onboard correctly returns available:false. The two signals disagree; reviewer expected launch-item-connect to be red. Suggest tightening the heuristic to actually attempt Account.create(type='express') in a try/rollback OR probe a Connect-only endpoint (e.g. stripe.Account.create dry-run / capability check) so admin sees red until Connect is truly usable."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter12_partner_onboarding.py", "/app/test_reports/pytest/iter12.xml"],
+  "action_items": [
+    "Fix launch-check 'connect' heuristic so it returns ok=false when platform Stripe cannot actually onboard Connect accounts (currently green while partner onboarding returns available:false — misleading for admin). See routes_ops.py:248-254."
+  ],
+  "critical_code_review_comments": [
+    "routes_ops.py:248-254 — stripe.Account.list(limit=1) is not a reliable Connect-enabled probe; it succeeds against a normal Stripe account. Use a real Connect capability check to keep launch-check honest (partner onboarding endpoint already exposes the ground truth via /api/partner/connect/onboard).",
+    "PartnerOnboarding.jsx: the CTA button uses `s.disabled` which is set only when connect.available===false. Works, but consider also visually flagging optional/unavailable steps (currently they still show as 'not done' grey which suggests user should still act). Small UX polish.",
+    "routes_ops.py:173 statement_pdf filename still 'extrato-theclub-{month}.pdf' — trivial rebrand leftover (only filename, not content). Consider 'extrato-rrclub-...'."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter12_partner_onboarding.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!; partner parceiro.exemplo@club.pt/parceiro123 — both worked; IBAN was NOT modified as instructed.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter12_partner_onboarding.py verifies partner onboarding + launch-check(12 items)+connect_onboard+poster rebrand. Launch-check 'connect' item is currently green because of a weak heuristic (Account.list succeeds); connect_onboard correctly returns available:false. If Stripe Connect gets enabled on the platform account in the future, expect launch-item-connect to still be green AND partner-onboarding step 2 to become clickable/completable (no longer 'Indisponível por agora'). PartnerOnboarding hides completely once done==3; testing agents should not expect the component when the partner has IBAN+campaign+charges_enabled all true.",
+  "rca of the issue": "launch-check connect heuristic uses stripe.Account.list() which merely lists connected accounts (returns empty on a non-Connect account without erroring on many stripe-python versions), while the real Connect-availability signal comes from Account.create(type='express') which is what connect_onboard uses. Fix: probe with the same call path (or a capability lookup on the platform account) so admin dashboard mirrors partner UX."
+}

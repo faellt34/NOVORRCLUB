@@ -94,6 +94,13 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Admin › Definições: card "Checklist pós-Publish (theclub.pt)" (`GET /api/admin/launch-check`, 11 itens: domínio, HTTPS, login, campanha ativa, cupão público no domínio final, scanner/partilha manuais, Resend, IBAN plataforma, IBAN parceiros, Stripe live) com pontuação e ações sugeridas
 - Nota: domínio/cupão público ficam vermelhos até o utilizador fazer Publish + ligar theclub.pt (esperado)
 
+### 2026-06 · Domínio rrclub.online + Onboarding parceiro 3 passos + QR no painel do parceiro ✅ (iteration_12)
+- Domínio definitivo **rrclub.online** (FRONTEND_URL, remetente, cartaz, story, checklist); theclub.pt abandonado
+- `PartnerOnboarding.jsx`: guia IBAN → Stripe Connect → primeiro cupão com estado por passo; desaparece quando 3/3
+- Painel do parceiro: tabela "Os seus cupões QR" (`campaigns` no `/api/dashboard/partner`) com botão QR/Cartaz (mesmo `CouponQrDialog`); toasts para `?connect=return|refresh`
+- Checklist admin: item `connect` (Stripe Connect ativo na conta da plataforma) → 12 itens
+- **Stripe Connect continua indisponível**: a conta Stripe ligada à chave do projeto (acct_…gKY, modo test) não tem Connect ativado — o dono tem de ativar em dashboard.stripe.com › Connect (na MESMA conta) e depois colocar a chave live nos secrets de produção
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
