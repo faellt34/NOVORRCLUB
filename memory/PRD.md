@@ -101,6 +101,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Checklist admin: item `connect` (Stripe Connect ativo na conta da plataforma) → 12 itens
 - **Stripe Connect continua indisponível**: a conta Stripe ligada à chave do projeto (acct_…gKY, modo test) não tem Connect ativado — o dono tem de ativar em dashboard.stripe.com › Connect (na MESMA conta) e depois colocar a chave live nos secrets de produção
 
+### 2026-06 · Logo oficial Vesica Piscis ✅ (iteration_13)
+- Marca do utilizador ("LOGO A PENSAR1.html"): dois círculos sobrepostos gradiente #B47BFF→#6E2BFF + ponto central, fundo #08040E→#1A0F2E; aplicada em `BrandMark`, ícones PWA (`brand.py`), cartaz A5, story video, manifest (theme #6E2BFF)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
