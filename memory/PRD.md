@@ -104,6 +104,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ### 2026-06 · Logo oficial Vesica Piscis ✅ (iteration_13)
 - Marca do utilizador ("LOGO A PENSAR1.html"): dois círculos sobrepostos gradiente #B47BFF→#6E2BFF + ponto central, fundo #08040E→#1A0F2E; aplicada em `BrandMark`, ícones PWA (`brand.py`), cartaz A5, story video, manifest (theme #6E2BFF)
 
+### 2026-06 · Bug: links de cupão com domínio errado ✅ (iteration_14)
+- Causa: `FRONTEND_URL` no `backend/.env` estava `https://theclub.pt`; `story_video.py` tinha default `site="theclub.pt"`; `poster.py` tinha texto `THECLUB.PT`; frontend usava `window.location.origin` (preview) e o cartaz aceitava `?site=` do cliente
+- Fix: tudo deriva de `FRONTEND_URL` (`GET /api/public/site` → `getSiteUrl()` no frontend; cartaz/story/checklist só leem env; sem fallbacks hardcoded); cache de vídeos antigos removida
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

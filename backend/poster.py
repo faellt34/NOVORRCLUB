@@ -25,7 +25,7 @@ def render_poster(cupom: str, desconto: float, parceiro: str, influencer: str, l
     c.drawString(W / 2 - 9 * mm, H - 23.5 * mm, "RRclub")
     c.setFont("Helvetica-Bold", 8.5)
     c.setFillColor(HexColor("#DDD6FE"))
-    c.drawCentredString(W / 2, H - 28 * mm, "EXPERIÊNCIAS PREMIUM  ·  THECLUB.PT")
+    c.drawCentredString(W / 2, H - 28 * mm, f"EXPERIÊNCIAS PREMIUM  ·  {link.replace('https://', '').replace('http://', '').split('/')[0].upper()}")
 
     c.setFillColor(white)
     c.setFont("Helvetica-Bold", 30)

@@ -1,0 +1,37 @@
+{
+  "summary": "Verified coupon links/QR now derive from backend FRONTEND_URL (https://rrclub.online). Backend: /api/public/site returns rrclub.online; /api/admin/launch-check domain label + coupon_public hint contain rrclub.online; poster.pdf embeds rrclub.online/c/CLUB-10 (as QR/footer link) and ignores ?site=evil.example; story-video returns MP4. Frontend: influencer coupon-copy-link clipboard, influencer/partner/admin coupon-qr-link dialogs all show https://rrclub.online/c/CLUB-10; coupon-qr-download and coupon-qr-poster buttons visible; PNG/PDF poster download buttons present; /c/CLUB-10 public page + all dashboards contain no visible 'theclub' text. FOUND ONE BUG: poster.pdf hardcodes tagline 'EXPERIÊNCIAS PREMIUM · THECLUB.PT' (poster.py:28) — 'theclub.pt' still appears as visible text in generated PDF.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/campaigns/{id}/poster.pdf", "issue": "PDF still contains hardcoded tagline 'EXPERIÊNCIAS PREMIUM · THECLUB.PT' (poster.py line 28). Coupon link/QR now correctly use rrclub.online, but the header subtitle string is a leftover branding. Iter12 test test_iter12_partner_onboarding.py also asserts this and only passes because it checks raw bytes (compressed streams hide it); pypdf text extraction reveals it.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_coupon_domain.py",
+    "/app/test_reports/pytest/iter14.xml"
+  ],
+  "action_items": [
+    "Fix /app/backend/poster.py line 28: replace hardcoded 'EXPERIÊNCIAS PREMIUM  ·  THECLUB.PT' with a tagline derived from FRONTEND_URL host (e.g., 'EXPERIÊNCIAS PREMIUM · RRCLUB.ONLINE') or simply drop the .pt reference so no 'theclub' string is ever rendered in coupon poster PDFs.",
+    "Consider strengthening iter12 poster assertion to decode PDF text (via pypdf) instead of raw bytes; current test passes despite visible 'theclub.pt' string in output."
+  ],
+  "critical_code_review_comments": [
+    "backend/poster.py:28 — branding string is hardcoded and out of sync with FRONTEND_URL; violates the same principle just fixed for coupon links.",
+    "backend/routes_ops.py:382 — poster endpoint accepts a `site` query param but correctly ignores it in favor of env FRONTEND_URL. Consider removing the unused query parameter from the signature to avoid future confusion / potential misuse via docs.",
+    "frontend/src/lib/api.js:32-37 — getSiteUrl caches the site URL in a module-level variable; on backend FRONTEND_URL change, users would need a full reload. Acceptable for now but document."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_coupon_domain.py"
+  ],
+  "success_rate": {"backend": "80% (4/5 — poster PDF still leaks 'theclub.pt' branding text)", "frontend": "100% (all coupon links resolve to https://rrclub.online/c/CLUB-10, no visible 'theclub' anywhere)"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!; influencer influencer.exemplo@club.pt/influencer123; partner parceiro.exemplo@club.pt/parceiro123 — from /app/memory/test_credentials.md",
+  "seed_data_creation": "None. Used existing CLUB-10 campaign.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iter14 tests live in /app/backend/tests/test_iter14_coupon_domain.py. They use pypdf to actually read PDF text — this is stricter than iter12's raw-bytes check. After main agent removes 'THECLUB.PT' from poster.py:28, rerun pytest -v on that file; all 5 tests should pass. Frontend flows verified via Playwright using data-testids coupon-copy-link, coupon-qr-link, coupon-qr-download, coupon-qr-poster, campaign-qr-*, partner-campaign-qr-*, qr-* (admin).",
+  "rca_of_the_issue": "Fix intent: derive every coupon URL from backend FRONTEND_URL. Fix is correct for URLs (verified end-to-end). However, poster PDF has a separate branding subtitle string 'EXPERIÊNCIAS PREMIUM · THECLUB.PT' that was NOT part of the coupon-link derivation path and remained hardcoded at poster.py:28. Reproduction: GET /api/campaigns/{id}/poster.pdf → extract text via pypdf → 'theclub.pt' appears in header. Mitigation: change literal to use rrclub.online (or derive from env FRONTEND_URL host)."
+}
