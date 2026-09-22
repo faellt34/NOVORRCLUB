@@ -1,0 +1,21 @@
+{
+  "summary": "Iter15 retest: verified poster.py fix. GET /api/campaigns/{id}/poster.pdf as influencer and as partner both return PDFs whose extracted text (via pymupdf) contains 'RRCLUB.ONLINE' tagline and coupon URL 'rrclub.online/c/CLUB-10', and does NOT contain any case-insensitive 'theclub' substring. Repo grep sanity (backend/*.py + frontend/src/**) confirms no 'theclub' remains in source. All 3 pytest cases pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_poster_tagline.py",
+    "/app/test_reports/pytest/iter15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "poster.py:28 now derives tagline from the coupon link host via split('/')[0].upper(). Works, but a bit implicit — a small helper (e.g., tagline_from_url(link)) or reading FRONTEND_URL from env directly would be clearer and safer if `link` is ever malformed."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter15_poster_tagline.py"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "influencer.exemplo@club.pt/influencer123, parceiro.exemplo@club.pt/parceiro123 from /app/memory/test_credentials.md",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter15 test file /app/backend/tests/test_iter15_poster_tagline.py uses pymupdf (fitz) to extract PDF text and validate poster branding. Reuse for future poster branding regressions.",
+  "rca_of_the_issue": "Iter14 identified poster.py:28 hardcoded 'THECLUB.PT' tagline. Main agent fixed it by deriving the domain from `link` param (link.replace('https://','').replace('http://','').split('/')[0].upper()), so with FRONTEND_URL=https://rrclub.online, the tagline renders as 'EXPERIÊNCIAS PREMIUM · RRCLUB.ONLINE'. Verified via PDF text extraction for both influencer and partner poster downloads. Fix confirmed."
+}
