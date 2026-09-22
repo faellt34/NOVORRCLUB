@@ -108,6 +108,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Causa: `FRONTEND_URL` no `backend/.env` estava `https://theclub.pt`; `story_video.py` tinha default `site="theclub.pt"`; `poster.py` tinha texto `THECLUB.PT`; frontend usava `window.location.origin` (preview) e o cartaz aceitava `?site=` do cliente
 - Fix: tudo deriva de `FRONTEND_URL` (`GET /api/public/site` → `getSiteUrl()` no frontend; cartaz/story/checklist só leem env; sem fallbacks hardcoded); cache de vídeos antigos removida
 
+### 2026-06 · Checklist email + RESEND_FROM ✅ (iteration_16)
+- Bug: `launch_check` chamava `mailer.configured()` sem `load_settings()` → "Email não configurado" falso; corrigido
+- `mailer.py` lê remetente por ordem: settings (Admin UI) → `RESEND_FROM` → `SENDER_EMAIL`; `.env` tem `RESEND_FROM="RRclub <pedidos@rrclub.online>"` (RESEND_API_KEY do .env está vazio; a chave ativa está em settings via Admin › Definições)
+- Nota: remetente atual guardado nas settings é um gmail — alterar para pedidos@rrclub.online em Admin › Definições depois de verificar o domínio no Resend
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

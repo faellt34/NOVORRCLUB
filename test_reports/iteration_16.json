@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 16 - Backend-only validation of two config bug fixes (coupon URL domain -> rrclub.online, and admin launch-check email item order-of-init). All 5 pytest checks PASS.",
+  "tests_executed": {
+    "test_launch_check_email_coupon_domain": "PASS - item id 'email' ok=true; 'coupon_public' hint == 'https://rrclub.online/c/CLUB-10'; 'domain' label/hint contains 'rrclub.online'",
+    "test_admin_settings_email_configured": "PASS - GET /api/admin/settings returned email_configured=true, sender_email is non-empty string",
+    "test_public_site_frontend_url": "PASS - GET /api/public/site frontend_url == 'https://rrclub.online'",
+    "test_no_theclub_references_in_repo": "PASS - case-insensitive grep for 'theclub' in /app/backend (excluding tests/__pycache__/.pytest_cache), /app/frontend/src, /app/frontend/public, and /app/backend/.env returned zero hits",
+    "test_email_test_endpoint": "PASS (accepted) - POST /api/admin/settings/email/test returned HTTP 502 (Cloudflare bad gateway from upstream Resend call). Per request, 200 or 502 both acceptable; reported as-is."
+  },
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/admin/settings/email/test", "issue": "Returns 502 from Cloudflare (upstream Resend request likely times out or fails). Not a blocker per test spec, but Resend domain verification / from-address configuration should be double-checked before real send flows are used."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter16_config.py", "/app/test_reports/pytest/iter16.xml"],
+  "action_items": [
+    "(Optional) Investigate why /api/admin/settings/email/test returns 502 - likely Resend from-domain not verified or request exceeding proxy timeout. Not required to block this iteration."
+  ],
+  "critical_code_review_comments": [
+    "Fix for launch_check calling mailer.configured() before load_settings() is confirmed working: 'email' item now reports ok=true when Resend key is present in DB settings.",
+    "Coupon public URL is now correctly built from FRONTEND_URL=https://rrclub.online (verified in launch-check hint).",
+    "No residual 'theclub' string in backend/*.py, backend/.env, frontend/src, frontend/public - branding cleanup complete."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter16_config.py"],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "test_credentials": "faellt@gmail.com / Robson2026! (admin owner) - from /app/memory/test_credentials.md",
+  "seed_data_creation": "None. Pilot reset not run; no settings modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 16 validated two config bug fixes on the backend. New regression test file /app/backend/tests/test_iter16_config.py can be reused. Email test endpoint currently returns 502 (upstream) - acceptable, but if Resend send flow must actually work end-to-end, investigate Resend domain verification and RESEND_FROM env value. Do NOT re-run pilot reset. Backend URL from frontend/.env REACT_APP_BACKEND_URL.",
+  "rca of the issue": "Bug 1 (launch-check email 'not configured'): launch_check() invoked mailer.configured() before load_settings() ran, so the in-memory settings object was empty at check time even though a Resend key was persisted in DB. Fix: load_settings() is now invoked prior to the mailer.configured() probe, and mailer additionally reads RESEND_FROM env as sender fallback. Bug 2 (coupon URL domain): FRONTEND_URL env now standardised to https://rrclub.online; coupon_public hint and domain label both reflect the correct host. Both bugs verified fixed via GET /api/admin/launch-check, GET /api/admin/settings, and GET /api/public/site."
+}
