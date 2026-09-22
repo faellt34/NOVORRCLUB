@@ -170,7 +170,7 @@ async def statement_pdf(month: str, user: dict = Depends(require_role("influence
            Paragraph("A taxa de comissão é travada em cada redenção no momento da validação pelo parceiro. Este documento é gerado automaticamente pela plataforma RRclub e serve de suporte à faturação/contabilidade. Pagamento por transferência bancária conforme acordo de parceria.", small)]
     doc.build(el)
     await audit("EXTRATO", f"PDF do extrato {month} gerado", user, month)
-    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-theclub-{month}.pdf"'})
+    return Response(content=buf.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="extrato-rrclub-{month}.pdf"'})
 
 
 class FeedbackIn(BaseModel):
@@ -238,7 +238,8 @@ async def launch_check(request: Request, user: dict = Depends(require_role("admi
     from mailer import configured as mail_ok
     host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
     fe = os.environ.get("FRONTEND_URL", "").rstrip("/")
-    on_domain = "rrclub.online" in host
+    fe_host = fe.replace("https://", "").replace("http://", "")
+    on_domain = bool(fe_host) and fe_host in host
     admins = await db.users.count_documents({"role": "admin", "status": "Ativo"})
     camp = await db.campaigns.find_one({"status": "Ativa"}, NO_ID)
     partners_iban = await db.partners.count_documents({"iban": {"$exists": True, "$ne": ""}})
@@ -262,7 +263,7 @@ async def launch_check(request: Request, user: dict = Depends(require_role("admi
         except Exception:
             coupon_ok = False
     items = [
-        {"id": "domain", "ok": on_domain, "label": "Site publicado no domínio rrclub.online", "hint": f"A aceder por: {host or '?'}" if not on_domain else "Domínio ativo", "action": "Clique Publish na plataforma e ligue o domínio em Publish › Domain."},
+        {"id": "domain", "ok": on_domain, "label": f"Site publicado no domínio {fe_host or '(FRONTEND_URL não definido)'}", "hint": f"A aceder por: {host or '?'}" if not on_domain else "Domínio ativo", "action": "Clique Publish na plataforma e ligue o domínio em Publish › Domain."},
         {"id": "https", "ok": request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https", "label": "HTTPS ativo (necessário para câmara e PWA)", "action": "Automático após ligar o domínio."},
         {"id": "login", "ok": admins > 0, "label": "Login Admin funciona", "hint": f"{admins} admin(s) ativos"},
         {"id": "campaign", "ok": bool(camp), "label": "Existe pelo menos uma campanha/cupão ativo", "hint": camp["cupom"] if camp else "Nenhuma", "action": "Crie em Gestão › Campanhas."},
@@ -390,7 +391,7 @@ async def campaign_poster(campaign_id: str, site: str = "", user: dict = Depends
         raise HTTPException(status_code=404, detail="Campanha não encontrada")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
     inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) or {}
-    base = (site or os.environ.get("FRONTEND_URL", "")).rstrip("/")
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
     pdf = render_poster(c["cupom"], float(c["desconto"]), partner.get("nome", ""), inf.get("handle") or inf.get("nome", ""), f"{base}/c/{c['cupom']}", partner.get("cidade", ""))
     await audit("CARTAZ", f"Cartaz A5 gerado · {c['cupom']}", user, campaign_id)
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="cartaz-{c["cupom"]}.pdf"'})
@@ -406,7 +407,7 @@ async def story_video(campaign_id: str, user: dict = Depends(require_role("influ
         raise HTTPException(status_code=404, detail="Campanha não encontrada")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
     inf = await db.influencers.find_one({"id": user["influencer_id"]}, NO_ID) or {}
-    site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "rrclub.online")).rstrip("/")
+    site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "")).rstrip("/")
     key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v2".encode()).hexdigest()[:12]
     out = MEDIA_DIR / f"story-{c['cupom']}-{key}.mp4"
     if not out.exists():

@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -227,6 +228,11 @@ async def notifications(user: dict = Depends(get_current_user)):
 async def read_notifications(user: dict = Depends(get_current_user)):
     await db.notifications.update_many({"user_id": user["id"], "lido": False}, {"$set": {"lido": True}})
     return {"ok": True}
+
+
+@router.get("/public/site")
+async def public_site():
+    return {"frontend_url": os.environ.get("FRONTEND_URL", "").rstrip("/")}
 
 
 @router.get("/public/coupon/{code}")

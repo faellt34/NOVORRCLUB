@@ -28,6 +28,15 @@ export const num = (v) => new Intl.NumberFormat("pt-PT").format(Number(v) || 0);
 
 export const slug = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-");
 
+let siteUrl = null;
+export const getSiteUrl = async () => {
+  if (siteUrl) return siteUrl;
+  try { const { data } = await api.get("/public/site"); siteUrl = data.frontend_url || window.location.origin; }
+  catch { siteUrl = window.location.origin; }
+  return siteUrl;
+};
+export const couponLink = (site, code) => `${site}/c/${code}`;
+
 export const downloadCsv = (filename, header, rows) => {
   const blob = new Blob([header + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);

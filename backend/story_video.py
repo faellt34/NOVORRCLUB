@@ -17,7 +17,7 @@ def _noise(x, y, z):
     return math.sin(x * 3.1 + y * 1.7) * math.cos(z * 2.9 - x * 1.3) + math.sin((x + z) * 5.3) * 0.5 + math.cos(y * 4.7 + z * 2.1) * 0.6
 
 
-def render_story(out_path: Path, name: str, handle: str, coupon: str, discount: float, partner: str, site: str = "rrclub.online", W=720, H=1280, F=90):
+def render_story(out_path: Path, name: str, handle: str, coupon: str, discount: float, partner: str, site: str, W=720, H=1280, F=90):
     rnd = random.Random(7)
     pts = []
     N = 6000

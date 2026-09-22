@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Copy, Download, Share2, Printer, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { api, apiError } from "../lib/api";
+import { api, apiError, getSiteUrl, couponLink } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 
 const round = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
@@ -15,7 +15,7 @@ export const renderCouponPng = (qrCanvas, c, link) => {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "#fff"; ctx.textAlign = "center";
   ctx.font = "bold 92px Georgia, serif"; ctx.fillText("RRclub", W / 2, 150);
-  ctx.font = "600 34px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText("EXPERIÊNCIAS PREMIUM · rrclub.online", W / 2, 205);
+  ctx.font = "600 34px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText(`EXPERIÊNCIAS PREMIUM · ${link.replace(/^https?:\/\//, "").split("/")[0]}`, W / 2, 205);
   ctx.fillStyle = "#fff"; round(ctx, 140, 270, 800, 800, 48);
   ctx.drawImage(qrCanvas, 190, 320, 700, 700);
   ctx.fillStyle = "#7C3AED"; round(ctx, 190, 1110, 700, 96, 24);
@@ -28,8 +28,10 @@ export const renderCouponPng = (qrCanvas, c, link) => {
 export const CouponQrDialog = ({ campaign: c, open, onOpenChange }) => {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [site, setSite] = useState(window.location.origin);
+  useEffect(() => { getSiteUrl().then(setSite); }, []);
   if (!c) return null;
-  const link = `${window.location.origin}/c/${c.cupom}`;
+  const link = couponLink(site, c.cupom);
   const msg = `${c.desconto}% OFF em ${c.parceiro} com o meu cupão ${c.cupom}: ${link}`;
 
   const png = () => renderCouponPng(ref.current?.querySelector("canvas"), c, link);
@@ -59,7 +61,7 @@ export const CouponQrDialog = ({ campaign: c, open, onOpenChange }) => {
   const poster = async () => {
     setBusy(true);
     try {
-      const r = await api.get(`/campaigns/${c.id}/poster.pdf`, { params: { site: window.location.origin }, responseType: "blob", timeout: 60000 });
+      const r = await api.get(`/campaigns/${c.id}/poster.pdf`, { params: { site }, responseType: "blob", timeout: 60000 });
       const a = document.createElement("a"); a.href = URL.createObjectURL(r.data); a.download = `cartaz-${c.cupom}.pdf`; a.click(); URL.revokeObjectURL(a.href);
       toast.success("Cartaz A5 descarregado — imprima e coloque na mesa/balcão");
     } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }

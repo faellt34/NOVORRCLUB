@@ -7,7 +7,7 @@ import { CouponQrDialog, renderCouponPng } from "../components/CouponQrDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
-import { api, apiError, eur, num } from "../lib/api";
+import { api, apiError, eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -23,6 +23,8 @@ export default function InfluencerDashboard() {
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [site, setSite] = useState(window.location.origin);
+  useEffect(() => { getSiteUrl().then(setSite); }, []);
   useEffect(() => { api.get("/influencer/me").then((r) => setProfile(r.data)).catch(() => {}); }, []);
   const saveIban = async (e) => {
     e.preventDefault();
@@ -54,7 +56,7 @@ export default function InfluencerDashboard() {
     const matchSearch = `${c.nome} ${c.parceiro} ${c.cupom} ${c.cidade}`.toLowerCase().includes(search.toLowerCase());
     return matchSearch && (statusFilter === "todas" || c.status === statusFilter);
   });
-  const link = featured ? `${window.location.origin}/c/${featured.cupom}` : "";
+  const link = featured ? couponLink(site, featured.cupom) : "";
 
   const share = async (action) => {
     if (action === "copiar") { navigator.clipboard?.writeText(link).catch(() => {}); toast.success("Link copiado para a área de transferência"); }
