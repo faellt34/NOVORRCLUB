@@ -7,6 +7,7 @@ import { api, apiError, eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { AbandonAnalysis } from "../components/AbandonAnalysis";
+import { TestRunDialog } from "../components/TestRunDialog";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -25,6 +26,13 @@ export default function AdminDashboard() {
   const [flash, triggerFlash] = useFlash();
   const [wsState, setWsState] = useState("a ligar");
   const [clicksKey, setClicksKey] = useState(0);
+  const [testOpen, setTestOpen] = useState(false);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [clearWord, setClearWord] = useState("");
+  const clearAllTests = async () => {
+    try { const { data: r } = await api.post("/admin/test-run/clear-all", { confirm: clearWord }); toast.success(`Testes apagados (${Object.values(r.removed).reduce((a, b) => a + b, 0)} registos)`); setClearAllOpen(false); setClearWord(""); load(); }
+    catch (e) { toast.error(apiError(e)); }
+  };
   const [leads, setLeads] = useState([]);
   const [resets, setResets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -49,6 +57,7 @@ export default function AdminDashboard() {
   const { status: wsStatus, eventos } = useRealtime((ev) => {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
+    if (ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
     if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
       const v = Number(ev.valor_plataforma || 0);
       setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10, usos: s.usos + 1 }));
@@ -98,10 +107,13 @@ export default function AdminDashboard() {
           <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
           <p className="text-sm text-slate-500 mt-1">Métricas globais do RRclub — receita, comissões e entidades ativas</p>
         </div>
-        <span data-testid="ws-indicator" data-status={wsStatus} className={`shrink-0 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${wsStatus === "conectado" ? "text-emerald-700 bg-emerald-50 border-emerald-100" : wsStatus === "reconectando" ? "text-amber-700 bg-amber-50 border-amber-100" : "text-red-600 bg-red-50 border-red-100"}`}>
-          <span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : wsStatus === "reconectando" ? "bg-amber-500 live-dot" : "bg-red-500"}`} />
-          WS · {wsStatus === "conectado" ? "Conectado" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 text-white text-xs font-semibold btn-press">🎬 Novo Teste</button>
+          <span data-testid="ws-indicator" data-status={wsStatus} className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${wsStatus === "conectado" ? "text-emerald-700 bg-emerald-50 border-emerald-100" : wsStatus === "reconectando" ? "text-amber-700 bg-amber-50 border-amber-100" : "text-red-600 bg-red-50 border-red-100"}`}>
+            <span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : wsStatus === "reconectando" ? "bg-amber-500 live-dot" : "bg-red-500"}`} />
+            WS · {wsStatus === "conectado" ? "Conectado" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -294,6 +306,17 @@ export default function AdminDashboard() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />
+
+      <button data-testid="clear-all-tests-button" onClick={() => setClearAllOpen(true)} className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg hover:bg-red-50 hover:text-red-600 text-slate-600 text-xs font-semibold btn-press">🗑️ Limpar TODOS os testes</button>
+      <Dialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
+        <DialogContent data-testid="clear-all-tests-dialog" className="max-w-sm">
+          <DialogHeader><DialogTitle>Limpar todos os testes</DialogTitle><DialogDescription>Apaga apenas campanhas, cupões e transações marcadas como teste. Utilizadores e campanhas reais não são tocados.</DialogDescription></DialogHeader>
+          <Input data-testid="clear-all-tests-input" value={clearWord} onChange={(e) => setClearWord(e.target.value)} placeholder='Escreva "LIMPAR"' className="rounded-xl bg-slate-50" />
+          <button data-testid="clear-all-tests-confirm" disabled={clearWord !== "LIMPAR"} onClick={clearAllTests} className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold btn-press">Apagar dados de teste</button>
         </DialogContent>
       </Dialog>
     </div>

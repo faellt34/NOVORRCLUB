@@ -339,6 +339,7 @@ async def mark_converted(campaign_id: str, rec: dict):
         await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"converted": True, "converted_at": rec["date"], "valor": rec["amount"], "redemption_id": rec["id"]}})
     from realtime import emit
     emit("venda", valor=rec["amount"], comissao=rec["commission"], cupom=rec["coupon"], claim_id=cl["id"] if cl else None, at=rec["date"], influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"))
+    emit("venda_validada", valor=rec["amount"], restaurante_id=rec.get("partner_id"), influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"), cupom=rec["coupon"])
 
 
 def _claim_state(cl: dict) -> str:
