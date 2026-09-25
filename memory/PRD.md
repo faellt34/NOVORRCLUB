@@ -125,6 +125,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Admin › "Cliques Recentes" (`RecentClicks.jsx`, `GET /api/admin/clicks?period=today|7|30`, máx 100): Data/hora · Origem (`?src=`/UA/referer → Instagram/WhatsApp/Facebook/TikTok/QR direto) · Influencer · Campanha · Status (Converteu = redenção da campanha até 7 dias após o clique) + Export CSV; atualiza ao vivo
 - Dados de teste limpos
 
+### 2026-06 · KPIs de funil no Admin ✅ (iteration_19)
+- `/api/dashboard/admin` → `funnel` {clicks, uses, not_used, conversion, ticket, origins[]}; 2.ª linha de KPIs: Pessoas que usaram cupom · Cliques · Clicaram e não usaram · Taxa de Conversão · Ticket Médio; card "Origens dos cliques" com barras; tudo atualiza ao vivo
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
