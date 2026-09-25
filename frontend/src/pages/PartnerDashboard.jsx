@@ -9,6 +9,8 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { QrScannerDialog } from "../components/QrScannerDialog";
 import { PartnerOnboarding } from "../components/PartnerOnboarding";
 import { CouponQrDialog } from "../components/CouponQrDialog";
+import { useRealtime } from "../services/ws";
+import { useFlash } from "../services/live";
 import { StatusBadge } from "../components/KpiCard";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -28,6 +30,23 @@ export default function PartnerDashboard() {
   const [connect, setConnect] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [flash, triggerFlash] = useFlash();
+  const [live, setLive] = useState(false);
+  useRealtime((ev) => {
+    if (ev.tipo === "ligado") { setLive(true); return; }
+    if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.tipo === "split_executado" && ev.record) {
+      const r = ev.record;
+      setData((d) => {
+        if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
+        const t = d.totals, count = t.count + 1, revenue = t.revenue + r.amount;
+        return { ...d, totals: { ...t, count, revenue, discounts: t.discounts + r.discount, commission: t.commission + r.commission, ticket: revenue / count, online_paid: (t.online_paid || 0) + (r.paid_online ? r.amount - r.discount : 0) },
+          redemptions: [{ ...r, enter: true }, ...d.redemptions].slice(0, 100) };
+      });
+      ["revenue", "count", "discounts", "commission", "ticket"].forEach(triggerFlash);
+      if (ev.origem === "qr") toast.success(`Pagamento por QR recebido · ${r.coupon} · ${eur(r.amount - r.discount)}`);
+    }
+  });
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("connect");
@@ -99,17 +118,17 @@ export default function PartnerDashboard() {
     <div className="space-y-6">
       <div>
         <h1 data-testid="partner-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{user.nome}</h1>
-        <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers</p>
+        <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers {live && <span data-testid="partner-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
       </div>
 
       <PartnerOnboarding hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" value={eur(Math.round(totals.revenue))} trend={trend.revenue} />
-        <KpiCard id="redencoes" icon={Ticket} label="Redenções" value={num(totals.count)} trend={trend.count} />
-        <KpiCard id="descontos" icon={BadgePercent} label="Descontos Concedidos" value={eur(Math.round(totals.discounts))} />
-        <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão Devida" value={eur(Math.round(totals.commission))} trend={trend.commission} />
-        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" value={eur(+totals.ticket.toFixed(2))} />
+        <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
+        <KpiCard id="redencoes" icon={Ticket} label="Redenções" live={totals.count} format={num} flash={flash.count} trend={trend.count} />
+        <KpiCard id="descontos" icon={BadgePercent} label="Descontos Concedidos" live={totals.discounts} format={(v) => eur(Math.round(v))} flash={flash.discounts} />
+        <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão Devida" live={totals.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={trend.commission} />
+        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={totals.ticket} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
       <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -218,7 +237,7 @@ export default function PartnerDashboard() {
           </div>
           <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
             {redemptions.map((r) => (
-              <div key={r.id} data-testid={`redemption-${r.id}`} className="flex items-center justify-between gap-2 pb-3 border-b border-slate-50 last:border-0">
+              <div key={r.id} data-testid={`redemption-${r.id}`} className={`audit-item flex items-center justify-between gap-2 pb-3 border-b border-slate-50 last:border-0 ${r.enter ? "enter" : ""}`}>
                 <div className="min-w-0">
                   <p className="font-coupon text-[11px] font-bold text-purple-700 truncate">{r.coupon}</p>
                   <p className="text-xs text-slate-500">{new Date(r.date).toLocaleString("pt-PT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · {r.staff}</p>

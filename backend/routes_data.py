@@ -177,7 +177,8 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         return {"record": existing, "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
     from realtime import emit
-    emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja")
+    emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
+         influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
     inf_user = await db.users.find_one({"influencer_id": c.get("influencer_id")}, {"id": 1}) if inf else None
     await notify(([inf_user["id"]] if inf_user else []) + await admin_ids(), "redencao", "Nova redenção",
                  f"{code} validado em {rec['partner']} · {rec['amount']:.2f}€ · comissão {rec['commission']:.2f}€", "/influencer")
@@ -232,6 +233,49 @@ async def read_notifications(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+def _click_origin(request: Request) -> str:
+    src = (request.query_params.get("src") or request.query_params.get("utm_source") or "").strip().lower()
+    ua = request.headers.get("user-agent", "").lower()
+    ref = request.headers.get("referer", "").lower()
+    if src:
+        return src.capitalize()
+    if "instagram" in ua or "instagram" in ref:
+        return "Instagram"
+    if "whatsapp" in ua or "whatsapp" in ref:
+        return "WhatsApp"
+    if "fban" in ua or "fbav" in ua or "facebook" in ref:
+        return "Facebook"
+    if "tiktok" in ua or "tiktok" in ref:
+        return "TikTok"
+    if "t.co" in ref or "twitter" in ref:
+        return "X/Twitter"
+    if ref:
+        return ref.split("/")[2] if ref.count("/") >= 2 else ref
+    return "QR / direto"
+
+
+@router.get("/admin/clicks")
+async def admin_clicks(period: str = "7", user: dict = Depends(require_role("admin"))):
+    days = 1 if period in ("today", "hoje", "1") else int(period)
+    start = datetime.now(timezone.utc).date().isoformat() if days == 1 else since(days)
+    claims = await db.coupon_claims.find({"date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(100)
+    if not claims:
+        return {"items": [], "total": 0, "converted": 0}
+    reds = await db.redemptions.find({"date": {"$gte": start}}, {"_id": 0, "campaign_id": 1, "date": 1}).to_list(50000)
+    by_camp = defaultdict(list)
+    for r in reds:
+        by_camp[r["campaign_id"]].append(r["date"])
+    camps = {c["id"]: c async for c in db.campaigns.find({}, {"_id": 0, "id": 1, "nome": 1})}
+    infs = {i["id"]: i.get("nome", "—") async for i in db.influencers.find({}, {"_id": 0, "id": 1, "nome": 1})}
+    items = []
+    for cl in claims:
+        window_end = (datetime.fromisoformat(cl["date"]) + timedelta(days=7)).isoformat()
+        converted = any(cl["date"] <= d <= window_end for d in by_camp.get(cl["campaign_id"], []))
+        items.append({"id": cl["id"], "date": cl["date"], "origem": cl.get("origem", "QR / direto"), "influencer": cl.get("influencer") or infs.get(cl.get("influencer_id"), "—"),
+                      "campanha": cl.get("campaign") or camps.get(cl["campaign_id"], {}).get("nome", "—"), "cupom": cl["coupon"], "status": "Converteu" if converted else "Só clicou"})
+    return {"items": items, "total": len(items), "converted": sum(1 for i in items if i["status"] == "Converteu")}
+
+
 @router.get("/public/site")
 async def public_site():
     return {"frontend_url": os.environ.get("FRONTEND_URL", "").rstrip("/")}
@@ -249,7 +293,12 @@ async def public_coupon(code: str, request: Request):
     key = f"{c['cupom']}:{ip}:{ua}"
     recent = await db.coupon_claims.find_one({"key": key, "date": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()}})
     if not recent:
-        await db.coupon_claims.insert_one({"id": new_id("cl"), "key": key, "coupon": c["cupom"], "campaign_id": c["id"], "influencer_id": c.get("influencer_id"), "partner_id": c.get("parceiro_id"), "date": now_iso()})
+        origem = _click_origin(request)
+        cl = {"id": new_id("cl"), "key": key, "coupon": c["cupom"], "campaign_id": c["id"], "campaign": c["nome"], "influencer_id": c.get("influencer_id"), "influencer": inf.get("nome", "—"),
+              "partner_id": c.get("parceiro_id"), "partner": partner.get("nome", "—"), "origem": origem, "date": now_iso()}
+        await db.coupon_claims.insert_one(dict(cl))
+        from realtime import emit
+        emit("clique_cupao", cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
     return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),

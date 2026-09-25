@@ -11,6 +11,8 @@ import { api, apiError, eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { useRealtime } from "../services/ws";
+import { useFlash } from "../services/live";
 
 export default function InfluencerDashboard() {
   const { user, unread } = useApp();
@@ -18,6 +20,21 @@ export default function InfluencerDashboard() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todas");
   const [data, setData] = useState(null);
+  const [flash, triggerFlash] = useFlash();
+  const [live, setLive] = useState(false);
+  useRealtime((ev) => {
+    if (ev.tipo === "ligado") { setLive(true); return; }
+    if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.tipo === "split_executado") {
+      setData((d) => d && { ...d, kpis: { ...d.kpis, uses: d.kpis.uses + 1, revenue: d.kpis.revenue + Number(ev.valor_total || 0), commission: d.kpis.commission + Number(ev.valor_plataforma || 0) },
+        campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, uses: c.uses + 1 } : c) });
+      triggerFlash("uses"); triggerFlash("revenue"); triggerFlash("commission");
+      toast.success(`Venda validada · ${ev.cupom} · +${eur(ev.valor_plataforma)} de comissão`);
+    } else if (ev.tipo === "clique_cupao") {
+      setData((d) => d && { ...d, kpis: { ...d.kpis, customers: d.kpis.customers + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, claims: (c.claims || 0) + 1 } : c) });
+      triggerFlash("customers");
+    }
+  });
   const [videoBusy, setVideoBusy] = useState(false);
   const [profile, setProfile] = useState(null);
   const [iban, setIban] = useState("");
@@ -84,7 +101,7 @@ export default function InfluencerDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div>
           <h1 data-testid="influencer-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Olá, {user.nome.split(" ")[0]}! 👋</h1>
-          <p className="text-sm text-slate-500 mt-1">Painel de desempenho e atribuição das suas parcerias de luxo</p>
+          <p className="text-sm text-slate-500 mt-1">Painel de desempenho e atribuição das suas parcerias de luxo {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={setPeriod}>
@@ -121,10 +138,10 @@ export default function InfluencerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" value={num(kpis.uses)} trend={kpis.trend.uses} />
-        <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" value={num(kpis.customers)} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
-        <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" value={eur(Math.round(kpis.revenue))} trend={kpis.trend.revenue} />
-        <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} value={eur(Math.round(kpis.commission))} trend={kpis.trend.commission} />
+        <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
+        <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
+        <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" live={kpis.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={kpis.trend.revenue} />
+        <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={kpis.trend.commission} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

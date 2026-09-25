@@ -6,6 +6,7 @@ import { useApp } from "../context/AppContext";
 import { api, apiError, eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
+import { RecentClicks } from "../components/RecentClicks";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -22,6 +23,7 @@ export default function AdminDashboard() {
   const [audit, setAudit] = useState([]);
   const [flash, triggerFlash] = useFlash();
   const [wsState, setWsState] = useState("a ligar");
+  const [clicksKey, setClicksKey] = useState(0);
   const [leads, setLeads] = useState([]);
   const [resets, setResets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -50,6 +52,9 @@ export default function AdminDashboard() {
       setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10 }));
       pushAudit("REDENÇÃO", `${ev.cupom} · ${ev.parceiro}${ev.origem === "qr" ? " · pago por QR" : ""} · ${ev.influencer || ""}`, v);
       triggerFlash("receita"); triggerFlash("comissoes");
+      setClicksKey((k) => k + 1);
+    } else if (ev.tipo === "clique_cupao") {
+      setClicksKey((k) => k + 1);
     } else if (ev.tipo === "indicacao_criada") {
       setStats((s) => ({ ...s, parceiros: s.parceiros + 1 }));
       pushAudit("INDICAÇÃO", `${ev.nome} · ${ev.categoria} · ${ev.cidade} · por ${ev.por}`);
@@ -152,6 +157,8 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      <RecentClicks refreshKey={clicksKey} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div data-testid="admin-feedback-card" className="card-soft p-5">
