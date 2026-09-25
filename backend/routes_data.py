@@ -187,6 +187,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
     from realtime import emit
     emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
          influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
+    await mark_converted(c["id"], rec)
     inf_user = await db.users.find_one({"influencer_id": c.get("influencer_id")}, {"id": 1}) if inf else None
     await notify(([inf_user["id"]] if inf_user else []) + await admin_ids(), "redencao", "Nova redenção",
                  f"{code} validado em {rec['partner']} · {rec['amount']:.2f}€ · comissão {rec['commission']:.2f}€", "/influencer")
@@ -299,18 +300,65 @@ async def public_coupon(code: str, request: Request):
     ip = request.client.host if request.client else "?"
     ua = request.headers.get("user-agent", "")[:120]
     key = f"{c['cupom']}:{ip}:{ua}"
-    recent = await db.coupon_claims.find_one({"key": key, "date": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()}})
+    recent = await db.coupon_claims.find_one({"key": key, "date": {"$gte": (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat()}}, NO_ID)
+    claim_id = recent["id"] if recent else None
     if not recent:
         origem = _click_origin(request)
         cl = {"id": new_id("cl"), "key": key, "coupon": c["cupom"], "campaign_id": c["id"], "campaign": c["nome"], "influencer_id": c.get("influencer_id"), "influencer": inf.get("nome", "—"),
-              "partner_id": c.get("parceiro_id"), "partner": partner.get("nome", "—"), "origem": origem, "date": now_iso()}
+              "partner_id": c.get("parceiro_id"), "partner": partner.get("nome", "—"), "origem": origem, "cliente": f"Cliente #{ip.split('.')[-1] if '.' in ip else ip[-4:]}", "date": now_iso(), "created_at": now_iso(),
+              "qr_downloaded": False, "qr_downloaded_at": None, "converted": False, "converted_at": None, "valor": None}
         await db.coupon_claims.insert_one(dict(cl))
+        claim_id = cl["id"]
         from realtime import emit
+        dados = {k: cl[k] for k in ("id", "coupon", "campaign", "influencer", "partner", "origem", "cliente", "date", "qr_downloaded", "converted", "valor")}
         emit("clique_cupao", cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
+        emit("novo_clique", dados=dados, influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"))
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
     return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
-            "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims}
+            "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id}
+
+
+@router.post("/public/coupon/{code}/qr-downloaded")
+async def public_qr_downloaded(code: str, body: dict):
+    cl = await db.coupon_claims.find_one({"id": body.get("claim_id"), "coupon": code.strip().upper()}, NO_ID)
+    if not cl:
+        raise HTTPException(status_code=404, detail="Clique não encontrado")
+    if not cl.get("qr_downloaded"):
+        ts = now_iso()
+        await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"qr_downloaded": True, "qr_downloaded_at": ts}})
+        from realtime import emit
+        emit("qr_baixado", claim_id=cl["id"], cupom=cl["coupon"], at=ts, influencer_id=cl.get("influencer_id"), partner_id=cl.get("partner_id"))
+    return {"ok": True}
+
+
+async def mark_converted(campaign_id: str, rec: dict):
+    start = (datetime.fromisoformat(rec["date"]) - timedelta(days=7)).isoformat()
+    cl = await db.coupon_claims.find_one({"campaign_id": campaign_id, "converted": {"$ne": True}, "date": {"$gte": start}}, NO_ID, sort=[("qr_downloaded", -1), ("date", -1)])
+    if cl:
+        await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"converted": True, "converted_at": rec["date"], "valor": rec["amount"], "redemption_id": rec["id"]}})
+    from realtime import emit
+    emit("venda", valor=rec["amount"], comissao=rec["commission"], cupom=rec["coupon"], claim_id=cl["id"] if cl else None, at=rec["date"], influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"))
+
+
+def _claim_state(cl: dict) -> str:
+    if cl.get("converted"):
+        return "Converteu"
+    if cl.get("qr_downloaded"):
+        return "QR sem scan"
+    age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(cl["date"])).total_seconds() / 3600
+    return "Abandonou" if age_h > 48 else "Sem download"
+
+
+@router.get("/admin/cliques/analysis")
+async def clicks_analysis(period: str = "7d", user: dict = Depends(require_role("admin"))):
+    p = period.lower().rstrip("d")
+    start = datetime.now(timezone.utc).date().isoformat() if p in ("hoje", "today", "1") else since(int(p or 7))
+    claims = await db.coupon_claims.find({"date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(500)
+    lista = [{"id": cl["id"], "date": cl["date"], "origem": cl.get("origem", "QR / direto"), "cliente": cl.get("cliente", "Cliente"), "influencer": cl.get("influencer", "—"), "campanha": cl.get("campaign", "—"), "cupom": cl["coupon"],
+              "qr": bool(cl.get("qr_downloaded")), "qr_downloaded_at": cl.get("qr_downloaded_at"), "estado": _claim_state(cl), "converted_at": cl.get("converted_at"), "valor": cl.get("valor")} for cl in claims]
+    return {"total": len(lista), "sem_download": sum(1 for x in lista if x["estado"] in ("Sem download", "Abandonou")), "qr_sem_scan": sum(1 for x in lista if x["estado"] == "QR sem scan"),
+            "convertidos": sum(1 for x in lista if x["estado"] == "Converteu"), "lista": lista}
 
 
 CITY_COORDS = {"Lisboa": (38.72, -9.14), "Porto": (41.15, -8.61), "Algarve": (37.02, -7.93), "Douro": (41.16, -7.79), "Madrid": (40.42, -3.70), "Barcelona": (41.39, 2.17),

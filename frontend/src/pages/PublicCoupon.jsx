@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone } from "lucide-react";
+import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
@@ -42,6 +42,16 @@ export default function PublicCoupon() {
   }, [code]);
 
   const copy = () => { navigator.clipboard?.writeText(c.cupom).catch(() => {}); toast.success("Código copiado — mostre-o no local"); };
+  const downloadQr = () => {
+    const svg = document.querySelector("[data-testid=public-coupon-download-qr]")?.parentElement?.querySelector("svg");
+    if (svg) {
+      const img = new Image();
+      img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = 600; const ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 600, 600); ctx.drawImage(img, 30, 30, 540, 540); const a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = `qr-${c.cupom}.png`; a.click(); };
+      img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg))));
+    }
+    if (c.claim_id) api.post(`/public/coupon/${encodeURIComponent(code)}/qr-downloaded`, { claim_id: c.claim_id }).catch(() => {});
+    toast.success("QR guardado — mostre-o no restaurante");
+  };
   const active = c?.status === "Ativa";
 
   return (
@@ -77,7 +87,10 @@ export default function PublicCoupon() {
                   <div><p className="font-bold text-slate-900">{c.parceiro}</p><p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {c.categoria} · {c.cidade}</p></div>
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
-                  <div className="bg-white p-2 rounded-xl border border-purple-100"><QRCodeSVG value={window.location.href} size={92} fgColor="#3B0764" /></div>
+                  <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
+                    <QRCodeSVG value={window.location.href} size={92} fgColor="#3B0764" />
+                    <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">O seu código</p>
                     <p data-testid="public-coupon-code" className="font-coupon font-bold text-lg tracking-wider text-purple-700 break-all">{c.cupom}</p>

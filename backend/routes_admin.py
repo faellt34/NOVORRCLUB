@@ -101,6 +101,7 @@ async def create_item(kind: str, data: dict, user: dict = Depends(require_role("
     if kind == "campanhas":
         from realtime import emit
         emit("cupons_gerados", quantidade=1, cupom=doc.get("cupom"), campanha=label, parceiro=doc.get("parceiro"), por=user["nome"], ref=doc["id"])
+        emit("cupom_gerado", cupom=doc.get("cupom"), campanha=label, ref=doc["id"])
     return out_user(doc) if kind == "usuarios" else doc
 
 

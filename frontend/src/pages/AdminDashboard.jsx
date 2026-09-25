@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { api, apiError, eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
-import { RecentClicks } from "../components/RecentClicks";
+import { AbandonAnalysis } from "../components/AbandonAnalysis";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -46,7 +46,7 @@ export default function AdminDashboard() {
   const pushAudit = (action, detail, amount, extra = {}) =>
     setAudit((prev) => [{ id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, action, detail, amount, date: new Date().toISOString(), actor: "tempo real", enter: true, ...extra }, ...prev].slice(0, 50));
 
-  useRealtime((ev) => {
+  const { status: wsStatus, eventos } = useRealtime((ev) => {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
@@ -93,9 +93,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-        <p className="text-sm text-slate-500 mt-1">Métricas globais do RRclub — receita, comissões e entidades ativas</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
+          <p className="text-sm text-slate-500 mt-1">Métricas globais do RRclub — receita, comissões e entidades ativas</p>
+        </div>
+        <span data-testid="ws-indicator" data-status={wsStatus} className={`shrink-0 inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${wsStatus === "conectado" ? "text-emerald-700 bg-emerald-50 border-emerald-100" : wsStatus === "reconectando" ? "text-amber-700 bg-amber-50 border-amber-100" : "text-red-600 bg-red-50 border-red-100"}`}>
+          <span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : wsStatus === "reconectando" ? "bg-amber-500 live-dot" : "bg-red-500"}`} />
+          WS · {wsStatus === "conectado" ? "Conectado" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -189,7 +195,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <RecentClicks refreshKey={clicksKey} />
+      <AbandonAnalysis events={eventos} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div data-testid="admin-feedback-card" className="card-soft p-5">

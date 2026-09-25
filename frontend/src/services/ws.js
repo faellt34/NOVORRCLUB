@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getToken } from "../lib/api";
 
 export const wsUrl = () => `${window.location.origin.replace(/^http/, "ws")}/api/ws/dashboard?token=${encodeURIComponent(getToken() || "")}`;
@@ -6,22 +6,29 @@ export const wsUrl = () => `${window.location.origin.replace(/^http/, "ws")}/api
 export const useRealtime = (onEvent, { enabled = true } = {}) => {
   const cb = useRef(onEvent);
   cb.current = onEvent;
+  const [status, setStatus] = useState("reconectando");
+  const [eventos, setEventos] = useState([]);
   useEffect(() => {
     if (!enabled) return;
     let ws, ping, retry, closed = false, delay = 1000;
     const connect = () => {
+      setStatus("reconectando");
       ws = new WebSocket(wsUrl());
-      ws.onopen = () => { delay = 1000; ping = setInterval(() => ws.readyState === 1 && ws.send("ping"), 20000); cb.current?.({ tipo: "ligado" }); };
-      ws.onmessage = (e) => { try { const ev = JSON.parse(e.data); if (ev.tipo !== "pong") cb.current?.(ev); } catch {} };
+      ws.onopen = () => { delay = 1000; setStatus("conectado"); ping = setInterval(() => ws.readyState === 1 && ws.send("ping"), 20000); cb.current?.({ tipo: "ligado" }); };
+      ws.onmessage = (e) => { try { const ev = JSON.parse(e.data); if (ev.tipo === "pong" || ev.tipo === "ligado") return; setEventos((p) => [ev, ...p].slice(0, 200)); cb.current?.(ev); } catch {} };
       ws.onclose = (e) => {
         clearInterval(ping);
         cb.current?.({ tipo: "desligado" });
-        if (closed || e.code === 4401) return;
+        if (closed || e.code === 4401) { setStatus("offline"); return; }
+        setStatus("reconectando");
         retry = setTimeout(connect, delay); delay = Math.min(delay * 2, 15000);
       };
       ws.onerror = () => ws.close();
     };
     connect();
-    return () => { closed = true; clearInterval(ping); clearTimeout(retry); ws?.close(); };
+    const onOffline = () => setStatus("offline");
+    window.addEventListener("offline", onOffline);
+    return () => { closed = true; clearInterval(ping); clearTimeout(retry); ws?.close(); window.removeEventListener("offline", onOffline); };
   }, [enabled]);
+  return { status, eventos };
 };

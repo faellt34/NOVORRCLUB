@@ -98,7 +98,7 @@ h1, h2, h3, h4, .font-display {
 /* Realtime dashboard */
 @keyframes numFade { 0% { color: #a78bfa; transform: scale(1.02); } 100% { color: inherit; transform: scale(1); } }
 .stat-val { display: inline-block; transform-origin: left center; }
-.stat-val.updating { animation: numFade .9s ease-out; }
+.stat-val.updating { animation: numFade .7s ease-out; }
 .stat { transition: border-color .3s ease, box-shadow .3s ease; border: 1px solid transparent; }
 .stat.live-updated { border-color: #c4b5fd; box-shadow: 0 0 32px -10px #8b5cf6; }
 @keyframes materialize { 0% { opacity: 0; transform: translateY(-6px) scale(.98); filter: blur(3px); } 60% { filter: blur(0); } 100% { opacity: 1; transform: none; } }

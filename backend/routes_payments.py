@@ -118,6 +118,8 @@ async def fulfil(session_id: str, extra: dict):
         from realtime import emit
         emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
              influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
+        from routes_data import mark_converted
+        await mark_converted(rec["campaign_id"], rec)
         targets = await admin_ids()
         pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
         targets += [u["id"] for u in (pu, iu) if u]
