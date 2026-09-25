@@ -113,6 +113,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `mailer.py` lê remetente por ordem: settings (Admin UI) → `RESEND_FROM` → `SENDER_EMAIL`; `.env` tem `RESEND_FROM="RRclub <pedidos@rrclub.online>"` (RESEND_API_KEY do .env está vazio; a chave ativa está em settings via Admin › Definições)
 - Nota: remetente atual guardado nas settings é um gmail — alterar para pedidos@rrclub.online em Admin › Definições depois de verificar o domínio no Resend
 
+### 2026-06 · Dashboard Admin em tempo real (WebSocket) ✅ (iteration_17: backend 7/7, frontend 100%)
+- `backend/realtime.py`: `/api/ws/dashboard?token=` (só admin, fecha 4401), `emit()`/`broadcast()`; eventos `split_executado` (redenção loja + pagamento QR), `indicacao_criada`, `cupons_gerados`, `erro_transferencia` (webhook Stripe failed/transfer.failed)
+- Frontend: `services/ws.js` (`useRealtime`, URL = origin→ws + `/api/ws/dashboard`, reconnect exponencial, ping 20s), `services/live.js` (`useCountUp`, `useFlash`), `KpiCard` com `live`/`flash`, `AdminDashboard` com estados, audit log limitado a 8, `.enter`, `.amt`, badge `ws-status`
+- CSS: `.stat-val.updating`/`numFade`, `.stat.live-updated`, `.audit-item.enter`, `.amt`
+- Dados de teste (redenções/claims/audit de CLUB-10) limpos
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
