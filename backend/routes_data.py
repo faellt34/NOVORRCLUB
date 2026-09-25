@@ -117,10 +117,18 @@ async def admin_dashboard(user: dict = Depends(require_role("admin"))):
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
     camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(50))
+    claims = await db.coupon_claims.find({}, {"_id": 0, "origem": 1}).to_list(100000)
+    clicks = len(claims)
+    uses = t["count"]
+    origins = defaultdict(int)
+    for cl in claims:
+        origins[cl.get("origem") or "QR / direto"] += 1
     return {
-        "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"])},
+        "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"]), "count": trend(tc["count"], tp["count"])},
         "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo"}), "partners": await db.partners.count_documents({"status": "Ativo"}),
                    "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
+        "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
+                   "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
         "campaigns": camps[:8], "chart": daily_series(cur, 30),
     }
 

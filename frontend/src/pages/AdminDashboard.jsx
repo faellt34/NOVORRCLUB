@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb, Radio } from "lucide-react";
+import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb, Radio, Ticket, MousePointerClick, UserX, Percent, Receipt, Target } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -19,7 +19,8 @@ const AUDIT_LIMIT = 8;
 export default function AdminDashboard() {
   const { refreshUnread } = useApp();
   const [data, setData] = useState(null);
-  const [stats, setStats] = useState({ receita: 0, comissoes: 0, influencers: 0, parceiros: 0, campanhas: 0 });
+  const [stats, setStats] = useState({ receita: 0, comissoes: 0, influencers: 0, parceiros: 0, campanhas: 0, usos: 0, cliques: 0 });
+  const [origins, setOrigins] = useState([]);
   const [audit, setAudit] = useState([]);
   const [flash, triggerFlash] = useFlash();
   const [wsState, setWsState] = useState("a ligar");
@@ -36,7 +37,8 @@ export default function AdminDashboard() {
     try {
       const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin"), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
       setData(d.data); setAudit(a.data); setLeads(l.data); setResets(r.data); setFeedback(f.data);
-      setStats({ receita: d.data.totals.revenue, comissoes: d.data.totals.commission, influencers: d.data.counts.influencers, parceiros: d.data.counts.partners, campanhas: d.data.counts.campaigns });
+      setStats({ receita: d.data.totals.revenue, comissoes: d.data.totals.commission, influencers: d.data.counts.influencers, parceiros: d.data.counts.partners, campanhas: d.data.counts.campaigns, usos: d.data.funnel.uses, cliques: d.data.funnel.clicks });
+      setOrigins(d.data.funnel.origins);
     } catch (e) { toast.error(apiError(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -49,11 +51,14 @@ export default function AdminDashboard() {
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
       const v = Number(ev.valor_plataforma || 0);
-      setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10 }));
+      setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10, usos: s.usos + 1 }));
       pushAudit("REDENÇÃO", `${ev.cupom} · ${ev.parceiro}${ev.origem === "qr" ? " · pago por QR" : ""} · ${ev.influencer || ""}`, v);
-      triggerFlash("receita"); triggerFlash("comissoes");
+      triggerFlash("receita"); triggerFlash("comissoes"); triggerFlash("usos"); triggerFlash("conv"); triggerFlash("ticket");
       setClicksKey((k) => k + 1);
     } else if (ev.tipo === "clique_cupao") {
+      setStats((s) => ({ ...s, cliques: s.cliques + 1 }));
+      setOrigins((o) => { const i = o.findIndex((x) => x.origem === ev.origem); return i >= 0 ? o.map((x, j) => j === i ? { ...x, clicks: x.clicks + 1 } : x) : [...o, { origem: ev.origem, clicks: 1 }]; });
+      triggerFlash("cliques"); triggerFlash("naousou");
       setClicksKey((k) => k + 1);
     } else if (ev.tipo === "indicacao_criada") {
       setStats((s) => ({ ...s, parceiros: s.parceiros + 1 }));
@@ -100,6 +105,32 @@ export default function AdminDashboard() {
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
       </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <KpiCard id="cupons-usados" icon={Ticket} label="Pessoas que usaram cupom" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
+        <KpiCard id="cliques-total" icon={MousePointerClick} label="Cliques no cupom" live={stats.cliques} flash={flash.cliques} />
+        <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
+        <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
+        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
+      </div>
+
+      {origins.length > 0 && (
+        <div data-testid="admin-origins-card" className="card-soft p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Target className="w-5 h-5 text-purple-600" />
+            <h3 className="text-lg font-semibold text-slate-900">Origens dos cliques</h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{stats.cliques} cliques</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+            {origins.map((o) => (
+              <div key={o.origem} data-testid={`origin-${o.origem.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                <div className="flex items-center justify-between text-xs mb-1"><span className="font-semibold text-slate-700">{o.origem}</span><span className="text-slate-500">{o.clicks} · {stats.cliques ? Math.round(o.clicks / stats.cliques * 100) : 0}%</span></div>
+                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#B47BFF] to-[#6E2BFF] transition-all duration-700" style={{ width: `${stats.cliques ? o.clicks / stats.cliques * 100 : 0}%` }} /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {resets.length > 0 && (
         <div data-testid="admin-reset-requests-card" className="card-soft p-5 border-l-4 border-amber-400">
