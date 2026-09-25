@@ -1,0 +1,46 @@
+{
+  "summary": "Iter 21 — Reset-all + Test Mode (novo teste, limpar este teste, limpar TODOS os testes) + WS venda_validada verified end-to-end. Backend 9/9 PASS: /api/admin/reset-all (wrong confirm=400, non-admin=403, 'RESET-ALL' wipes operational data, keeps users/campaigns; dashboard totals.revenue=0, funnel.clicks=0; CLUB-10 preserved); /api/admin/test-run (non-admin=403; creates campaign+claim+redemption+payment_tx, cupom starts TEST-, split={restaurante:37.5,influencer:2.5,rrclub:5,stripe:5}; dashboard revenue becomes 50; WS emits teste_passo 1..6 with estado=ok, novo_clique, qr_baixado, venda_validada{valor:50}, split_executado; DELETE /api/admin/test-run/{run_id} removes 1 campaign+1 redemption, revenue back to 0, CLUB-10 stays, TEST- gone); /api/admin/test-run/clear-all (wrong confirm=400, non-admin=403, two runs then LIMPAR removes both). Frontend PASS: new-test-button opens test-run-dialog with test-influencer-select/test-partner-select/test-valor-input (default 50)/test-run-execute; test-step-1..6 progressively reach data-state='ok' within ~5s; test-split shows 37,50 € / 2,50 € / 5 € / 5 €; kpi-receita-sistema-value shows 50 € live and ws-indicator stays 'WS · Conectado' throughout; test-clear-run closes dialog and kpi-receita-sistema-value returns to 0 €. clear-all-tests-button (fixed bottom-right) opens clear-all-tests-dialog with confirm disabled until input=='LIMPAR'; confirm shows toast 'Testes apagados (N registos)' and dashboard reloads. Influencer live: influencer.exemplo dashboard open while admin runs test-run via API → toast 'Venda validada · TEST-xxxxxx · +2,50 € de comissão' shows and kpi-sua-comissao-value goes from 0 € to 3 € (Math.round(2.5)).",
+  "tests_executed": {
+    "backend": {
+      "reset_all_bad_confirm_400": "PASS",
+      "reset_all_non_admin_403": "PASS",
+      "reset_all_ok_dashboard_zero_club10_preserved": "PASS",
+      "test_run_non_admin_403": "PASS",
+      "test_run_creates_split_delete_and_revenue_flow": "PASS - split 37.5/2.5/5/5, delete removes 1+1",
+      "test_run_ws_events": "PASS - teste_passo passos 1..6 ok, novo_clique, qr_baixado, venda_validada{valor:50}, split_executado all received",
+      "clear_all_bad_confirm_400": "PASS",
+      "clear_all_non_admin_403": "PASS",
+      "clear_all_removes_multiple": "PASS - 2 runs cleared, revenue back to 0"
+    },
+    "frontend": {
+      "new_test_button_opens_dialog": "PASS",
+      "dialog_form_selects_default_valor_50": "PASS",
+      "test_run_execute_steps_1_to_6_ok": "PASS - within ~5s",
+      "test_split_values": "PASS - 37,50 € / 2,50 € / 5 € / 5 € visible",
+      "kpi_receita_live_50_and_ws_conectado": "PASS - kpi-receita-sistema-value shows 50 € live, ws-indicator stays conectado",
+      "test_clear_run_resets_to_0": "PASS - kpi-receita-sistema-value back to 0 €",
+      "clear_all_tests_button_and_dialog": "PASS - confirm disabled until LIMPAR, then toast+reload",
+      "influencer_live_commission_toast": "PASS - toast 'Venda validada · TEST-004434 · +2,50 € de comissão' + kpi-sua-comissao-value 0 → 3 €"
+    }
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter21_test_mode.py", "/app/test_reports/pytest/iter21.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx split_executado handler (line 61-66) adds ev.valor_plataforma (=commission=2.5) to stats.receita. That means the 'live' Receita do Sistema after a €50 sale only bumps by €3 not €50 (matches server-side revenue on next reload, but UX-wise inconsistent with backend semantics where revenue == amount, not commission). The observed 50 € live in this iteration only worked because dashboards.totals.revenue was refreshed via teste_limpo/load between events; a run that finishes before load() would show +3 €, not +50 €. Consider using ev.valor_total for receita and keep ev.valor_plataforma for comissoes.",
+    "routes_test.py _delete_test (line 88-92) is dead code — delete_test_run and clear_all_tests don't call it. Safe to remove to avoid confusion.",
+    "routes_test.py test_run has hard-coded rate=0.05 for commission while the real /api/redeem/qr uses partner.rate. In test mode the influencer sees +2.5 € commission but a production redemption at same partner might use a different rate. Consider looking up partner rate for consistency.",
+    "TestRunDialog.jsx step-progress transitions off the 'run' state may briefly show wait for step 3 & 4 because backend emits {estado:'run'} then {estado:'ok'} back-to-back; UI copes fine but flicker possible on slow WS.",
+    "routes_test.py clear-all audit_log deletion regex '· TESTE ·' assumes exact spacing; if audit format ever changes those rows will leak. Prefer marking test audit rows with a boolean flag.",
+    "InfluencerDashboard toast uses eur(ev.valor_plataforma) which formats 2.5 as '2,50 €' — good; but the review request expected the KPI to increase 'by 2,50 € rounded' — currently rounded to 3 € due to Math.round on Receita/Comissão KpiCards. Consistent with rest of app, but flag if precise decimals expected."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter21_test_mode.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (8/8 assertions)"},
+  "test_credentials": "faellt@gmail.com / Robson2026! (admin); influencer.exemplo@club.pt / influencer123 (influencer); parceiro.exemplo@club.pt / parceiro123 (partner)",
+  "seed_data_creation": "During tests: multiple TEST- campaigns/claims/redemptions were created and then removed. Final cleanup: POST /api/admin/test-run/clear-all {confirm:'LIMPAR'} → DB clean (0 test rows, only CLUB-10 campaign, dashboards.revenue=0). Verified via /api/dashboard/admin.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "WS event key is 'tipo' (not 'type'). New alias event 'venda_validada' emitted alongside 'venda' and 'split_executado' in test-run and should also be emitted by production redemption if code paths align (currently only routes_test.py emits it explicitly — verify routes_data.py / routes_payments.py also emit venda_validada if that's the intended alias). test-run POST is synchronous (~4s wall clock due to internal await asyncio.sleep(0.6..0.9) per step); the endpoint returns only after step 6. WS 'teste_passo' events are broadcast to all admin dashboards concurrently. AdminDashboard.load() is called on teste_limpo which is emitted by DELETE /api/admin/test-run/{id} and POST /api/admin/test-run/clear-all. Frontend Receita counter uses ev.valor_plataforma (commission), not ev.valor_total. Backend expects body.confirm strings exactly 'RESET-ALL' / 'LIMPAR'.",
+  "rca of the issue": "No production bugs. Notable: (1) Frontend AdminDashboard live-increments Receita by commission (2.5 €) instead of total (50 €); UI eventually correct via load() on teste_limpo, but WS-only increment is understated by 20x. (2) Dead code _delete_test in routes_test.py. (3) Rate hardcoded at 5% in test mode, may diverge from partner.rate in production. Flagged for main agent."
+}
