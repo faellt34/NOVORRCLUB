@@ -1,0 +1,45 @@
+{
+  "summary": "Iter 20 — Abandon Analysis (funnel + realtime WS) fully verified end-to-end. Backend 6/6 PASS: GET /api/public/coupon/CLUB-10?src=instagram returns claim_id, POST qr-downloaded ok, 404 on bad claim_id, admin GET /api/admin/cliques/analysis?period=hoje|7d|30d returns {total,sem_download,qr_sem_scan,convertidos,lista} with counts consistent (total == sem+qr+conv), full funnel transitions Sem download -> QR sem scan -> Converteu, 403 for non-admin. Backend WS emits novo_clique (dados.id==claim_id), qr_baixado (claim_id), venda (valor, claim_id) all received <2s (event key is 'tipo'). Frontend 100% PASS: ws-indicator text 'WS · Conectado' + data-status='conectado'; abandon-analysis funnel KPIs render and increment live on new click (+1 total, +1 sem_download), on qr-download (qr_sem_scan +1, sem_download -1), on redemption (conv +1); row appears with 'enter' class; row click opens click-timeline-dialog with timeline-step-0..2; funnel-kpi-convertidos filters rows to Converteu only and abandon-clear-filter appears; CSV downloads named cliques-7d.csv and cliques-7d-filtrado.csv when filtered; PublicCoupon /c/CLUB-10 has public-coupon-download-qr, click triggers a PNG download (qr-CLUB-10.png) and POSTs /api/public/coupon/CLUB-10/qr-downloaded.",
+  "tests_executed": {
+    "backend": {
+      "test_public_coupon_returns_claim_id": "PASS",
+      "test_qr_downloaded_ok_and_bad_claim_404": "PASS",
+      "test_analysis_requires_admin": "PASS - 403 for partner",
+      "test_analysis_periods_and_counts_consistency": "PASS - hoje/7d/30d counts consistent",
+      "test_full_funnel_qr_sem_scan_then_converteu": "PASS - transitions Sem download -> QR sem scan -> Converteu, valor=45",
+      "test_ws_events_novo_clique_qr_baixado_venda": "PASS - all 3 events received within ~2s, key is 'tipo'"
+    },
+    "frontend": {
+      "ws_indicator_conectado": "PASS - data-status=conectado, text 'WS · Conectado'",
+      "funnel_kpis_render": "PASS - all 4 KPIs render with values",
+      "period_switch": "PASS - hoje/7d/30d switchable",
+      "live_novo_clique": "PASS - after 7d 6->8 across 2 clicks; new abandon-row-<id> has class 'enter' and funnel-kpi-total/sem_download incremented",
+      "live_qr_baixado": "PASS - abandon-qr shows 'Sim', state -> 'QR sem scan', funnel-kpi-qr_sem_scan +1",
+      "live_venda": "PASS - state -> 'Converteu' with valor 20 €, funnel-kpi-convertidos +1",
+      "row_click_timeline_dialog": "PASS - click-timeline-dialog opens with timeline-step-0..2 visible",
+      "filter_convertidos_and_clear": "PASS - only Converteu rows shown, abandon-clear-filter visible",
+      "csv_export": "PASS - cliques-7d.csv unfiltered, cliques-7d-filtrado.csv filtered",
+      "public_coupon_download_qr": "PASS - PNG downloaded (qr-CLUB-10.png) AND POST /api/public/coupon/CLUB-10/qr-downloaded observed in network"
+    }
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter20_abandon_analysis.py", "/app/test_reports/pytest/iter20.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routes_data.py mark_converted (line 335-341) selects most-recent unconverted claim within last 7 days sorted by (qr_downloaded desc, date desc). If a partner redeems a code that was clicked >7 days ago, no claim gets flagged converted but the 'venda' WS event still fires with claim_id=None. Consider widening the lookback or falling back to campaign-only match.",
+    "backend/routes_data.py public_qr_downloaded (line 322-332) does NOT require authentication and accepts any body.claim_id — an attacker can spam qr_downloaded=true for any claim they can enumerate (ids are cl-<10hex>). Consider rate-limiting or requiring the ip+ua key of the claim.",
+    "backend/routes_data.py public_coupon (line 300-309) still stores full IP in 'key' (used only server-side) but exposes 'cliente': 'Cliente #<last-octet-or-4>' — mild PII leak for /24 blocks; acceptable but flag it.",
+    "backend/routes_data.py _claim_state considers a claim 'Abandonou' after 48h regardless of qr_downloaded — a click with QR downloaded 60h ago would flip from 'QR sem scan' to 'Abandonou'. Intentional? UI badges the same as no-download.",
+    "backend/routes_data.py clicks_analysis has to_list(500) — hard cap may silently drop older rows for 30d period once traffic grows.",
+    "backend/realtime.py emit() swallows RuntimeError silently when no running loop — if server ever calls emit from a sync context (e.g., background task) events are dropped without logging. Add a logger.warning."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter20_abandon_analysis.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (11/11 assertions)"},
+  "test_credentials": "faellt@gmail.com / Robson2026! (admin); parceiro.exemplo@club.pt / parceiro123 (partner)",
+  "seed_data_creation": "Backend test created ~4 fresh CLUB-10 coupon_claims (unique UAs) and 2 redemptions (idempotency=iter20-<hex>, iter20ws-<hex>, amounts 45 and 30). Frontend test created 2 more claims and 1 redemption (idempotency=iter20ui-<hex>, amount 20). Explicit IDs captured in stdout: claim_id=cl-3c23a4a005 redemption_idem=iter20ui-83392c60ec (UI last run), plus SEED_CREATED / WS_SEED lines in pytest -s output.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "WS event key is 'tipo' (NOT 'type'/'event'). Realtime.py emit() serializes as {tipo, ts, ...payload}. novo_clique carries {dados:{id,coupon,campaign,influencer,partner,origem,cliente,date,qr_downloaded,converted,valor}}; qr_baixado carries {claim_id,cupom,at}; venda carries {valor,comissao,cupom,claim_id,at}. To force new coupon_claims past the 12h ip+ua dedupe use requests.get / page.context.request.get with a UNIQUE User-Agent header. The admin funnel KPI values use useCountUp animation — wait ~2s after event for Math.round(v) to settle. AbandonAnalysis default period is '7d'; on 'hoje' rows may be 0 if no clicks today. Redemption body uses 'code' + 'idempotency_key' (NOT 'cupom'). websockets.sync.client works fine against wss:// preview URL with ?token= query param.",
+  "rca of the issue": "No production bugs found. Notable code smells (unauthenticated qr-downloaded endpoint; 48h 'Abandonou' overriding QR downloaded state; hard 500-row analysis cap) flagged for main agent review."
+}

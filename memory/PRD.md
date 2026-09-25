@@ -128,6 +128,14 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ### 2026-06 · KPIs de funil no Admin ✅ (iteration_19)
 - `/api/dashboard/admin` → `funnel` {clicks, uses, not_used, conversion, ticket, origins[]}; 2.ª linha de KPIs: Pessoas que usaram cupom · Cliques · Clicaram e não usaram · Taxa de Conversão · Ticket Médio; card "Origens dos cliques" com barras; tudo atualiza ao vivo
 
+### 2026-06 · Análise de Abandono em tempo real ✅ (iteration_20: backend 6/6, frontend 100%)
+- `coupon_claims` ganha `qr_downloaded/_at`, `converted/_at`, `valor`, `cliente`, `created_at`; `GET /api/public/coupon/{code}` devolve `claim_id`; `POST /api/public/coupon/{code}/qr-downloaded`; redenção marca o clique mais recente da campanha como convertido (`mark_converted`)
+- `GET /api/admin/cliques/analysis?period=hoje|7d|30d` → {total, sem_download, qr_sem_scan, convertidos, lista}; estados: Converteu / QR sem scan / Sem download / Abandonou (+48h)
+- WS: novos eventos `novo_clique{dados}`, `qr_baixado`, `venda`, `cupom_gerado` (mantidos os antigos); `useRealtime` devolve `{status, eventos}`; badge `ws-indicator` WS · Conectado/Reconectando/Offline
+- `AbandonAnalysis.jsx` (substitui RecentClicks): 4 KPIs clicáveis que filtram, tabela "Cliques Individuais" com timeline por linha, Export CSV filtrado, animações 700ms + flash violeta
+- Botão "Guardar QR" na página pública `/c/CODE` (regista download)
+- **Todos os dados de teste apagados** (redemptions, claims, audit, notificações, leads, feedback, mensagens, payouts, transações QR) — contas/campanhas/e-books mantidos
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
