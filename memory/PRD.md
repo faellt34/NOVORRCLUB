@@ -119,6 +119,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - CSS: `.stat-val.updating`/`numFade`, `.stat.live-updated`, `.audit-item.enter`, `.amt`
 - Dados de teste (redenções/claims/audit de CLUB-10) limpos
 
+### 2026-06 · Tempo real influencer/parceiro + Cliques Recentes ✅ (iteration_18: backend 10/10, frontend 100%)
+- `realtime.py` com filtro por papel (admin tudo; influencer/parceiro só os seus `influencer_id`/`partner_id`); novo evento `clique_cupao` (com `origem`); `split_executado` inclui `record`
+- Influencer: KPIs ao vivo (usos, clientes, receita, comissão) + toast de venda; Parceiro: KPIs ao vivo + nova redenção entra no histórico com `.enter`; badges "ao vivo"
+- Admin › "Cliques Recentes" (`RecentClicks.jsx`, `GET /api/admin/clicks?period=today|7|30`, máx 100): Data/hora · Origem (`?src=`/UA/referer → Instagram/WhatsApp/Facebook/TikTok/QR direto) · Influencer · Campanha · Status (Converteu = redenção da campanha até 7 dias após o clique) + Export CSV; atualiza ao vivo
+- Dados de teste limpos
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

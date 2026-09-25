@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 18 - Role-scoped WebSocket + Admin 'Cliques Recentes' end-to-end (backend + frontend). Backend: 10/10 pytest PASS. Frontend: admin RecentClicks card fully functional (period filters Hoje/7/30, table rows with click-status Converteu badges, CSV export as cliques-7.csv); influencer dashboard live-badge + KPI count-ups on both clique_cupao and split_executado; partner dashboard live-badge + KPI count-ups + new redemption row enters first with .enter class.",
+  "tests_executed": {
+    "backend": {
+      "test_ws_influencer_ligado_role": "PASS - influencer JWT accepted, first frame tipo=ligado role=influencer",
+      "test_ws_partner_ligado_role": "PASS - partner JWT accepted, first frame tipo=ligado role=partner",
+      "test_clique_cupao_delivered_to_all_scoped_roles": "PASS - GET /api/public/coupon/CLUB-10?src=tiktok emits clique_cupao (origem='Tiktok') to admin AND influencer (matching influencer_id) AND partner (matching partner_id) WS sessions concurrently",
+      "test_clique_origem_whatsapp_capitalized": "PASS - src=whatsapp -> origem='Whatsapp' (capitalized)",
+      "test_split_executado_delivered_to_influencer_and_admin": "PASS - partner POST /api/redemptions CLUB-10 25€ emits split_executado carrying full record to both admin and influencer sockets",
+      "test_admin_clicks_today": "PASS - GET /api/admin/clicks?period=today items[] each has {id,date,origem,influencer,campanha,cupom,status}, status in {'Converteu','Só clicou'}, length <= 100",
+      "test_admin_clicks_7_and_30": "PASS - period=7 and 30 return 200 with items[]",
+      "test_admin_clicks_forbidden_for_non_admin": "PASS - partner and influencer tokens both receive 403",
+      "test_click_then_redeem_becomes_converteu": "PASS - fresh Tiktok click on CLUB-10 followed by partner redemption -> click row shows status 'Converteu'",
+      "test_report_created_redemptions": "PASS - reports redemption ids created during backend tests"
+    },
+    "frontend": {
+      "admin_recent_clicks_card": "PASS - [data-testid=recent-clicks-card] with clicks-summary '4 cliques · 4 converteram', clicks-period-today/7/30 buttons switch data, clicks-table rows have click-status-<id> badge showing 'Converteu' (green)",
+      "admin_clicks_export_csv": "PASS - clicks-export-csv triggers download with suggested_filename='cliques-7.csv' when period=7",
+      "influencer_live_badge": "PASS - [data-testid=influencer-live-badge] 'ao vivo' visible within ~1s after login",
+      "influencer_clientes_on_click": "PASS - GET /api/public/coupon/CLUB-10?src=whatsapp (via fetch in page) -> kpi-clientes-impactados-value 4 -> 5 within 4s",
+      "influencer_kpi_on_redemption": "PASS - partner POST /api/redemptions amount=20 -> kpi-cupons-utilizados-value 2->3, kpi-sua-comissao-value 7 € -> 9 € (+2 €), kpi-receita-gerada-value 67 € -> 87 € (+20 €)",
+      "influencer_toast_venda_validada": "PASS - Sonner toast 'Venda validada · CLUB-10 · +2 € de comissão' visible",
+      "partner_live_badge": "PASS - [data-testid=partner-live-badge] 'ao vivo' visible",
+      "partner_kpi_on_own_redemption": "PASS - fresh partner-token POST /api/redemptions amount=30 -> kpi-redencoes-value 3->4, kpi-receita-atribuida-value 87 € -> 117 € (+30 €)",
+      "partner_new_redemption_row": "PASS - redemption-<newId> row is first child inside redemption-history-card with class 'enter' (audit-item ... enter)"
+    }
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter18_role_scoped_ws_clicks.py", "/app/test_reports/pytest/iter18.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "backend/routes_data.py public_coupon: dedup key is coupon:ip:ua truncated to 120 chars, valid 12h. This is per-user-agent; anyone using the same browser will only ever generate one click per 12h across campaigns of the same code — reasonable, but note that two influencers cannot share the same visitor without one of them losing the attribution.",
+    "backend/routes_data.py _click_origin: returns request.query_params 'src' verbatim after .capitalize(); a malicious src like '<script>' would be stored as '<script>' in origem. Frontend renders it as text via React (safe), but CSV export writes it raw with ';' delimiter — a src containing ';' could corrupt CSV rows. Consider whitelisting src to a set of known origins or sanitising.",
+    "backend/routes_data.py admin_clicks 'converted' detection: uses cl['date'] <= d <= window_end where window_end is 7 days after click. Since redemptions are queried with date>=start (same window as clicks), a click on day-30 with redemption on day-3 would still be checked but only within its 7-day window — behaviour is correct. However, redemptions can also close a click OLDER than the requested period (e.g., a click yesterday can be marked Converteu by a redemption within window). Fine as designed.",
+    "backend/realtime.py _visible: partner filter uses ev.get('partner_id') == user['partner_id'] and influencer filter uses ev.get('influencer_id'). Both clique_cupao and split_executado emit both IDs, so scoping is correct. Admin sees everything. Non-admin/non-matching WS clients receive nothing (silent) — verified via tests.",
+    "frontend/src/pages/AdminDashboard.jsx line 52: split_executado still increments comissoes by v*0.10 while receita is +v (v is the platform commission valor_plataforma). This double-count discrepancy from iter 17 remains. Not exercised by this iteration's tests, still worth fixing (should be +v to match receita)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter18_role_scoped_ws_clicks.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (all assertions PASS on first try)"},
+  "test_credentials": "faellt@gmail.com / Robson2026! (admin); parceiro.exemplo@club.pt / parceiro123; influencer.exemplo@club.pt / influencer123",
+  "seed_data_creation": "Created 4 CLUB-10 redemptions during testing (not deletable via API). IDs captured: r-2b9058f115 (backend 25€ split_executado test), plus test_click_then_redeem 42€ redemption (id in backend log), plus UI runs r-<partner-influencer-20€>, r-662e97187e (partner UI 30€). Also created ~3 fresh coupon_claims with unique UAs across src=tiktok/whatsapp — persisted in db.coupon_claims.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter18 verifies WS role scoping and admin clicks endpoint. Public coupon claims dedupe on coupon:ip:ua for 12h — vary the User-Agent header (or hit from within the browser fetch which uses a distinct UA) to force new clicks. Browsers do not allow fetch to override the User-Agent, so from Playwright use `python requests` with a custom UA (backend tests do that). REACT_APP_BACKEND_URL is only set for the Node/browser environment; pytest reads it via os.environ.get with the preview URL fallback.",
+  "rca of the issue": "No production bug uncovered."
+}
