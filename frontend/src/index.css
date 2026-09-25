@@ -95,6 +95,18 @@ h1, h2, h3, h4, .font-display {
     animation: fade-up 0.4s ease both;
 }
 
+/* Realtime dashboard */
+@keyframes numFade { 0% { color: #a78bfa; transform: scale(1.02); } 100% { color: inherit; transform: scale(1); } }
+.stat-val { display: inline-block; transform-origin: left center; }
+.stat-val.updating { animation: numFade .9s ease-out; }
+.stat { transition: border-color .3s ease, box-shadow .3s ease; border: 1px solid transparent; }
+.stat.live-updated { border-color: #c4b5fd; box-shadow: 0 0 32px -10px #8b5cf6; }
+@keyframes materialize { 0% { opacity: 0; transform: translateY(-6px) scale(.98); filter: blur(3px); } 60% { filter: blur(0); } 100% { opacity: 1; transform: none; } }
+.audit-item.enter { animation: materialize .55s cubic-bezier(.2,.8,.2,1) both; }
+.amt { color: #059669; font-variant-numeric: tabular-nums; text-align: right; font-weight: 700; white-space: nowrap; }
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.live-dot { animation: livePulse 1.6s ease-in-out infinite; }
+
 @layer base {
     [data-debug-wrapper="true"] {
         display: contents !important;

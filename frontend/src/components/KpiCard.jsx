@@ -1,9 +1,13 @@
 import { TrendingUp, TrendingDown } from "lucide-react";
+import { useCountUp } from "../services/live";
 
-export const KpiCard = ({ id, icon: Icon, label, value, trend, period = "vs período anterior" }) => {
+export const KpiCard = ({ id, icon: Icon, label, value, trend, period = "vs período anterior", live, format, flash }) => {
   const negative = trend?.startsWith("-");
+  const isLive = typeof live === "number";
+  const [animated, updating] = useCountUp(isLive ? live : 0);
+  const shown = isLive ? (format ? format(animated) : Math.round(animated)) : value;
   return (
-    <div data-testid={`kpi-${id}`} className="card-soft p-5 fade-up">
+    <div data-testid={`kpi-${id}`} className={`card-soft p-5 fade-up stat ${flash ? "live-updated" : ""}`} data-live={isLive ? "true" : undefined}>
       <div className="flex items-start justify-between mb-4">
         <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
           <Icon className="w-5 h-5" />
@@ -15,7 +19,7 @@ export const KpiCard = ({ id, icon: Icon, label, value, trend, period = "vs per�
           </span>
         )}
       </div>
-      <p data-testid={`kpi-${id}-value`} className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">{value}</p>
+      <p data-testid={`kpi-${id}-value`} className={`stat-val font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 ${updating ? "updating" : ""}`}>{shown}</p>
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mt-1">{label}</p>
       {trend && <p className="text-[11px] text-slate-400 mt-0.5">{period}</p>}
     </div>

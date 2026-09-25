@@ -98,6 +98,9 @@ async def create_item(kind: str, data: dict, user: dict = Depends(require_role("
     await c.insert_one(dict(doc))
     label = doc.get("nome") or doc.get("titulo") or doc["id"]
     await audit("CRIAÇÃO", f"{kind} · {label}" + (f" · comissão {doc['comissao']:g}%" if kind == "campanhas" else ""), user, doc["id"])
+    if kind == "campanhas":
+        from realtime import emit
+        emit("cupons_gerados", quantidade=1, cupom=doc.get("cupom"), campanha=label, parceiro=doc.get("parceiro"), por=user["nome"], ref=doc["id"])
     return out_user(doc) if kind == "usuarios" else doc
 
 

@@ -25,6 +25,8 @@ async def create_lead(body: LeadIn, user: dict = Depends(get_current_user)):
             "referrer_id": user["id"], "referrer": user["nome"], "decision_note": None, "decided_at": None, "partner_id": None}
     await db.leads.insert_one(dict(lead))
     await audit("INDICAÇÃO", f"{body.nome} · {body.categoria} · {body.cidade} · por {user['nome']}", user, lead["id"])
+    from realtime import emit
+    emit("indicacao_criada", nome=body.nome, categoria=body.categoria, cidade=body.cidade, por=user["nome"], ref=lead["id"])
     await notify(await admin_ids(), "lead", "Nova indicação de parceiro", f"{user['nome']} indicou {body.nome} ({body.categoria}, {body.cidade})", "/admin")
     return lead
 

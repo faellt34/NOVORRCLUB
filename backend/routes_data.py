@@ -176,6 +176,8 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
         return {"record": existing, "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
+    from realtime import emit
+    emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja")
     inf_user = await db.users.find_one({"influencer_id": c.get("influencer_id")}, {"id": 1}) if inf else None
     await notify(([inf_user["id"]] if inf_user else []) + await admin_ids(), "redencao", "Nova redenção",
                  f"{code} validado em {rec['partner']} · {rec['amount']:.2f}€ · comissão {rec['commission']:.2f}€", "/influencer")

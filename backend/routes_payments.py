@@ -115,6 +115,8 @@ async def fulfil(session_id: str, extra: dict):
         except Exception:
             return
         await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
+        from realtime import emit
+        emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr")
         targets = await admin_ids()
         pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
         targets += [u["id"] for u in (pu, iu) if u]
@@ -173,6 +175,12 @@ async def stripe_webhook(request: Request):
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
         await db.payment_transactions.update_one({"session_id": obj["id"]}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        if st == "failed":
+            from realtime import emit
+            emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
+    elif t in ("transfer.failed", "payout.failed", "transfer.reversed"):
+        from realtime import emit
+        emit("erro_transferencia", detalhe=f"Stripe {t} · {obj.get('id', '')}", ref=obj.get("id"))
     elif t == "customer.subscription.deleted":
         await db.subscriptions.update_one({"stripe_subscription_id": obj["id"]}, {"$set": {"status": "canceled", "canceled_at": now_iso()}})
     return {"status": "ok"}
