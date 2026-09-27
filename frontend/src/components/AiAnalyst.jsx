@@ -12,6 +12,7 @@ export const AiAnalyst = ({ refreshKey }) => {
   const [busy, setBusy] = useState(false);
   const [session, setSession] = useState(() => sessionStorage.getItem("rr_ai_session") || null);
   const box = useRef(null);
+  const abortRef = useRef(null);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
 
   const ask = async (q) => {
@@ -20,7 +21,8 @@ export const AiAnalyst = ({ refreshKey }) => {
     setInput(""); setBusy(true);
     setMsgs((m) => [...m, { role: "user", content: question }, { role: "assistant", content: "" }]);
     try {
-      const res = await fetch(`${API}/api/admin/ai/ask`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }, body: JSON.stringify({ session_id: session, message: question }) });
+      abortRef.current = new AbortController();
+      const res = await fetch(`${API}/api/admin/ai/ask`, { method: "POST", signal: abortRef.current.signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }, body: JSON.stringify({ session_id: session, message: question }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || `Erro ${res.status}`);
       const reader = res.body.getReader(), dec = new TextDecoder();
       let buf = "";
@@ -35,14 +37,14 @@ export const AiAnalyst = ({ refreshKey }) => {
           if (data == null) continue;
           if (ev === "meta") { const s = JSON.parse(data).session_id; setSession(s); sessionStorage.setItem("rr_ai_session", s); }
           else if (ev === "error") toast.error(`IA: ${JSON.parse(data)}`);
-          else if (ev === "message") { const tok = JSON.parse(data); setMsgs((m) => { const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], content: c[c.length - 1].content + tok }; return c; }); }
+          else if (ev === "message") { const tok = JSON.parse(data); setMsgs((m) => { if (!m.length || m[m.length - 1].role !== "assistant") return m; const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], content: c[c.length - 1].content + tok }; return c; }); }
         }
       }
-    } catch (e) { toast.error(e.message); setMsgs((m) => m.slice(0, -1)); }
-    finally { setBusy(false); }
+    } catch (e) { if (e.name !== "AbortError") { toast.error(e.message); setMsgs((m) => (m.length && m[m.length - 1].role === "assistant" && !m[m.length - 1].content ? m.slice(0, -1) : m)); } }
+    finally { setBusy(false); abortRef.current = null; }
   };
 
-  const reset = () => { setMsgs([]); setSession(null); sessionStorage.removeItem("rr_ai_session"); };
+  const reset = () => { abortRef.current?.abort(); setMsgs([]); setSession(null); sessionStorage.removeItem("rr_ai_session"); };
 
   return (
     <div data-testid="ai-analyst-card" className="card-soft p-5 flex flex-col">

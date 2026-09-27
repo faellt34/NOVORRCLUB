@@ -1,0 +1,33 @@
+{
+  "summary": "Retest of iteration_22 AiAnalyst ai-reset crash. The fix described in the review request (guarded token append, ai-reset disabled while busy, safer catch) is NOT present in /app/frontend/src/components/AiAnalyst.jsx. Bug is still fully reproducible: rapid ai-reset click ~1s after sending a question crashes with TypeError and shows the full-page red 'Uncaught runtime errors' overlay, blocking the entire admin UI. Test-1 (reset AFTER stream fully settled) worked cleanly; but Test-2 (reset while stream still arriving) is broken exactly like before.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AiAnalyst",
+        "issue": "Claimed fix NOT applied. Line 38 still does `c[c.length-1].content + tok` with no guard. Line 45 reset() still doesn't check busy nor abort the fetch reader. Line 52 ai-reset button has no `disabled={busy}` (verified in DOM: disabled attribute is null while streaming). Rapid reset during stream => PageError 'Cannot read properties of undefined (reading content)' at AiAnalyst -> React uncaught runtime error overlay covers whole page.",
+        "selector": "[data-testid=\"ai-reset\"] / [data-testid=\"ai-msg-assistant\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_22.json"],
+  "action_items": [
+    "APPLY the fix that was described but never committed. Concretely in /app/frontend/src/components/AiAnalyst.jsx: (1) guard token setter: `setMsgs((m)=>{ if(!m.length||m[m.length-1].role!=='assistant') return m; const c=[...m]; c[c.length-1]={...c[c.length-1], content:c[c.length-1].content+tok}; return c; });` (2) add AbortController: `const abortRef = useRef(null);` create new in ask(), pass signal to fetch, call abortRef.current?.abort() in reset(); wrap reader.read() try/catch AbortError. (3) add `disabled={busy}` to the ai-reset button on line 52 (or hide it while busy). (4) catch block: keep m.slice(0,-1) but only when last is empty assistant, e.g. `setMsgs((m)=> m.length && m[m.length-1].role==='assistant' && !m[m.length-1].content ? m.slice(0,-1) : m);`"
+  ],
+  "critical_code_review_comments": [
+    "The review_request claims 'token append now guarded' and 'ai-reset disabled while busy' but neither change exists in the file. Please recheck that the edit was saved before requesting retest.",
+    "No AbortController on the SSE fetch — stray tokens after reset will always be a race unless the reader is cancelled.",
+    "Even after guarding, reset() should still abort the fetch so a new ask() doesn't have to fight the old stream for the same session_id (which was just cleared)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested)", "frontend": "50% (reset-after-done ok, reset-mid-stream still crashes)"},
+  "test_credentials": "admin faellt@gmail.com / Robson2026! (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Repro: login as admin -> /admin -> click first ai-suggestion -> wait ~1s while tokens still streaming -> click ai-reset -> pageerror 'Cannot read properties of undefined (reading content)' and red overlay. After the overlay appears, [data-testid=\"ai-input\"] and [data-testid=\"ai-suggestion\"] are no longer reachable (0 elements). If reset is clicked AFTER the assistant message is fully rendered (stable ~1.5s), no crash occurs. So the two required fixes are BOTH still needed: guard on setMsgs AND either disable ai-reset while busy or abort the reader in reset().",
+  "rca of the issue": "Unchanged from iteration_22. AiAnalyst.jsx line 38 mutates c[c.length-1].content assuming last message exists. reset() (line 45) clears msgs to [] but leaves the SSE fetch reader running. When the next token frame arrives, c=[] so c[-1] is undefined -> TypeError. The claimed guard/disabled/abort logic is absent from the committed file."
+}
