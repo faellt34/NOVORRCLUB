@@ -1,0 +1,20 @@
+{
+  "summary": "Iter 25 — Influencer AI captions (Claude Sonnet 4.6) tested E2E. Backend 4/4 pytest passed: POST /api/influencer/ai/captions returns 200 with cupom=CLUB-10, link containing /c/CLUB-10, and captions.pt/en/es each with >=1 string containing 'CLUB-10' (tom=divertido, ~15s); invalid campaign_id -> 404; partner token -> 403; admin token -> 403. Frontend E2E: login influencer.exemplo -> InfluencerDashboard -> coupon-ai-captions opens caption-dialog -> caption-tone-divertido + caption-generate -> caption-pt-0 appears within ~15s -> caption-lang-en switches to caption-en-0 -> caption-copy-en-0 triggers toast 'Legenda copiada — cole no seu story' -> Escape closes dialog. No console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter10_captions.py", "/app/test_reports/pytest/iter10.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_ai.ai_captions: FRONTEND_URL env-driven; if unset link becomes '/c/CUPOM' (no host). Currently set so tests pass; consider fallback to request.base_url.",
+    "JSON parse fallback returns {'pt':[raw],'en':[],'es':[]} on malformed LLM output — UI would show 'Sem legendas neste idioma' for en/es. Acceptable given strict system prompt, could retry once with stricter reminder.",
+    "No rate limiting on /api/influencer/ai/captions; a spammy influencer could burn LLM tokens. Consider per-user cooldown."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter10_captions.py", "/app/test_reports/iteration_25.json"],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% of scripted flows"},
+  "test_credentials": "influencer.exemplo@club.pt / influencer123; parceiro.exemplo@club.pt / parceiro123; admin faellt@gmail.com / Robson2026!",
+  "seed_data_creation": "None — used existing CLUB-10 campaign seeded for influencer.exemplo.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Captions endpoint stable at POST /api/influencer/ai/captions; role enforcement via require_role('influencer'). Frontend flow in InfluencerDashboard featured card -> CaptionDialog; all data-testid present (caption-dialog, caption-tone-{elegante|divertido|urgente}, caption-generate, caption-lang-{pt|en|es}, caption-{lang}-{i}, caption-copy-{lang}-{i}).",
+  "rca of the issue": "N/A — no defects found."
+}

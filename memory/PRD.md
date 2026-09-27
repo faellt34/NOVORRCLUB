@@ -146,6 +146,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `AiAnalyst.jsx` no Admin: sugestões, chat com streaming, multi-turn por sessão, reset
 - Botão "🧨 Apagar TODOS os resultados" (RESET-ALL) no header do Admin → zera qualquer ambiente (útil para produção rrclub.online)
 
+### 2026-06 · Legendas IA para influencer ✅ (iteration_25)
+- `POST /api/influencer/ai/captions {campaign_id, tom}` → 2 legendas × PT/EN/ES via Claude Sonnet 4.6 (JSON estrito); `CaptionDialog.jsx` no cartão em destaque do influencer (tons elegante/divertido/urgente, tabs de idioma, copiar com link)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
