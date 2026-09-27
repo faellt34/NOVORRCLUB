@@ -8,6 +8,7 @@ import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { AbandonAnalysis } from "../components/AbandonAnalysis";
 import { TestRunDialog } from "../components/TestRunDialog";
+import { AiAnalyst } from "../components/AiAnalyst";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -29,6 +30,12 @@ export default function AdminDashboard() {
   const [testOpen, setTestOpen] = useState(false);
   const [clearAllOpen, setClearAllOpen] = useState(false);
   const [clearWord, setClearWord] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetWord, setResetWord] = useState("");
+  const resetAll = async () => {
+    try { const { data: r } = await api.post("/admin/reset-all", { confirm: resetWord }); toast.success(`Resultados apagados (${Object.values(r.removed).reduce((a, b) => a + b, 0)} registos) — dashboard a zero`); setResetOpen(false); setResetWord(""); load(); }
+    catch (e) { toast.error(apiError(e)); }
+  };
   const clearAllTests = async () => {
     try { const { data: r } = await api.post("/admin/test-run/clear-all", { confirm: clearWord }); toast.success(`Testes apagados (${Object.values(r.removed).reduce((a, b) => a + b, 0)} registos)`); setClearAllOpen(false); setClearWord(""); load(); }
     catch (e) { toast.error(apiError(e)); }
@@ -109,6 +116,7 @@ export default function AdminDashboard() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 text-white text-xs font-semibold btn-press">🎬 Novo Teste</button>
+          <button data-testid="reset-all-button" onClick={() => setResetOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold btn-press">🧨 Apagar TODOS os resultados</button>
           <span data-testid="ws-indicator" data-status={wsStatus} className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${wsStatus === "conectado" ? "text-emerald-700 bg-emerald-50 border-emerald-100" : wsStatus === "reconectando" ? "text-amber-700 bg-amber-50 border-amber-100" : "text-red-600 bg-red-50 border-red-100"}`}>
             <span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : wsStatus === "reconectando" ? "bg-amber-500 live-dot" : "bg-red-500"}`} />
             WS · {wsStatus === "conectado" ? "Conectado" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}
@@ -208,6 +216,8 @@ export default function AdminDashboard() {
       </div>
 
       <AbandonAnalysis events={eventos} />
+
+      <AiAnalyst refreshKey={clicksKey} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div data-testid="admin-feedback-card" className="card-soft p-5">
@@ -310,6 +320,14 @@ export default function AdminDashboard() {
       </Dialog>
 
       <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />
+
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent data-testid="reset-all-dialog" className="max-w-sm">
+          <DialogHeader><DialogTitle>Apagar TODOS os resultados</DialogTitle><DialogDescription>Zera receita, comissões, ticket médio, vendas, cliques, audit log, notificações, indicações e pagamentos QR. Mantém utilizadores, campanhas reais, e-books e definições. Irreversível.</DialogDescription></DialogHeader>
+          <Input data-testid="reset-all-input" value={resetWord} onChange={(e) => setResetWord(e.target.value)} placeholder='Escreva "RESET-ALL"' className="rounded-xl bg-slate-50" />
+          <button data-testid="reset-all-confirm" disabled={resetWord !== "RESET-ALL"} onClick={resetAll} className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold btn-press">Apagar tudo e zerar dashboard</button>
+        </DialogContent>
+      </Dialog>
 
       <button data-testid="clear-all-tests-button" onClick={() => setClearAllOpen(true)} className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-white border border-slate-200 shadow-lg hover:bg-red-50 hover:text-red-600 text-slate-600 text-xs font-semibold btn-press">🗑️ Limpar TODOS os testes</button>
       <Dialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
