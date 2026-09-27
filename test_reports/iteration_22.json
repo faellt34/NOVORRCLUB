@@ -1,0 +1,45 @@
+{
+  "summary": "Tested new AI Analyst SSE endpoints and reset-all flow (backend + frontend). Backend 6/6 passing (after minor test tweak). Frontend AI streaming + reset-all confirm flow works end-to-end. Found 1 frontend runtime bug: clicking ai-reset while last-stream token is still in-flight (or shortly after) throws TypeError in AiAnalyst and shows a full-page red overlay, blocking further UI use.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "AiAnalyst",
+        "issue": "TypeError: Cannot read properties of undefined (reading 'content') when tokens arrive after msgs was cleared (e.g. clicking ai-reset just after a stream). setMsgs updater does `c[c.length-1].content + tok` without guarding c.length===0. Result: red uncaught runtime error overlay, ai-suggestion chips do not re-render (count=0), UI is blocked.",
+        "selector": "[data-testid=\"ai-reset\"] / [data-testid=\"ai-msg-assistant\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ai_and_reset.py",
+    "/app/test_reports/pytest/iter22.xml"
+  ],
+  "action_items": [
+    "In AiAnalyst.jsx streaming token handler, guard against empty msgs after reset. Suggested fix: `setMsgs((m) => { if (!m.length || m[m.length-1].role !== 'assistant') return m; const c=[...m]; c[c.length-1] = { ...c[c.length-1], content: c[c.length-1].content + tok }; return c; });`  Also consider aborting the fetch reader in reset() (keep an AbortController) so stray tokens after reset are dropped."
+  ],
+  "critical_code_review_comments": [
+    "AiAnalyst.reset() does not abort the in-flight fetch/reader; late SSE tokens still mutate state after msgs was cleared, causing the crash.",
+    "routes_ai.py:_context() may load up to 20k coupon_claims + 5k redemptions into a single JSON prompt — will scale poorly. Consider aggregating in Mongo instead of client-side.",
+    "routes_ai.py stores full assistant message (potentially large) in ai_messages with no size cap.",
+    "SSE endpoint does not send any keep-alive between meta and first token; proxies could time out on slower model calls."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ai_and_reset.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "80%"
+  },
+  "test_credentials": "admin faellt@gmail.com / Robson2026!  |  partner parceiro.exemplo@club.pt / parceiro123 (used to assert 403)",
+  "seed_data_creation": "None. Final reset-all invoked from UI already zeroed dashboard (3 registos removidos).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend AI SSE (event meta -> data tokens -> event done), history and non-admin 403 all verified via /app/backend/tests/test_ai_and_reset.py (run with `pytest ... -o addopts=\"\"` because /app/backend/pytest.ini forces xdist loadscope). Reset-all UI: dialog + input gating + toast + kpi-receita-sistema-value=0 € all work. Only frontend bug is the AiAnalyst reset-race TypeError described above.",
+  "rca of the issue": "AiAnalyst.jsx line ~38: token handler does `c[c.length-1].content + tok`. reset() clears msgs to [] and clears session, but doesn't abort the still-running fetch reader. Any SSE token frame that arrives after reset (or the trailing token right before `done` after the second answer) executes with c=[], so c[-1] is undefined -> TypeError -> React error boundary overlay. Repro: send AI question, wait for answer, click ai-reset within ~1s. Mitigation: guard in state updater AND AbortController cancelled in reset()."
+}
