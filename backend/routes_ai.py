@@ -79,3 +79,34 @@ async def ai_ask(body: AskIn, user: dict = Depends(require_role("admin"))):
 @router.get("/admin/ai/history")
 async def ai_history(session_id: str, user: dict = Depends(require_role("admin"))):
     return await db.ai_messages.find({"session_id": session_id}, NO_ID).sort("date", 1).to_list(100)
+
+
+class CaptionIn(BaseModel):
+    campaign_id: str
+    tom: str = "elegante"
+
+
+@router.post("/influencer/ai/captions")
+async def ai_captions(body: CaptionIn, user: dict = Depends(require_role("influencer"))):
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    c = await db.campaigns.find_one({"id": body.campaign_id, "influencer_id": user.get("influencer_id")}, NO_ID)
+    if not c:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    inf = await db.influencers.find_one({"id": user.get("influencer_id")}, NO_ID) or {}
+    link = f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{c['cupom']}"
+    prompt = (f"Cria legendas de Instagram Story/Reel para o influencer {inf.get('nome')} ({inf.get('handle', '')}) promover o cupão {c['cupom']} com {c['desconto']:g}% de desconto "
+              f"em {partner.get('nome')} ({partner.get('categoria', '')}, {partner.get('cidade', '')}). Link: {link}. Tom: {body.tom}. "
+              "Devolve APENAS JSON válido com esta forma: {\"pt\": [\"...\", \"...\"], \"en\": [\"...\", \"...\"], \"es\": [\"...\", \"...\"]} — 2 legendas por idioma, "
+              "cada uma com 1-2 frases, 2-4 emojis, o código do cupão em MAIÚSCULAS, um call-to-action e 3 hashtags no fim. Português de Portugal no pt.")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("cap"), system_message="És um copywriter de redes sociais para experiências premium. Respondes só com JSON.").with_model(*MODEL)
+    raw = await chat.send_message(UserMessage(text=prompt))
+    txt = raw.strip()
+    if txt.startswith("```"):
+        txt = txt.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+    try:
+        data = json.loads(txt[txt.index("{"): txt.rindex("}") + 1])
+    except Exception:
+        data = {"pt": [raw], "en": [], "es": []}
+    return {"cupom": c["cupom"], "link": link, "captions": {k: [s for s in data.get(k, []) if isinstance(s, str)] for k in ("pt", "en", "es")}}
