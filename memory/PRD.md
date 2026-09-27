@@ -136,6 +136,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Botão "Guardar QR" na página pública `/c/CODE` (regista download)
 - **Todos os dados de teste apagados** (redemptions, claims, audit, notificações, leads, feedback, mensagens, payouts, transações QR) — contas/campanhas/e-books mantidos
 
+### 2026-06 · Reset-all + Modo Teste completo + venda_validada ✅ (iteration_21: backend 9/9, frontend 100%)
+- `routes_test.py`: `POST /api/admin/reset-all {confirm:"RESET-ALL"}` (apaga dados operacionais; mantém users/campanhas reais/settings) — **executado, dashboard a 0**
+- `POST /api/admin/test-run {influencer_id, partner_id, valor}` simula campanha `is_test` TEST-XXXXXX → clique → QR → pagamento (simulado, sem Stripe real) → split 75/5/10/10; emite `teste_passo` 1..6 + todos os eventos reais; `DELETE /api/admin/test-run/{run_id}`; `POST /api/admin/test-run/clear-all {confirm:"LIMPAR"}`
+- Frontend: botão "🎬 Novo Teste" + `TestRunDialog.jsx` (passo-a-passo ao vivo, split, Ver dashboard / Limpar este teste); botão fixo "🗑️ Limpar TODOS os testes" com confirmação LIMPAR; `useRealtime` devolve `ultimoEvento`, backoff até 30s; evento `venda_validada`
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
