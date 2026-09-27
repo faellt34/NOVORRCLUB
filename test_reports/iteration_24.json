@@ -1,0 +1,23 @@
+{
+  "summary": "Retest #2 of AiAnalyst reset-during-stream crash. Fix is now present in /app/frontend/src/components/AiAnalyst.jsx (AbortController via abortRef, guarded token append, AbortError ignored, ai-reset always clickable). Verified end-to-end via UI: (a) rapid reset ~1s after clicking suggestion — messages cleared, suggestions re-rendered, NO 'Uncaught runtime errors' overlay, no console TypeError, no pageerror; repeated twice successfully. (b) Typing 'Quantos influencers ativos?' via ai-input+ai-send streams and completes cleanly in ~5s (533 chars). (c) ai-reset after completion clears state cleanly. Bug FIXED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_23.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correct: abortRef.current?.abort() in reset() cancels the reader, and the setMsgs token append now guards on last message being an assistant, so late tokens after reset are safely dropped.",
+    "Minor: after abort, the reader loop's reader.read() throws AbortError which is caught in the outer try/catch (name check on line 43) — clean."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (2/2 rapid-reset + full ask + clean reset)"},
+  "test_credentials": "admin faellt@gmail.com / Robson2026!",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "AiAnalyst reset-during-stream is fixed. If regressions appear, rerun the rapid_reset_test flow from this iteration: login → /admin → click first ai-suggestion → sleep 900ms → click ai-reset → assert no overlay & suggestions visible.",
+  "rca of the issue": "Fixed by main agent. Root cause was two-fold: (1) reset() cleared msgs=[] but didn't cancel the SSE fetch reader, so late token events tried to append to c[c.length-1] on an empty array; (2) the token-append setMsgs did not guard for msgs.length or last-role==='assistant'. Both are now addressed via AbortController in ask()/reset() and a guarded setMsgs updater."
+}
