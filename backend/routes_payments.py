@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import stripe
@@ -8,9 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
+from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids, campaign_expired
 from storage import put_object, get_object, APP_NAME
 import jwt
+from pymongo.errors import DuplicateKeyError
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
 WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
@@ -96,53 +97,74 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
 
 
 async def fulfil(session_id: str, extra: dict):
+    transaction = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
+    if not transaction:
+        raise RuntimeError(f"Payment transaction {session_id} has not been recorded")
+    if transaction.get("fulfillment_status") == "complete":
+        return
+    lock_token = uuid.uuid4().hex
+    lock_time = datetime.now(timezone.utc)
     res = await db.payment_transactions.find_one_and_update(
-        {"session_id": session_id, "payment_status": {"$ne": "paid"}},
-        {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
+        {"session_id": session_id, "fulfillment_status": {"$ne": "complete"},
+         "$or": [{"fulfillment_lock_until": {"$exists": False}}, {"fulfillment_lock_until": {"$lt": lock_time.isoformat()} }]},
+        {"$set": {"status": "processing", "fulfillment_status": "processing", "stripe_confirmed": True,
+                  "fulfillment_lock_token": lock_token, "fulfillment_lock_until": (lock_time + timedelta(minutes=10)).isoformat(),
+                  "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
         return
-    if res.get("kind") == "coupon_pay":
-        c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
-        partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
-        inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
-        rate = float(c["comissao"]) / 100 if c else 0
-        gross = float(res["gross_amount"])
-        rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
-               "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
-               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
-        try:
-            await db.redemptions.insert_one(dict(rec))
-        except Exception:
-            return
-        await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
-        from realtime import emit
-        emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
-             influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
-        from routes_data import mark_converted
-        await mark_converted(rec["campaign_id"], rec)
-        targets = await admin_ids()
-        pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
-        targets += [u["id"] for u in (pu, iu) if u]
-        await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
-        cust_email = extra.get("customer_email")
-        if cust_email:
-            from mailer import send_email
-            sent = await send_email(cust_email, f"RRclub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
-                f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
-                "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
-            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"customer_email": cust_email, "receipt_emailed": sent, "redemption_id": rec["id"]}})
+    try:
+        if res.get("kind") == "coupon_pay":
+            c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
+            partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
+            inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
+            rate = float(c["comissao"]) / 100 if c else 0
+            gross = float(res["gross_amount"])
+            rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
+                   "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
+                   "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
+            try:
+                await db.redemptions.insert_one(dict(rec))
+            except DuplicateKeyError:
+                rec = await db.redemptions.find_one({"idempotency_key": session_id}, NO_ID)
+                if not rec:
+                    raise
+            await db.payment_transactions.update_one({"session_id": session_id, "fulfillment_lock_token": lock_token}, {"$set": {"redemption_id": rec["id"]}})
+            await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
+            from realtime import emit
+            emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
+                 influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec, is_test=rec.get("is_test", False))
+            from routes_data import mark_converted
+            await mark_converted(rec["campaign_id"], rec)
+            targets = await admin_ids()
+            pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
+            targets += [u["id"] for u in (pu, iu) if u]
+            await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
+            cust_email = extra.get("customer_email") or res.get("customer_email")
+            if cust_email:
+                from mailer import send_email
+                sent = await send_email(cust_email, f"RRclub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
+                    f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
+                    "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
+                await db.payment_transactions.update_one({"session_id": session_id, "fulfillment_lock_token": lock_token}, {"$set": {"receipt_emailed": sent, "customer_email": cust_email}})
+        elif res.get("ebook_id"):
+            await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
+            eb = await db.ebooks.find_one({"id": res["ebook_id"]}, NO_ID)
+            await audit("COMPRA", f"E-book '{eb['titulo'] if eb else res['ebook_id']}' · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
+            await notify([res["user_id"]], "compra", "Compra confirmada", f"Já pode ler '{eb['titulo']}' na área de E-books.", "/ebooks")
         else:
-            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"redemption_id": rec["id"]}})
-        return
-    if res.get("ebook_id"):
-        await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
-        eb = await db.ebooks.find_one({"id": res["ebook_id"]}, NO_ID)
-        await audit("COMPRA", f"E-book '{eb['titulo'] if eb else res['ebook_id']}' · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
-        await notify([res["user_id"]], "compra", "Compra confirmada", f"Já pode ler '{eb['titulo']}' na área de E-books.", "/ebooks")
-    else:
-        await db.subscriptions.update_one({"user_id": res["user_id"]}, {"$set": {"id": new_id("sub"), "status": "active", "stripe_subscription_id": extra.get("stripe_subscription_id"), "started_at": now_iso(), "session_id": session_id}}, upsert=True)
-        await audit("SUBSCRIÇÃO", f"RRclub Premium mensal · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
-        await notify([res["user_id"]], "compra", "Subscrição Premium ativa", "Todos os guias premium estão desbloqueados.", "/ebooks")
+            await db.subscriptions.update_one({"user_id": res["user_id"]}, {"$set": {"id": new_id("sub"), "status": "active", "stripe_subscription_id": extra.get("stripe_subscription_id") or res.get("stripe_subscription_id"), "started_at": now_iso(), "session_id": session_id}}, upsert=True)
+            await audit("SUBSCRIÇÃO", f"RRclub Premium mensal · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
+            await notify([res["user_id"]], "compra", "Subscrição Premium ativa", "Todos os guias premium estão desbloqueados.", "/ebooks")
+        await db.payment_transactions.update_one(
+            {"session_id": session_id, "fulfillment_lock_token": lock_token},
+            {"$set": {"status": "completed", "payment_status": "paid", "fulfillment_status": "complete", "updated_at": now_iso()},
+             "$unset": {"fulfillment_lock_token": "", "fulfillment_lock_until": ""}})
+    except Exception:
+        await db.payment_transactions.update_one(
+            {"session_id": session_id, "fulfillment_lock_token": lock_token},
+            {"$set": {"status": "processing", "fulfillment_status": "pending", "stripe_confirmed": True, "updated_at": now_iso()},
+             "$unset": {"fulfillment_lock_token": "", "fulfillment_lock_until": ""}})
+        raise
 
 
 @router.get("/payments/status/{session_id}")
@@ -150,15 +172,18 @@ async def payment_status(session_id: str):
     rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
     if not rec:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
-    if rec["payment_status"] != "paid":
+    if rec.get("fulfillment_status") != "complete":
         try:
-            s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
-                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
-                rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
+            if rec.get("stripe_confirmed") or rec["payment_status"] == "paid":
+                await fulfil(session_id, {})
+            else:
+                s = stripe.checkout.Session.retrieve(session_id)
+                if s.payment_status == "paid" or s.status == "complete":
+                    await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
+            rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
-    out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
+    out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "fulfillment_status": rec.get("fulfillment_status"), "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
     if rec.get("kind") == "coupon_pay":
         out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": rec.get("customer_email"), "paid_at": rec.get("updated_at")})
     return out
@@ -227,9 +252,13 @@ async def user_from_query_or_header(authorization: Optional[str], auth: Optional
         payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=["HS256"])
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
+    if payload.get("type") != "access" or not payload.get("sub"):
+        raise HTTPException(status_code=401, detail="Token inválido")
     user = await db.users.find_one({"id": payload["sub"]}, NO_ID)
     if not user:
         raise HTTPException(status_code=401, detail="Utilizador não encontrado")
+    if user.get("status") == "Suspenso":
+        raise HTTPException(status_code=403, detail="Conta suspensa")
     return user
 
 
@@ -263,6 +292,8 @@ async def public_pay(body: PublicPayIn):
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if campaign_expired(c):
+        raise HTTPException(status_code=409, detail="Cupom fora da validade — não pode ser utilizado.")
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}

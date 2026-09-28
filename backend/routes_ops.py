@@ -17,7 +17,7 @@ router = APIRouter()
 
 @router.get("/admin/payouts")
 async def payouts_overview(user: dict = Depends(require_role("admin"))):
-    reds = await db.redemptions.find({}, {"influencer_id": 1, "influencer": 1, "date": 1, "commission": 1, "_id": 0}).to_list(100000)
+    reds = await db.redemptions.find({"is_test": {"$ne": True}}, {"influencer_id": 1, "influencer": 1, "date": 1, "commission": 1, "_id": 0}).to_list(100000)
     agg = defaultdict(lambda: {"commission": 0.0, "count": 0})
     names = {}
     for r in reds:
@@ -48,7 +48,7 @@ async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin")))
     inf = await db.influencers.find_one({"id": body.influencer_id}, NO_ID)
     if not inf:
         raise HTTPException(status_code=404, detail="Influencer não encontrado")
-    total = sum([r["commission"] async for r in db.redemptions.find({"influencer_id": body.influencer_id, "date": {"$regex": f"^{body.month}"}}, {"commission": 1})])
+    total = sum([r["commission"] async for r in db.redemptions.find({"influencer_id": body.influencer_id, "is_test": {"$ne": True}, "date": {"$regex": f"^{body.month}"}}, {"commission": 1})])
     doc = {"id": new_id("pay"), "influencer_id": body.influencer_id, "month": body.month, "paid_at": datetime.now(timezone.utc).date().isoformat(), "amount": round(total, 2), "note": body.note, "by": user["nome"]}
     await db.payouts.insert_one(dict(doc))
     await audit("PAGAMENTO", f"Extrato {body.month} de {inf['nome']} marcado como pago · {total:.2f}€", user, doc["id"])

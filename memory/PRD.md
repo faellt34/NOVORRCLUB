@@ -152,4 +152,5 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.
+- As contas e os dados de demonstração só são criados com `ENABLE_DEMO_SEED=true`; o padrão é desativado, e `settings.pilot.demo_disabled` continua a impedir a criação mesmo quando a variável está ativa.
 - Cupões válidos no Tivoli: ROBSON-LUXE-25, MARTA-SKY-10, DIOGO-SKY-15.

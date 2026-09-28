@@ -19,6 +19,11 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def campaign_expired(campaign: dict) -> bool:
+    validity = campaign.get("validade")
+    return bool(validity and validity < datetime.now(timezone.utc).date().isoformat())
+
+
 def new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10]}"
 

@@ -99,9 +99,9 @@ def test_test_run_creates_all_and_split(admin_token):
     assert data["cupom"].startswith("TEST-")
     assert data["split"] == {"restaurante": 37.5, "influencer": 2.5, "rrclub": 5.0, "stripe": 5.0}
     run_id = data["run_id"]
-    # dashboard revenue 50
+    # Test runs are excluded from business dashboard totals.
     d = requests.get(f"{BASE}/api/dashboard/admin", headers=_h(admin_token), timeout=15).json()
-    assert d["totals"]["revenue"] == 50, d["totals"]
+    assert d["totals"]["revenue"] == 0, d["totals"]
     # delete
     d2 = requests.delete(f"{BASE}/api/admin/test-run/{run_id}", headers=_h(admin_token), timeout=15).json()
     assert d2["ok"] is True
@@ -177,7 +177,7 @@ def test_clear_all_removes_multiple(admin_token):
         r = requests.post(f"{BASE}/api/admin/test-run", json={"influencer_id": inf_id, "partner_id": part_id, "valor": 50}, headers=_h(admin_token), timeout=30)
         assert r.status_code == 200
     d = requests.get(f"{BASE}/api/dashboard/admin", headers=_h(admin_token), timeout=15).json()
-    assert d["totals"]["revenue"] == 100, d["totals"]
+    assert d["totals"]["revenue"] == 0, d["totals"]
     r = requests.post(f"{BASE}/api/admin/test-run/clear-all", json={"confirm": "LIMPAR"}, headers=_h(admin_token), timeout=30)
     assert r.status_code == 200, r.text
     rem = r.json()["removed"]

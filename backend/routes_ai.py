@@ -19,9 +19,9 @@ class AskIn(BaseModel):
 
 
 async def _context() -> str:
-    reds = await db.redemptions.find({"date": {"$gte": since(30)}}, {"_id": 0, "amount": 1, "commission": 1, "coupon": 1, "partner": 1, "influencer": 1, "date": 1, "paid_online": 1, "is_test": 1}).to_list(5000)
-    claims = await db.coupon_claims.find({"date": {"$gte": since(30)}}, {"_id": 0, "coupon": 1, "origem": 1, "qr_downloaded": 1, "converted": 1, "date": 1}).to_list(20000)
-    camps = await db.campaigns.find({}, {"_id": 0, "nome": 1, "cupom": 1, "parceiro": 1, "influencer": 1, "desconto": 1, "comissao": 1, "status": 1, "validade": 1, "is_test": 1}).to_list(300)
+    reds = await db.redemptions.find({"is_test": {"$ne": True}, "date": {"$gte": since(30)}}, {"_id": 0, "amount": 1, "commission": 1, "coupon": 1, "partner": 1, "influencer": 1, "date": 1, "paid_online": 1}).to_list(5000)
+    claims = await db.coupon_claims.find({"is_test": {"$ne": True}, "date": {"$gte": since(30)}}, {"_id": 0, "coupon": 1, "origem": 1, "qr_downloaded": 1, "converted": 1, "date": 1}).to_list(20000)
+    camps = await db.campaigns.find({"is_test": {"$ne": True}}, {"_id": 0, "nome": 1, "cupom": 1, "parceiro": 1, "influencer": 1, "desconto": 1, "comissao": 1, "status": 1, "validade": 1}).to_list(300)
     by_coupon = {}
     for r in reds:
         d = by_coupon.setdefault(r["coupon"], {"vendas": 0, "receita": 0.0, "comissao": 0.0})

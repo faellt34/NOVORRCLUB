@@ -17,7 +17,7 @@ const CONFIG = {
     fields: [
       { key: "nome", label: "Nome" },
       { key: "email", label: "Email" },
-      { key: "password", label: "Palavra-passe", hideInTable: true, optional: true, placeholder: "deixe vazio para manter / padrão robson123" },
+      { key: "password", label: "Palavra-passe", hideInTable: true, optional: true, placeholder: "Deixe vazio para manter a palavra-passe atual" },
       { key: "papel", label: "Papel", type: "select", options: ["Influencer", "Parceiro", "Admin"] },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],

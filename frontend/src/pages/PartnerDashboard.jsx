@@ -35,6 +35,7 @@ export default function PartnerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.is_test) return;
     if (ev.tipo === "split_executado" && ev.record) {
       const r = ev.record;
       setData((d) => {

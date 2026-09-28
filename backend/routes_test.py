@@ -53,7 +53,7 @@ async def test_run(body: dict, user: dict = Depends(require_role("admin"))):
           "origem": "Teste", "cliente": "Cliente de teste", "date": now_iso(), "created_at": now_iso(), "qr_downloaded": False, "qr_downloaded_at": None, "converted": False, "converted_at": None, "valor": None, "is_test": True, "test_run_id": run_id}
     await db.coupon_claims.insert_one(dict(cl))
     dados = {k: cl[k] for k in ("id", "coupon", "campaign", "influencer", "partner", "origem", "cliente", "date", "qr_downloaded", "converted", "valor")}
-    emit("clique_cupao", cupom=cupom, campanha=camp["nome"], origem="Teste", influencer=inf["nome"], influencer_id=inf["id"], partner_id=partner["id"], ref=cl["id"])
+    emit("clique_cupao", cupom=cupom, campanha=camp["nome"], origem="Teste", influencer=inf["nome"], influencer_id=inf["id"], partner_id=partner["id"], ref=cl["id"], is_test=True)
     emit("novo_clique", dados=dados, campanha_id=camp["id"], influencer_id=inf["id"], partner_id=partner["id"], origem="Teste")
     await asyncio.sleep(0.7)
     await _step(run_id, 3, "Cliente clicou no link", "ok")
@@ -78,8 +78,8 @@ async def test_run(body: dict, user: dict = Depends(require_role("admin"))):
     await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"converted": True, "converted_at": rec["date"], "valor": valor, "redemption_id": rec["id"]}})
     await audit("REDENÇÃO", f"{cupom} · TESTE · {valor:.2f}€ · {partner['nome']}", user, rec["id"])
     emit("split_executado", valor_plataforma=rec["commission"], valor_total=valor, cupom=cupom, parceiro=partner["nome"], influencer=inf["nome"], ref=rec["id"], origem="qr", influencer_id=inf["id"], partner_id=partner["id"], record=rec, is_test=True)
-    emit("venda", valor=valor, comissao=rec["commission"], cupom=cupom, claim_id=cl["id"], at=rec["date"], influencer_id=inf["id"], partner_id=partner["id"])
-    emit("venda_validada", valor=valor, restaurante_id=partner["id"], influencer_id=inf["id"], partner_id=partner["id"], cupom=cupom)
+    emit("venda", valor=valor, comissao=rec["commission"], cupom=cupom, claim_id=cl["id"], at=rec["date"], influencer_id=inf["id"], partner_id=partner["id"], is_test=True)
+    emit("venda_validada", valor=valor, restaurante_id=partner["id"], influencer_id=inf["id"], partner_id=partner["id"], cupom=cupom, is_test=True)
     split = {"restaurante": round(valor * 0.75, 2), "influencer": round(valor * 0.05, 2), "rrclub": round(valor * 0.10, 2), "stripe": round(valor * 0.10, 2)}
     await _step(run_id, 6, "Split executado", "ok", split=split)
     return {"run_id": run_id, "campaign_id": camp["id"], "cupom": cupom, "claim_id": cl["id"], "redemption_id": rec["id"], "valor": valor, "split": split}

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
-from core import db, NO_ID, get_current_user, require_role, audit, notify, admin_ids, new_id, now_iso
+from core import db, NO_ID, get_current_user, require_role, audit, notify, admin_ids, new_id, now_iso, campaign_expired
 
 router = APIRouter()
 
@@ -58,10 +58,10 @@ async def enrich_campaigns(camps):
 @router.get("/dashboard/influencer")
 async def influencer_dashboard(period: int = 30, user: dict = Depends(require_role("influencer"))):
     inf_id = user.get("influencer_id")
-    reds = await db.redemptions.find({"influencer_id": inf_id, "date": {"$gte": since(period)}}, NO_ID).to_list(20000)
-    prev = await db.redemptions.find({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}}, NO_ID).to_list(20000)
+    reds = await db.redemptions.find({"influencer_id": inf_id, "is_test": {"$ne": True}, "date": {"$gte": since(period)}}, NO_ID).to_list(20000)
+    prev = await db.redemptions.find({"influencer_id": inf_id, "is_test": {"$ne": True}, "date": {"$gte": since(period * 2), "$lt": since(period)}}, NO_ID).to_list(20000)
     t, tp = totals(reds), totals(prev)
-    camps = await enrich_campaigns(await db.campaigns.find({"influencer_id": inf_id}, NO_ID).to_list(500))
+    camps = await enrich_campaigns(await db.campaigns.find({"influencer_id": inf_id, "is_test": {"$ne": True}}, NO_ID).to_list(500))
     uses = defaultdict(int); rev = defaultdict(float)
     for r in reds:
         uses[r["campaign_id"]] += 1; rev[r["campaign_id"]] += r["amount"]
@@ -72,9 +72,9 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
         by_partner[r["partner_id"]]["uses"] += 1; by_partner[r["partner_id"]]["revenue"] += r["amount"]
     parts = {p["id"]: p async for p in db.partners.find({}, NO_ID)}
     top = sorted([{**parts.get(pid, {"id": pid, "nome": "—"}), **v} for pid, v in by_partner.items()], key=lambda x: -x["revenue"])[:5]
-    claim_q = {"influencer_id": inf_id, "date": {"$gte": since(period)}}
+    claim_q = {"influencer_id": inf_id, "is_test": {"$ne": True}, "date": {"$gte": since(period)}}
     claims = await db.coupon_claims.count_documents(claim_q)
-    claims_prev = await db.coupon_claims.count_documents({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}})
+    claims_prev = await db.coupon_claims.count_documents({"influencer_id": inf_id, "is_test": {"$ne": True}, "date": {"$gte": since(period * 2), "$lt": since(period)}})
     claims_by_campaign = defaultdict(int)
     async for cl in db.coupon_claims.find(claim_q, {"campaign_id": 1}):
         claims_by_campaign[cl["campaign_id"]] += 1
@@ -94,7 +94,7 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
 @router.get("/dashboard/partner")
 async def partner_dashboard(user: dict = Depends(require_role("partner"))):
     pid = user.get("partner_id")
-    reds = await db.redemptions.find({"partner_id": pid}, NO_ID).sort("date", -1).to_list(20000)
+    reds = await db.redemptions.find({"partner_id": pid, "is_test": {"$ne": True}}, NO_ID).sort("date", -1).to_list(20000)
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
@@ -105,19 +105,19 @@ async def partner_dashboard(user: dict = Depends(require_role("partner"))):
     leaderboard = sorted([{**infs.get(k, {"id": k, "nome": "—"}), **{kk: round(vv, 2) for kk, vv in v.items()}} for k, v in board.items()], key=lambda x: -x["revenue"])[:5]
     partner = await db.partners.find_one({"id": pid}, NO_ID)
     t["online_paid"] = round(sum(r["amount"] - r["discount"] for r in reds if r.get("paid_online")), 2)
-    camps = await enrich_campaigns(await db.campaigns.find({"parceiro_id": pid}, NO_ID).to_list(200))
+    camps = await enrich_campaigns(await db.campaigns.find({"parceiro_id": pid, "is_test": {"$ne": True}}, NO_ID).to_list(200))
     return {"partner": partner, "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "count": trend(tc["count"], tp["count"]), "commission": trend(tc["commission"], tp["commission"])},
             "leaderboard": leaderboard, "redemptions": reds[:100], "campaigns": camps}
 
 
 @router.get("/dashboard/admin")
 async def admin_dashboard(user: dict = Depends(require_role("admin"))):
-    reds = await db.redemptions.find({}, NO_ID).to_list(50000)
+    reds = await db.redemptions.find({"is_test": {"$ne": True}}, NO_ID).to_list(50000)
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
-    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(50))
-    claims = await db.coupon_claims.find({}, {"_id": 0, "origem": 1}).to_list(100000)
+    camps = await enrich_campaigns(await db.campaigns.find({"is_test": {"$ne": True}}, NO_ID).sort("validade", -1).to_list(50))
+    claims = await db.coupon_claims.find({"is_test": {"$ne": True}}, {"_id": 0, "origem": 1}).to_list(100000)
     clicks = len(claims)
     uses = t["count"]
     origins = defaultdict(int)
@@ -126,7 +126,7 @@ async def admin_dashboard(user: dict = Depends(require_role("admin"))):
     return {
         "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"]), "count": trend(tc["count"], tp["count"])},
         "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo"}), "partners": await db.partners.count_documents({"status": "Ativo"}),
-                   "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
+                   "campaigns": await db.campaigns.count_documents({"status": "Ativa", "is_test": {"$ne": True}}), "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
         "campaigns": camps[:8], "chart": daily_series(cur, 30),
@@ -166,7 +166,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         raise HTTPException(status_code=404, detail="Cupom não encontrado para este parceiro.")
     if c["status"] != "Ativa":
         raise HTTPException(status_code=409, detail=f"Cupom {'expirado' if c['status'] == 'Expirada' else 'pausado'} — não pode ser redimido.")
-    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+    if campaign_expired(c):
         raise HTTPException(status_code=409, detail="Cupom fora da validade — não pode ser redimido.")
     recent = await db.redemptions.find_one({"partner_id": user["partner_id"], "coupon": code, "amount": body.amount, "date": {"$gte": (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()}}, NO_ID)
     if recent:
@@ -197,12 +197,13 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
 @router.get("/redemptions")
 async def list_redemptions(user: dict = Depends(get_current_user)):
     q = {"partner_id": user["partner_id"]} if user["role"] == "partner" else {"influencer_id": user["influencer_id"]} if user["role"] == "influencer" else {}
+    q["is_test"] = {"$ne": True}
     return await db.redemptions.find(q, NO_ID).sort("date", -1).to_list(2000)
 
 
 @router.get("/statements")
 async def statements(user: dict = Depends(require_role("influencer"))):
-    reds = await db.redemptions.find({"influencer_id": user["influencer_id"]}, NO_ID).to_list(50000)
+    reds = await db.redemptions.find({"influencer_id": user["influencer_id"], "is_test": {"$ne": True}}, NO_ID).to_list(50000)
     paid = {p["month"]: p["paid_at"] async for p in db.payouts.find({"influencer_id": user["influencer_id"]}, NO_ID)}
     months = defaultdict(lambda: defaultdict(lambda: {"uses": 0, "revenue": 0.0, "commission": 0.0}))
     for r in reds:
@@ -267,10 +268,10 @@ def _click_origin(request: Request) -> str:
 async def admin_clicks(period: str = "7", user: dict = Depends(require_role("admin"))):
     days = 1 if period in ("today", "hoje", "1") else int(period)
     start = datetime.now(timezone.utc).date().isoformat() if days == 1 else since(days)
-    claims = await db.coupon_claims.find({"date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(100)
+    claims = await db.coupon_claims.find({"is_test": {"$ne": True}, "date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(100)
     if not claims:
         return {"items": [], "total": 0, "converted": 0}
-    reds = await db.redemptions.find({"date": {"$gte": start}}, {"_id": 0, "campaign_id": 1, "date": 1}).to_list(50000)
+    reds = await db.redemptions.find({"is_test": {"$ne": True}, "date": {"$gte": start}}, {"_id": 0, "campaign_id": 1, "date": 1}).to_list(50000)
     by_camp = defaultdict(list)
     for r in reds:
         by_camp[r["campaign_id"]].append(r["date"])
@@ -314,7 +315,8 @@ async def public_coupon(code: str, request: Request):
         emit("clique_cupao", cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
         emit("novo_clique", dados=dados, influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"))
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
-    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
+    status = "Expirada" if c["status"] == "Ativa" and campaign_expired(c) else c["status"]
+    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": status,
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id}
 
@@ -338,8 +340,8 @@ async def mark_converted(campaign_id: str, rec: dict):
     if cl:
         await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"converted": True, "converted_at": rec["date"], "valor": rec["amount"], "redemption_id": rec["id"]}})
     from realtime import emit
-    emit("venda", valor=rec["amount"], comissao=rec["commission"], cupom=rec["coupon"], claim_id=cl["id"] if cl else None, at=rec["date"], influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"))
-    emit("venda_validada", valor=rec["amount"], restaurante_id=rec.get("partner_id"), influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"), cupom=rec["coupon"])
+    emit("venda", valor=rec["amount"], comissao=rec["commission"], cupom=rec["coupon"], claim_id=cl["id"] if cl else None, at=rec["date"], influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"), is_test=rec.get("is_test", False))
+    emit("venda_validada", valor=rec["amount"], restaurante_id=rec.get("partner_id"), influencer_id=rec.get("influencer_id"), partner_id=rec.get("partner_id"), cupom=rec["coupon"], is_test=rec.get("is_test", False))
 
 
 def _claim_state(cl: dict) -> str:
@@ -355,7 +357,7 @@ def _claim_state(cl: dict) -> str:
 async def clicks_analysis(period: str = "7d", user: dict = Depends(require_role("admin"))):
     p = period.lower().rstrip("d")
     start = datetime.now(timezone.utc).date().isoformat() if p in ("hoje", "today", "1") else since(int(p or 7))
-    claims = await db.coupon_claims.find({"date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(500)
+    claims = await db.coupon_claims.find({"is_test": {"$ne": True}, "date": {"$gte": start}}, NO_ID).sort("date", -1).to_list(500)
     lista = [{"id": cl["id"], "date": cl["date"], "origem": cl.get("origem", "QR / direto"), "cliente": cl.get("cliente", "Cliente"), "influencer": cl.get("influencer", "—"), "campanha": cl.get("campaign", "—"), "cupom": cl["coupon"],
               "qr": bool(cl.get("qr_downloaded")), "qr_downloaded_at": cl.get("qr_downloaded_at"), "estado": _claim_state(cl), "converted_at": cl.get("converted_at"), "valor": cl.get("valor")} for cl in claims]
     return {"total": len(lista), "sem_download": sum(1 for x in lista if x["estado"] in ("Sem download", "Abandonou")), "qr_sem_scan": sum(1 for x in lista if x["estado"] == "QR sem scan"),

@@ -25,6 +25,7 @@ export default function InfluencerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.is_test) return;
     if (ev.tipo === "split_executado") {
       setData((d) => d && { ...d, kpis: { ...d.kpis, uses: d.kpis.uses + 1, revenue: d.kpis.revenue + Number(ev.valor_total || 0), commission: d.kpis.commission + Number(ev.valor_plataforma || 0) },
         campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, uses: c.uses + 1 } : c) });
