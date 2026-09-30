@@ -43,7 +43,7 @@ def create_access_token(user_id: str, email: str, role: str) -> str:
 
 
 def public_user(user: dict) -> dict:
-    u = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
+    u = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "avatar_path")}
     return u
 
 

@@ -19,6 +19,7 @@ import Notifications from "@/pages/Notifications";
 import PaymentResult from "@/pages/PaymentResult";
 import AdminPayouts from "@/pages/AdminPayouts";
 import AdminSettings from "@/pages/AdminSettings";
+import Profile from "@/pages/Profile";
 import { ForgotPassword, ResetPassword } from "@/pages/PasswordRecovery";
 
 const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
@@ -71,6 +72,7 @@ function App() {
               <Route path="/mensagens" element={<Messages />} />
               <Route path="/notificacoes" element={<Notifications />} />
               <Route path="/ebooks" element={<Ebooks />} />
+              <Route path="/perfil" element={<Profile />} />
               <Route element={<Protected roles={["influencer"]} />}>
                 <Route path="/influencer" element={<InfluencerDashboard />} />
                 <Route path="/influencer/extrato" element={<Statement />} />

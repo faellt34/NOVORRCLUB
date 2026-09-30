@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { useT } from "../../context/I18nContext";
@@ -68,13 +68,14 @@ export const SidebarContent = ({ onNavigate }) => {
       </div>
 
       <div className="px-4 pb-4">
-        <div data-testid="sidebar-user-card" className="w-full p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+        <Link to="/perfil" onClick={() => onNavigate?.()} data-testid="sidebar-user-card" className="w-full p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3 hover:bg-white/10 transition-colors">
           <img src={user.avatar} alt={user.nome} className="w-9 h-9 rounded-full object-cover" />
           <div className="flex-1 min-w-0">
             <p data-testid="sidebar-user-name" className="text-sm font-semibold text-white truncate">{user.nome}</p>
             <p data-testid="sidebar-user-role" className="text-xs text-purple-300/80 truncate flex items-center gap-1"><RoleIcon className="w-3 h-3" /> {ROLE_LABEL[user.role]} · {user.handle || user.email}</p>
           </div>
-        </div>
+          <UserCircle className="w-4 h-4 text-slate-500 shrink-0" />
+        </Link>
       </div>
 
       <nav className="flex-1 px-3 space-y-1 overflow-y-auto" data-testid="sidebar-nav">

@@ -2,10 +2,11 @@ import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile, File
 from pydantic import BaseModel
 
 from core import db, verify_password, create_access_token, public_user, get_current_user, audit, now_iso, new_id, hash_password, notify, admin_ids
+from storage import put_object, get_object, APP_NAME
 
 router = APIRouter(prefix="/auth")
 
@@ -44,6 +45,38 @@ async def login(body: LoginIn, request: Request, response: Response):
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return user
+
+
+@router.post("/profile/avatar")
+async def update_avatar(request: Request, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    allowed_types = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Escolha uma imagem JPG, PNG ou WebP.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="O ficheiro está vazio.")
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="A fotografia deve ter no máximo 5 MB.")
+
+    path = f"{APP_NAME}/avatars/{user['id']}/{new_id('avatar')}"
+    put_object(path, data, file.content_type)
+    avatar_url = f"{str(request.base_url).rstrip('/')}/api/auth/avatar/{user['id']}?v={new_id('v')}"
+    await db.users.update_one({"id": user["id"]}, {"$set": {"avatar": avatar_url, "avatar_path": path}})
+    if user.get("influencer_id"):
+        await db.influencers.update_one({"id": user["influencer_id"]}, {"$set": {"avatar": avatar_url}})
+    if user.get("partner_id"):
+        await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"avatar": avatar_url}})
+    updated = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"user": public_user(updated)}
+
+
+@router.get("/avatar/{user_id}")
+async def get_avatar(user_id: str):
+    user = await db.users.find_one({"id": user_id}, {"avatar_path": 1})
+    if not user or not user.get("avatar_path"):
+        raise HTTPException(status_code=404, detail="Fotografia não encontrada")
+    data, content_type = get_object(user["avatar_path"])
+    return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=31536000"})
 
 
 @router.post("/logout")
