@@ -168,6 +168,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `GET /ebooks/{id}/pdf`: removido token em query string (`?auth=`); só header Authorization (frontend já o usava)
 - Diretor: subagentes Frontend/Backend podem devolver `CORRECAO_SUGERIDA`; `propor_correcao(area, ficheiro, descricao, diff)` → ação pendente com diff visível; aprovar grava `.patch` em `memory/patches/` + `correcoes_aprovadas` (aplicação ao código é feita por mim a pedido — não altera código em produção automaticamente)
 
+### 2026-06 · Auditoria de Segurança completa (subagente Backend) ✅ (iteration_30)
+- `POST /api/diretor/auditoria` audita em paralelo todos os `routes_*.py` + core/realtime/mailer/storage (Claude Sonnet 4.6, JSON de achados com severidade/função/correção/diff, ~60s); `GET /api/diretor/auditoria` (última); `POST /api/diretor/auditoria/{id}/propor/{finding}` → ação pendente `propor_correcao`
+- `SecurityAudit.jsx` na página Diretor: botão "Auditar todas as rotas", chips alta/média/baixa com contagens, achados expansíveis com diff, "Propor correção"
+- Primeira auditoria: 45 alta / 31 média / 8 baixa (ex.: JWT sem revogação, HTML não escapado em emails, sem rate limiting, token WS em query string) — a triar com o utilizador
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
