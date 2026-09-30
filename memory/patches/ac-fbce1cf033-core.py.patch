@@ -1,0 +1,11 @@
+# backend/core.py
+# [alta] Revogação de token sem verificação de assinatura (verify_exp=False ignora validade total) — Verificar sempre a assinatura e o `sub`. Usar `options={"verify_exp": False, "require": ["jti", "sub"]}` e confirmar que o `sub` corresponde ao utilizador da sessão antes de revogar.
+
+--- a/core.py
++++ b/core.py
+@@ -async def revoke_token(token: Optional[str]):
+-        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
++        payload = jwt.decode(
++            token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM],
++            options={"verify_exp": False, "require": ["jti", "sub"]}
++        )

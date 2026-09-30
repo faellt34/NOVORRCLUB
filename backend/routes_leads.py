@@ -69,10 +69,12 @@ async def approve_lead(lead_id: str, body: DecisionIn, user: dict = Depends(requ
     await db.leads.update_one({"id": lead_id}, {"$set": {"status": "Aprovada", "decision_note": body.note, "decided_at": now_iso(), "decided_by": user["nome"], "partner_id": partner["id"]}})
     await audit("APROVAÇÃO", f"Indicação {lead['nome']} aprovada → parceiro {partner['id']} criado" + (f" · acesso {email}" if created_user else ""), user, lead_id)
     await notify([lead["referrer_id"]], "lead_aprovada", "Indicação aprovada 🎉", f"{lead['nome']} foi aprovado e já é parceiro RRclub. O seu bónus será processado no próximo extrato.", "/influencer")
+    emailed = False
     if created_user:
         from mailer import send_email
-        await send_email(email, "RRclub · Acesso de parceiro", "Bem-vindo ao RRclub", f"A sua conta de parceiro foi criada. Palavra-passe temporária: {temp_password}\nAltere-a após o primeiro acesso.", "Entrar", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/login")
-    return {"lead": await db.leads.find_one({"id": lead_id}, NO_ID), "partner": partner, "access_email": email if created_user else None, "temp_password": temp_password}
+        emailed = await send_email(email, "RRclub · Acesso de parceiro", "Bem-vindo ao RRclub", f"A sua conta de parceiro foi criada. Palavra-passe temporária: {temp_password}\nAltere-a após o primeiro acesso.", "Entrar", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/login")
+    return {"lead": await db.leads.find_one({"id": lead_id}, NO_ID), "partner": partner, "access_email": email if created_user else None,
+            "temp_password": None if emailed else temp_password, "password_emailed": emailed}
 
 
 @router.post("/{lead_id}/reject")

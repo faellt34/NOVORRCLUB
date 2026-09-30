@@ -98,7 +98,7 @@ export default function AdminDashboard() {
     setBusy(true);
     try {
       const { data: res } = await api.post(`/leads/${decision.lead.id}/${decision.mode}`, { note, email: email || null });
-      if (decision.mode === "approve") toast.success(`Parceiro "${res.partner.nome}" criado automaticamente${res.access_email ? ` · acesso: ${res.access_email} / palavra-passe temporária: ${res.temp_password} (também enviada por email)` : ""}`);
+      if (decision.mode === "approve") toast.success(`Parceiro "${res.partner.nome}" criado automaticamente${res.access_email ? ` · acesso: ${res.access_email}${res.password_emailed ? " (palavra-passe temporária enviada por email)" : ` / palavra-passe temporária: ${res.temp_password}`}` : ""}`);
       else toast.success("Indicação rejeitada e influencer notificado");
       setDecision(null); load(); refreshUnread();
     } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }

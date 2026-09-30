@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 31 full-stack test of top-10 security fixes + Diretor code-patch apply endpoint. Backend: 9/11 pytest passed, 2 skipped due to register rate-limit 5/hour already exhausted (weak/valid password tests — both verified passing on first pass before rate limit tripped). Frontend: login, WS realtime status 'conectado', Diretor /admin/diretor Aprovadas tab shows aplicar buttons + error retry state, clicking aplicar shows toast and page reloads with acao-aplicacao-erro-{id} + retry button. Logout redirects to /login and revokes JWT (backend confirms /auth/me → 401 'Sessão terminada' after logout).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/diretor/acoes/{id}/aplicar", "issue": "LLM-generated unified diffs from the security audit consistently fail `git apply --check` (error 'file: No such file or directory' — diffs use only basename like 'mailer.py' instead of 'backend/mailer.py'). Endpoint correctly returns status='falhou' with etapa/erro. Consider auto-prefixing paths or hinting the LLM to include the full repo-relative path in the diff header so approved patches actually apply."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter31_security.py",
+    "/app/test_reports/pytest/iter31.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: adjust the audit prompt so `diff` fields include the correct file paths ('a/backend/<file>' / 'b/backend/<file>') — currently every applied patch fails and is auto-reverted. Endpoint contract is correct; only patch usefulness is affected.",
+    "Cleanup test user created during register test: TEST_iter31_53b9b3@example.com (influencer)."
+  ],
+  "critical_code_review_comments": [
+    "routes_diretor.py:_apply_patch: tries multiple git-apply strategies but doesn't try `-p1` with a prepended `a/backend/` prefix — could increase success rate for LLM diffs that use file basenames only.",
+    "routes_diretor.py:aplicar_correcao does not enforce a lock on double-apply (only checks status=='aplicada'). A second concurrent aplicar on the same 'falhou' action could race — consider setting an intermediate 'a_aplicar' status like `aprovar` does.",
+    "core.py:decode_token uses `require: [exp, sub, jti]` — good. But `revoke_token` stores exp as datetime object (jwt.decode without verify_exp still returns exp as int) — actually returns int, so fine. Consider adding a TTL index on `revoked_tokens.exp` so revoked JTIs are auto-purged after 24h.",
+    "realtime.py: 8s auth timeout is aggressive if clients are slow; observed working. Consider 10-15s.",
+    "The register endpoint's 5/hour IP-based rate limit is very tight for a shared preview environment — testing exhausts it quickly. For prod acceptable; for testing consider raising or exempting internal IPs.",
+    "Diretor.jsx line 101 renders `JSON.stringify(a.resultado)` as text — okay for admin, but could look messy for large results; consider a collapsible details block."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter31_security.py"
+  ],
+  "success_rate": {"backend": "100% (9 passed, 2 skipped due to external rate limit)", "frontend": "100%"},
+  "test_credentials": "admin: faellt@gmail.com / Robson2026!",
+  "seed_data_creation": "Registered influencer TEST_iter31_53b9b3@example.com / Teste1234 (main agent should delete). Created 4 propor_correcao actions (all 'falhou' after aplicar — see /app/memory/patches for saved .patch files: ac-be78409e9a, ac-fbce1cf033, ac-1461beeea6, plus one clicked via UI). No code files under /app/backend were modified (all diffs failed to apply and were auto-reverted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend rate limit windows: register=5/hour/IP, login=30/15min/IP. Existing audit doc has 84 findings — do NOT trigger POST /api/diretor/auditoria (60s LLM). Test file /app/backend/tests/test_iter31_security.py covers JWT/logout revocation, register password policy, WS auth-via-first-message (invalid + timeout close 4401), message length 2000-char limit, Diretor aplicar endpoint (403/404/409/propose-approve-apply). All LLM-generated audit diffs currently fail `git apply` because file paths in diff headers are basenames only. Run: `pytest backend/tests/test_iter31_security.py -o asyncio_mode=auto -o addopts=''`.",
+  "rca of the issue": "N/A — no user-visible bugs. Only observation: applied audit patches always fail because the LLM produces diffs whose --- a/xxx / +++ b/xxx paths are file basenames (e.g. 'a/mailer.py') rather than repo-relative paths ('a/backend/mailer.py'). The apply endpoint tries -p0/-p1/--directory backend but none matches when the header path has no leading directory component and the file is not in repo root. Fix in the audit prompt (routes_diretor.py:_audit_file SYSTEM message) to require full paths, or in _apply_patch add a variant that prepends the area directory to the a/ b/ headers."
+}

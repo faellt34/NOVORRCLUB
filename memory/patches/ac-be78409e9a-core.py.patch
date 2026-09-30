@@ -1,0 +1,10 @@
+# backend/core.py
+# [alta] Spoofing de IP via cabeçalho X-Forwarded-For não validado — Confiar apenas no IP real da ligação TCP (`request.client.host`) ou, se houver um proxy reverso de confiança (nginx/Cloudflare), configurar o middleware `TrustedHostMiddleware` / `ProxyHeadersMiddleware` no FastAPI e ler o IP já validado pelo framework, nunca diretamente do cabeçalho.
+
+--- a/core.py
++++ b/core.py
+@@ -def client_ip(request: Request) -> str:
+-    fwd = request.headers.get("x-forwarded-for", "")
+-    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
++    # Usar apenas o IP da ligação TCP; configurar ProxyHeadersMiddleware no app
++    return request.client.host if request.client else "?"

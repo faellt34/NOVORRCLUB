@@ -1,0 +1,13 @@
+# backend/mailer.py
+# [alta] API key da Resend atribuída globalmente em variável de módulo partilhada — Passar a API key diretamente no objeto de parâmetros ou usar um cliente instanciado localmente, evitando estado global mutável partilhado entre corrotinas concorrentes.
+
+--- a/mailer.py
++++ b/mailer.py
+@@ -1,4 +1,4 @@
+-    resend.api_key = _settings_cache["key"]
+-    params = {"from": _settings_cache["sender"], "to": [to], "subject": subject, "html": _wrap(...)}
++    # Instanciar cliente local em vez de mutar global
++    client = resend.Client(api_key=_settings_cache["key"])
++    params = {"from": _settings_cache["sender"], "to": [to], "subject": subject, "html": _wrap(...)}
+-    await asyncio.to_thread(resend.Emails.send, params)
++    await asyncio.to_thread(client.emails.send, params)

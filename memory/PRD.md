@@ -173,7 +173,18 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `SecurityAudit.jsx` na página Diretor: botão "Auditar todas as rotas", chips alta/média/baixa com contagens, achados expansíveis com diff, "Propor correção"
 - Primeira auditoria: 45 alta / 31 média / 8 baixa (ex.: JWT sem revogação, HTML não escapado em emails, sem rate limiting, token WS em query string) — a triar com o utilizador
 
+### 2026-06 · Triagem dos 10 achados "alta" + aplicação de patches aprovados ✅ (iteration_31: backend 9/11 (2 skipped por rate limit), frontend 100%)
+- JWT: validade 24h, `jti`/`iat`, campos obrigatórios validados, role do token confrontado com a BD; `POST /auth/logout` revoga (`revoked_tokens`); `core.decode_token/revoke_token/rate_limit/client_ip`
+- WebSocket `/api/ws/dashboard`: token deixou de ir na query string — cliente envia `{"type":"auth","token"}` como 1ª mensagem (8s timeout, 4401 inválido, 4429 >5 ligações/utilizador); `_clients` protegido por lock
+- Registo: rate limit 5/h por IP, password ≥8 com letras+dígitos; login 30/15min por IP além do bloqueio por email
+- Mailer: `html.escape` em título/corpo/CTA, CTA só https no FRONTEND_URL, 20 emails/h por destinatário; validação de email
+- Stripe: removido fallback hardcoded (`STRIPE_SECRET_KEY` obrigatório); regex com `re.escape` em admin/ops; `month` validado AAAA-MM
+- Mensagens: máx. 2000 chars, 30/min; Leads: 10/h, campos ≤500, aprovação atómica, password temporária aleatória (`secrets`) enviada por email (devolvida na resposta só se o email falhar)
+- Diretor: nome do `.patch` sanitizado; aprovação atómica (`a_executar`); **`POST /api/diretor/acoes/{id}/aplicar`** aplica o diff com `git apply --check` (várias estratégias de caminho), verifica (`py_compile` + `import server` + pytest se existirem testes) e reverte com `git apply -R` se falhar → `aplicacao.status ∈ {aplicada, falhou, revertida}`; botão "Aplicar ao código (com testes)" na tab Aprovadas (`acao-aplicar-{id}`)
+- Re-auditoria: os 10 achados originais desapareceram; o auditor devolve até 6 achados/ficheiro, por isso o total mantém-se ~45 alta (novos itens: TOCTOU/race conditions, paginação, rate limit nos endpoints públicos de cupão/pagamento, IDOR `qr-downloaded`, sem verificação de email no registo)
+
 ## Backlog priorizado
+- P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
 

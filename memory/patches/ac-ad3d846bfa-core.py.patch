@@ -1,0 +1,23 @@
+# backend/core.py
+# [alta] Race condition no rate limiting — contagem não atómica — Substituir a lógica por uma operação atómica com `find_one_and_update` usando `$inc` e `$setOnInsert`, verificando o valor retornado. Alternativamente, usar Redis com comandos INCR/EXPIRE que são atómicos por natureza.
+
+--- a/core.py
++++ b/core.py
+@@ -async def rate_limit(...):
+-    doc = await db.rate_limits.find_one({"key": key})
+-    if doc and datetime.fromisoformat(doc["start"]) + timedelta(seconds=window_s) > now:
+-        if doc["count"] >= limit:
+-            raise HTTPException(status_code=429, detail=detail)
+-        await db.rate_limits.update_one({"key": key}, {"$inc": {"count": 1}})
+-    else:
+-        await db.rate_limits.update_one({"key": key}, {"$set": {"key": key, "start": now.isoformat(), "count": 1}}, upsert=True)
++    window_start = now - timedelta(seconds=window_s)
++    doc = await db.rate_limits.find_one_and_update(
++        {"key": key, "start": {"$gt": window_start.isoformat()}},
++        {"$inc": {"count": 1}},
++        return_document=True
++    )
++    if doc is None:
++        await db.rate_limits.update_one({"key": key}, {"$set": {"key": key, "start": now.isoformat(), "count": 1}}, upsert=True)
++    elif doc["count"] > limit:
++        raise HTTPException(status_code=429, detail=detail)
