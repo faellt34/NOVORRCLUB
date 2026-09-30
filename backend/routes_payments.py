@@ -31,9 +31,9 @@ def _stripe_probe() -> dict:
         info["erro"] = e.user_message or str(e)[:160]
         return info
     try:
-        stripe.Account.list(limit=1)
+        _v2().v2.core.accounts.list({"limit": 1})
         info["connect_enabled"] = True
-    except stripe.error.StripeError:
+    except stripe.StripeError:
         info["connect_enabled"] = False
     return info
 
@@ -375,39 +375,68 @@ async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
     return {"ok": True, "iban": iban}
 
 
+CONNECT_INCLUDE = ["configuration.merchant", "configuration.recipient", "requirements"]
+
+
+def _v2():
+    return stripe.StripeClient(os.environ["STRIPE_SECRET_KEY"])
+
+
+def _connect_create(email: str, nome: str, partner_id: str):
+    return _v2().v2.core.accounts.create({
+        "contact_email": email, "display_name": nome, "dashboard": "express",
+        "identity": {"country": "pt", "entity_type": "company", "business_details": {"registered_name": nome}},
+        "defaults": {"responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
+        "configuration": {"merchant": {"capabilities": {"card_payments": {"requested": True}}}, "recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}}},
+        "metadata": {"partner_id": partner_id}, "include": CONNECT_INCLUDE})
+
+
+def _connect_link(acct_id: str, origin: str):
+    return _v2().v2.core.account_links.create({"account": acct_id, "use_case": {"type": "account_onboarding", "account_onboarding": {
+        "configurations": ["merchant", "recipient"], "return_url": f"{origin}/parceiro?connect=return", "refresh_url": f"{origin}/parceiro?connect=refresh"}}})
+
+
+def _connect_status(acct_id: str) -> dict:
+    a = _v2().v2.core.accounts.retrieve(acct_id, {"include": CONNECT_INCLUDE})
+    cfg = a.configuration
+    card = getattr(getattr(getattr(cfg, "merchant", None), "capabilities", None), "card_payments", None)
+    tr = getattr(getattr(getattr(getattr(cfg, "recipient", None), "capabilities", None), "stripe_balance", None), "stripe_transfers", None)
+    summary = getattr(getattr(a, "requirements", None), "summary", None)
+    pending = bool(summary and getattr(summary, "minimum_deadline", None) and summary.minimum_deadline.status in ("past_due", "currently_due", "eventually_due"))
+    return {"connected": True, "charges_enabled": bool(card and card.status == "active"), "payouts_enabled": bool(tr and tr.status == "active"), "details_submitted": not pending}
+
+
 @router.post("/partner/connect/onboard")
 async def connect_onboard(body: dict, user: dict = Depends(require_role("partner"))):
+    import asyncio
     partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
-    origin = (body.get("origin_url") or "").rstrip("/")
+    origin = (body.get("origin_url") or os.environ.get("FRONTEND_URL", "")).rstrip("/")
     try:
         acct_id = partner.get("stripe_account_id")
         if not acct_id:
-            acct = stripe.Account.create(type="express", country="PT", email=user["email"], business_type="company",
-                                         capabilities={"card_payments": {"requested": True}, "transfers": {"requested": True}},
-                                         business_profile={"name": partner.get("nome", user["nome"])}, metadata={"partner_id": user["partner_id"]})
+            acct = await asyncio.to_thread(_connect_create, user["email"], partner.get("nome", user["nome"]), user["partner_id"])
             acct_id = acct.id
             await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
-        link = stripe.AccountLink.create(account=acct_id, refresh_url=f"{origin}/parceiro?connect=refresh", return_url=f"{origin}/parceiro?connect=return", type="account_onboarding")
-    except stripe.error.StripeError as e:
-        msg = e.user_message or str(e)
-        if "signed up for Connect" in msg:
+        link = await asyncio.to_thread(_connect_link, acct_id, origin)
+    except stripe.StripeError as e:
+        msg = getattr(e, "user_message", None) or str(e)
+        if "signed up for Connect" in msg or "Connect" in msg and "not" in msg.lower():
             return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve reclamar a conta Stripe e ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
-        raise HTTPException(status_code=502, detail=f"Stripe Connect indisponível: {msg}")
+        raise HTTPException(status_code=502, detail=f"Stripe Connect indisponível: {msg[:200]}")
     await audit("CONFIGURAÇÃO", f"Onboarding Stripe Connect iniciado · {partner.get('nome')}", user, acct_id)
     return {"available": True, "url": link.url, "account_id": acct_id}
 
 
 @router.get("/partner/connect/status")
 async def connect_status(user: dict = Depends(require_role("partner"))):
+    import asyncio
     partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
     acct_id = partner.get("stripe_account_id")
     if not acct_id:
         return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
     try:
-        a = stripe.Account.retrieve(acct_id)
-        info = {"connected": True, "charges_enabled": bool(a.charges_enabled), "payouts_enabled": bool(a.payouts_enabled), "details_submitted": bool(a.details_submitted),
-                "bank_last4": (a.external_accounts.data[0].last4 if getattr(a, "external_accounts", None) and a.external_accounts.data else None)}
-    except stripe.error.StripeError:
+        info = await asyncio.to_thread(_connect_status, acct_id)
+    except stripe.StripeError:
         info = {"connected": True, "charges_enabled": bool(partner.get("stripe_charges_enabled")), "payouts_enabled": False}
     await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"]}})
     return info

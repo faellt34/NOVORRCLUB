@@ -202,6 +202,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Créditos IA: `llm_usage` (dia, origem diretor/subagente/auditoria); `_llm_guard` → 429 acima do limite diário (`settings.diretor.limite_diario`, default 60); `GET /diretor/uso`, `POST /diretor/uso/limite` (5–1000); `CreditMeter` no cabeçalho do Diretor (clicar altera limite); `window.confirm` com custo (14 chamadas) antes da auditoria; regra 7 no prompt (só chama subagentes se o CEO pedir explicitamente)
 - **Erro 522 (Cloudflare → origem) em rrclub.online**: pedido de RCA ao deployer em curso; código funciona em preview. Provável: DNS/proxy do domínio ou pods sem secrets obrigatórios.
 
+### 2026-06 · Stripe Connect migrado para Accounts v2 + estado do 522 ✅ (self-tested)
+- Bug real encontrado: `stripe.Account.create` (v1) agora é recusado ("Stripe no longer recommends Accounts v1") → onboarding do parceiro devolvia 502. Reescrito com `stripe.StripeClient(...).v2.core.accounts.create` (dashboard express, merchant card_payments + recipient stripe_transfers, fees/losses = application), `v2.core.account_links.create` (use_case account_onboarding), estado via `configuration.*.capabilities.*.status == "active"`. Testado em preview: link `connect.stripe.com/setup/e/...` gerado, idempotente (2ª chamada reutiliza conta). Conta de teste `acct_1ULWtpLjzpPp2bmR` ficou associada ao "Parceiro Exemplo" (preview).
+- 522: às 23:24 UTC rrclub.online respondia 200 e backend vivo (`/api/auth/me` 401) mas com **build antigo** (`/api/payments/config` 404). O 522 foi transitório (rollouts). Redeploy dispachado; RCA do deployer ainda sem resposta.
+- Passar a live e concluir KYC do hotel são ações do utilizador (Payments tab → reclamar sandbox; parceiro → "Continuar onboarding").
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
