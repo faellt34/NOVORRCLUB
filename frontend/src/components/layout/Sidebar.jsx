@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { useT } from "../../context/I18nContext";
@@ -30,6 +30,7 @@ const MENUS = {
     { to: "/admin/gestao", icon: Settings, key: "manage", id: "gestao" },
     { to: "/admin/pagamentos", icon: Wallet, key: "payouts", id: "pagamentos" },
     { to: "/admin/definicoes", icon: SlidersHorizontal, key: "settings", id: "definicoes" },
+    { to: "/admin/diretor", icon: Briefcase, key: "diretor", id: "diretor" },
     { to: "/mensagens", icon: MessageSquare, key: "messages", id: "mensagens", badge: "messages" },
     { to: "/notificacoes", icon: Bell, key: "notifications", id: "notificacoes", badge: "notifications" },
     { to: "/ebooks", icon: BookOpen, key: "ebooks", id: "e-books-guias" },

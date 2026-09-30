@@ -19,6 +19,7 @@ import Notifications from "@/pages/Notifications";
 import PaymentResult from "@/pages/PaymentResult";
 import AdminPayouts from "@/pages/AdminPayouts";
 import AdminSettings from "@/pages/AdminSettings";
+import Diretor from "@/pages/Diretor";
 import { ForgotPassword, ResetPassword } from "@/pages/PasswordRecovery";
 
 const ROLE_HOME = { influencer: "/influencer", partner: "/parceiro", admin: "/admin" };
@@ -83,6 +84,7 @@ function App() {
                 <Route path="/admin/gestao" element={<AdminManage />} />
                 <Route path="/admin/pagamentos" element={<AdminPayouts />} />
                 <Route path="/admin/definicoes" element={<AdminSettings />} />
+                <Route path="/admin/diretor" element={<Diretor />} />
               </Route>
               <Route path="*" element={<RoleRedirect />} />
             </Route>
