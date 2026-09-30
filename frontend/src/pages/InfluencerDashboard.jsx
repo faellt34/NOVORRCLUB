@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark, QrCode, Sparkles } from "lucide-react";
+import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark, QrCode, Sparkles, Image as ImageIcon } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { QRCodeSVG } from "qrcode.react";
 import { CouponQrDialog, renderCouponPng } from "../components/CouponQrDialog";
 import { CaptionDialog } from "../components/CaptionDialog";
+import { StoryImageDialog } from "../components/StoryImageDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -42,6 +43,7 @@ export default function InfluencerDashboard() {
   const [ibanEdit, setIbanEdit] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
   const [captionCampaign, setCaptionCampaign] = useState(null);
+  const [imageCampaign, setImageCampaign] = useState(null);
   const [site, setSite] = useState(window.location.origin);
   useEffect(() => { getSiteUrl().then(setSite); }, []);
   useEffect(() => { api.get("/influencer/me").then((r) => setProfile(r.data)).catch(() => {}); }, []);
@@ -189,6 +191,9 @@ export default function InfluencerDashboard() {
               <button data-testid="coupon-ai-captions" onClick={() => setCaptionCampaign(featured)} className="w-full mt-2 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
                 <Sparkles className="w-4 h-4" /> Legendas IA para o story (PT · EN · ES)
               </button>
+              <button data-testid="coupon-ai-image" onClick={() => setImageCampaign(featured)} className="w-full mt-2 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
+                <ImageIcon className="w-4 h-4" /> Imagem de story IA (Gemini)
+              </button>
             </>
           ) : <p className="text-sm text-slate-400 py-10">Sem campanhas ativas.</p>}
         </div>
@@ -275,6 +280,7 @@ export default function InfluencerDashboard() {
       </div>
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
       <CaptionDialog campaign={captionCampaign} open={!!captionCampaign} onOpenChange={(o) => !o && setCaptionCampaign(null)} />
+      <StoryImageDialog campaign={imageCampaign} open={!!imageCampaign} onOpenChange={(o) => !o && setImageCampaign(null)} />
     </div>
   );
 }

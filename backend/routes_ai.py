@@ -81,6 +81,36 @@ async def ai_history(session_id: str, user: dict = Depends(require_role("admin")
     return await db.ai_messages.find({"session_id": session_id}, NO_ID).sort("date", 1).to_list(100)
 
 
+class StoryImageIn(BaseModel):
+    campaign_id: str
+    estilo: str = "luxo"
+
+
+@router.post("/influencer/ai/story-image")
+async def ai_story_image(body: StoryImageIn, user: dict = Depends(require_role("influencer"))):
+    import base64
+    from fastapi import HTTPException
+    from fastapi.responses import Response
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    c = await db.campaigns.find_one({"id": body.campaign_id, "influencer_id": user.get("influencer_id")}, NO_ID)
+    if not c:
+        raise HTTPException(status_code=404, detail="Campanha não encontrada")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    estilos = {"luxo": "dark luxury editorial photography, deep purple and gold accents, soft candlelight, shallow depth of field",
+               "fresco": "bright airy lifestyle photo, natural daylight, pastel tones, minimal and clean",
+               "noite": "vibrant nightlife, neon purple and violet lights, city bokeh, cinematic"}
+    prompt = (f"Vertical 9:16 Instagram story image for a premium {partner.get('categoria') or 'restaurant'} named '{partner.get('nome')}' in {partner.get('cidade') or 'Lisbon'}. "
+              f"{estilos.get(body.estilo, estilos['luxo'])}. Show an inviting scene (signature dish or elegant ambience), no people faces. "
+              f"Leave clean negative space in the lower third. Render the text '{c['desconto']:g}% OFF' large and the coupon code '{c['cupom']}' in a small elegant pill, both in white sans-serif, perfectly legible. "
+              "Brand mark: small text 'RRclub' at the top. No other text, no watermarks.")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("img"), system_message="You generate polished marketing images.").with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    _, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
+    if not images:
+        raise HTTPException(status_code=502, detail="O Gemini não devolveu imagem. Tente outro estilo.")
+    img = images[0]
+    return Response(base64.b64decode(img["data"]), media_type=img.get("mime_type", "image/png"), headers={"Content-Disposition": f'inline; filename="story-{c["cupom"]}.png"'})
+
+
 class CaptionIn(BaseModel):
     campaign_id: str
     tom: str = "elegante"
