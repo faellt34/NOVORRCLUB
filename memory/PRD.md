@@ -158,6 +158,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Página `/admin/diretor` ("Diretor IA" na sidebar): chat com histórico + painel Ações Pendentes/Aprovadas/Rejeitadas
 - Nota: stack real é FastAPI+React+Mongo (não Next.js); usa EMERGENT_LLM_KEY (não GEMINI_API_KEY). Dados de teste limpos. **Não publicado** — aguarda teste do utilizador.
 
+### 2026-06 · Subagentes reais do Diretor ✅ (iteration_28)
+- `subagente_marketing(pergunta)` (dados de campanhas/funil/financeiro), `subagente_frontend(pergunta, ficheiro?)` e `subagente_backend(pergunta, ficheiro?)` (leem código real em `frontend/src` e `backend/`, só leitura, com índice + seleção de ficheiros por palavras-chave) — cada um chama Claude Sonnet 4.6; o Diretor (Gemini) integra as conclusões; `chamadas[].resumo` mostrado em painéis "🧩 Subagente" na página Diretor
+- Achados do subagente Backend a considerar: `/payments/status/{session_id}` sem auth; webhook aceita payload se `STRIPE_WEBHOOK_SECRET` vazio; token JWT em query string no PDF de e-books
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

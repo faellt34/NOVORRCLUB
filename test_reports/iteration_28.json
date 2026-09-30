@@ -1,0 +1,22 @@
+{
+  "summary": "Iter 28 — Diretor IA subagentes (Gemini 2.5 Flash orchestrator + 3 Claude Sonnet 4.6 read-functions: subagente_marketing / subagente_frontend / subagente_backend). Backend pytest 3/3 in 47.68s: (1) POST /api/diretor/conversar 'plano para aumentar a conversão' -> chamadas contains subagente_marketing with non-empty resumo (>20 chars), resposta_diretor non-empty PT; (2) 'auditar PublicCoupon.jsx' -> subagente_frontend chamado, resumo populado; (3) 'revisão de segurança de routes_payments.py' -> subagente_backend chamado, resumo populado, regex de segredos (sk_*/re_*/whsec_*) NÃO encontrado no resumo nem na resposta_diretor. Frontend E2E: login admin -> /admin/diretor (diretor-page) -> 4 SUGGESTIONS visíveis; clicked 'Pede ao subagente Backend uma revisão de segurança dos pagamentos' -> diretor-msg-diretor apareceu em ~30s -> diretor-subagente-subagente_backend details element presente com análise real (600 chars) referenciando linhas de código (payment_status L118, JWT em query string, STRIPE_WEBHOOK_SECRET). Zero erros de consola.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter28_subagentes.py", "/app/test_reports/pytest/iter28.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_diretor._subagent: cada chamada de subagente cria um LlmChat novo com session_id aleatório — sem cache/limitador. Combinado com o loop de 6 turnos do Gemini, uma pergunta 'delega a todos' pode custar 4+ chamadas Sonnet 4.6 (>$0.10). Adicionar rate limit por user e/ou reutilizar session_id por conversa.",
+    "routes_diretor._code_read: budget de 24000 chars é aplicado antes do primeiro ficheiro; se ficheiro pedido pelo utilizador tiver 40k, é truncado silenciosamente sem aviso ao subagente. Considerar assinalar '(truncado)' no output.",
+    "routes_diretor._pick_files: default de fallback inclui 'routes_payments.py' e 'realtime.py' sempre — se o admin perguntar sobre 'auth', o subagente_backend recebe payments.py por defeito e pode responder off-topic. Melhorar heurística de scoring (usar match parcial em conteúdo do ficheiro, não só nome).",
+    "conversar loop: chamada a _subagent conta como 1 dos 6 turnos do Gemini mas o resultado JSON completo (até 9000 chars incluindo o texto do Claude) volta como user message — pode fazer o Gemini repetir/parafrasear em vez de sintetizar. Considerar resumir/anexar apenas 'analise' e não o dict inteiro.",
+    "Segurança verificada: subagente_backend leu routes_payments.py e NÃO expôs sk_/re_/whsec_ apesar de mencionar STRIPE_WEBHOOK_SECRET pelo nome (correto). Test-gate de secrets a passar."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter28_subagentes.py", "/app/test_reports/iteration_28.json"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com / Robson2026!",
+  "seed_data_creation": "Nenhum — todas as chamadas subagente_* são read-only (não fazem queue em acoes_pendentes). Conversas persistidas em db.conversas_diretor conforme design.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Diretor subagentes: 3 novas funções read em routes_diretor.py (linhas 132-153): subagente_marketing/frontend/backend, todas encapsulando LlmChat com Claude Sonnet 4.6. Cada chamada demora 15-35s. resposta em chamadas[].resumo vem de res['analise'] (linha 197 do routes_diretor). Frontend: Diretor.jsx renderiza <details data-testid='diretor-subagente-{funcao}'> por cada chamada com resumo (linhas 54-58). URL frontend real = https://robson-dashboard.preview.emergentagent.com (o outro subdomínio no request está inativo).",
+  "rca of the issue": "N/A — no defects."
+}
