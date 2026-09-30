@@ -187,6 +187,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Funções de leitura (sem aprovação): `listar_ficheiros_github(pasta)`, `ler_codigo_github(caminho)`, `procurar_codigo_github(termo)` via GitHub API; env `GITHUB_REPO=faellt34/NOVORRCLUB`, `GITHUB_BRANCH=main`, `GITHUB_TOKEN` opcional (sem token: repo público, 60 req/h, pesquisa por tree + raw grep em vez de /search/code)
 - **Produção**: adicionar `GITHUB_REPO` e `GITHUB_BRANCH` aos secrets
 
+### 2026-06 · Correções aprovadas pelo CEO aplicadas manualmente ✅
+- Os 4 diffs do Diretor eram inválidos (sem `@@ -n,m` / caminho sem `backend/`) → auto-apply recusou corretamente. Aplicado à mão em `core.py`: `rate_limit` atómico (`find_one_and_update`), `client_ip` usa último XFF, `revoke_token` exige `jti`+`sub`. Resend "client local" marcado não aplicável (SDK só tem api_key global). Estado registado em `acoes_pendentes.aplicacao`.
+- Melhoria futura: pedir ao subagente diffs com hunks numerados e caminho `backend/…`, e validar com `git apply --check` antes de propor.
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

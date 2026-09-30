@@ -73,7 +73,7 @@ async def revoke_token(token: Optional[str]):
     if not token:
         return
     try:
-        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM], options={"verify_exp": False, "require": ["jti", "sub"]})
     except jwt.InvalidTokenError:
         return
     if payload.get("jti"):
@@ -101,18 +101,16 @@ async def get_current_user(request: Request) -> dict:
 
 async def rate_limit(key: str, limit: int, window_s: int, detail: str = "Demasiados pedidos. Tente novamente mais tarde."):
     now = datetime.now(timezone.utc)
-    doc = await db.rate_limits.find_one({"key": key})
-    if doc and datetime.fromisoformat(doc["start"]) + timedelta(seconds=window_s) > now:
-        if doc["count"] >= limit:
-            raise HTTPException(status_code=429, detail=detail)
-        await db.rate_limits.update_one({"key": key}, {"$inc": {"count": 1}})
-    else:
+    doc = await db.rate_limits.find_one_and_update({"key": key, "start": {"$gt": (now - timedelta(seconds=window_s)).isoformat()}}, {"$inc": {"count": 1}}, return_document=True)
+    if doc is None:
         await db.rate_limits.update_one({"key": key}, {"$set": {"key": key, "start": now.isoformat(), "count": 1}}, upsert=True)
+    elif doc["count"] > limit:
+        raise HTTPException(status_code=429, detail=detail)
 
 
 def client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "")
-    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
+    fwd = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    return fwd[-1] if fwd else (request.client.host if request.client else "?")
 
 
 def require_role(*roles):
