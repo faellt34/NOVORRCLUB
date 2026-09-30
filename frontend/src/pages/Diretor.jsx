@@ -3,7 +3,7 @@ import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText } from "luc
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 
-const SUGGESTIONS = ["Resumo do dashboard", "Quais hotéis têm melhor performance?", "Consulta o financeiro", "Propõe uma campanha para o melhor hotel"];
+const SUGGESTIONS = ["Resumo do dashboard", "Pede ao subagente Marketing um plano para aumentar a conversão", "Pede ao subagente Frontend uma auditoria da página pública do cupão", "Pede ao subagente Backend uma revisão de segurança dos pagamentos"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code" };
 const fmt = (d) => new Date(d).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -51,6 +51,12 @@ export default function Diretor() {
                 <div data-testid="diretor-msg-user" className="ml-auto max-w-[85%] rounded-2xl px-4 py-2.5 bg-purple-600 text-white text-sm whitespace-pre-wrap">{m.mensagem_user}</div>
                 <div data-testid="diretor-msg-diretor" className="max-w-[92%] rounded-2xl px-4 py-2.5 bg-slate-50 border border-slate-100 text-sm text-slate-800 whitespace-pre-wrap">
                   {m.resposta_diretor}
+                  {m.chamadas?.filter((c) => c.resumo).map((c, i) => (
+                    <details key={i} data-testid={`diretor-subagente-${c.funcao}`} className="mt-2 rounded-xl bg-white border border-purple-100 p-2">
+                      <summary className="text-[11px] font-semibold text-purple-700 cursor-pointer">🧩 {c.funcao.replace("subagente_", "Subagente ")}{c.args?.ficheiro ? ` · ${c.args.ficheiro}` : ""}</summary>
+                      <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap">{c.resumo}</p>
+                    </details>
+                  ))}
                   {(m.chamadas?.length > 0 || m.acoes_ids?.length > 0) && <p className="mt-2 text-[10px] uppercase tracking-wider text-slate-400">{m.chamadas?.map((c) => c.funcao).join(" · ")}{m.acoes_ids?.length ? ` · ${m.acoes_ids.length} ação pendente` : ""} · {fmt(m.timestamp)}</p>}
                 </div>
               </div>

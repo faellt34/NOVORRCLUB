@@ -29,7 +29,11 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- enviar_email(destinatario, assunto, corpo)\n"
           "- gerar_qr_code(influencer_id, campanha_id)\n"
           "- consultar_financeiro(): IVA, Stripe fees, margens\n"
-          "- listar_influencers()")
+          "- listar_influencers()\n"
+          "- subagente_marketing(pergunta): analisa campanhas, cliques, conversão, origens e propõe ações\n"
+          "- subagente_frontend(pergunta): lê o código React em frontend/src e analisa UI/UX, bugs, melhorias (pode indicar ficheiro)\n"
+          "- subagente_backend(pergunta): lê o código FastAPI em backend/ e analisa API, segurança, performance (pode indicar ficheiro)\n"
+          "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final.")
 
 
 class MsgIn(BaseModel):
@@ -77,7 +81,80 @@ async def consultar_financeiro(**_):
             "split": {"hotel_75pct": round(bruto * 0.75, 2), "influencer_5pct": round(bruto * 0.05, 2), "rrclub_10pct": round(bruto * 0.10, 2)}, "margem_rrclub": round(bruto * 0.10, 2), "vendas": len(reds)}
 
 
-READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro}
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CODE_DIRS = {"frontend": os.path.join(ROOT, "frontend", "src"), "backend": os.path.join(ROOT, "backend")}
+
+
+def _code_index(area: str) -> list[str]:
+    base, out = CODE_DIRS[area], []
+    for dp, dn, fns in os.walk(base):
+        dn[:] = [d for d in dn if d not in ("node_modules", "__pycache__", "ui", "media")]
+        for f in fns:
+            if f.endswith((".jsx", ".js", ".py", ".css")) and not f.startswith("."):
+                out.append(os.path.relpath(os.path.join(dp, f), base))
+    return sorted(out)
+
+
+def _code_read(area: str, files: list[str], budget: int = 24000) -> str:
+    parts, used = [], 0
+    for rel in files:
+        p = os.path.normpath(os.path.join(CODE_DIRS[area], rel))
+        if not p.startswith(CODE_DIRS[area]) or not os.path.isfile(p):
+            continue
+        txt = open(p, encoding="utf-8", errors="ignore").read()
+        chunk = txt[: max(0, min(len(txt), budget - used))]
+        used += len(chunk)
+        parts.append(f"===== {rel} ({len(txt)} chars) =====\n{chunk}")
+        if used >= budget:
+            break
+    return "\n\n".join(parts)
+
+
+def _pick_files(area: str, pergunta: str, ficheiro: str) -> list[str]:
+    idx = _code_index(area)
+    if ficheiro:
+        hits = [f for f in idx if ficheiro.lower() in f.lower()]
+        if hits:
+            return hits[:3]
+    words = [w.lower() for w in pergunta.replace("/", " ").split() if len(w) > 3]
+    scored = sorted(idx, key=lambda f: -sum(1 for w in words if w in f.lower()))
+    default = {"frontend": ["pages/AdminDashboard.jsx", "pages/PublicCoupon.jsx", "services/ws.js"], "backend": ["routes_data.py", "routes_payments.py", "realtime.py"]}[area]
+    return list(dict.fromkeys(scored[:2] + default))[:4]
+
+
+async def _subagent(role: str, system: str, prompt: str) -> dict:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model("anthropic", "claude-sonnet-4-6")
+    txt = await chat.send_message(UserMessage(text=prompt))
+    return {"subagente": role, "analise": txt.strip()[:4000]}
+
+
+async def subagente_marketing(pergunta: str = "Analisa as campanhas", **_):
+    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).to_list(100))
+    claims = await db.coupon_claims.find({"date": {"$gte": since(30)}}, {"_id": 0, "coupon": 1, "origem": 1, "qr_downloaded": 1, "converted": 1}).to_list(20000)
+    dash = await ler_dashboard()
+    fin = await consultar_financeiro()
+    data = {"dashboard": dash, "financeiro": fin, "campanhas": [{k: c.get(k) for k in ("nome", "cupom", "parceiro", "influencer", "desconto", "comissao", "status", "validade", "uses", "claims")} for c in camps],
+            "origens": {o: sum(1 for c in claims if c.get("origem") == o) for o in {c.get("origem") for c in claims}},
+            "qr_baixados": sum(1 for c in claims if c.get("qr_downloaded")), "convertidos": sum(1 for c in claims if c.get("converted"))}
+    return await _subagent("Marketing", "És o subagente de Marketing da RRClub (cupões QR de influencers para hotéis/restaurantes premium). Português de Portugal, conciso, orientado a ações com números. Máx. 200 palavras.",
+                           f"Pergunta do Diretor: {pergunta}\n\nDADOS:\n{json.dumps(data, ensure_ascii=False, default=str)[:12000]}")
+
+
+async def subagente_frontend(pergunta: str = "Analisa a UI", ficheiro: str = "", **_):
+    files = _pick_files("frontend", pergunta, ficheiro)
+    return {**await _subagent("Frontend", "És o subagente Frontend da RRClub: especialista React/Tailwind. Analisas código real e apontas bugs, riscos de UX, acessibilidade e melhorias concretas com referência a ficheiro/linha. Português de Portugal, conciso (máx. 220 palavras).",
+                              f"Pergunta do Diretor: {pergunta}\n\nÍNDICE (frontend/src): {', '.join(_code_index('frontend'))}\n\nCÓDIGO:\n{_code_read('frontend', files)}"), "ficheiros_lidos": files}
+
+
+async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "", **_):
+    files = _pick_files("backend", pergunta, ficheiro)
+    return {**await _subagent("Backend", "És o subagente Backend da RRClub: especialista FastAPI/MongoDB/Stripe. Analisas código real e apontas bugs, falhas de segurança/autorização, performance e melhorias concretas com referência a ficheiro/função. Nunca reveles valores de segredos. Português de Portugal, conciso (máx. 220 palavras).",
+                              f"Pergunta do Diretor: {pergunta}\n\nÍNDICE (backend/): {', '.join(_code_index('backend'))}\n\nCÓDIGO:\n{_code_read('backend', files)}"), "ficheiros_lidos": files}
+
+
+READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
+              "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend}
 
 
 def _parse(txt: str) -> dict:
@@ -117,8 +194,8 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
                     res = await READ_FUNCS[fn](**args)
                 except TypeError:
                     res = {"erro": "argumentos inválidos"}
-                chamadas.append({"funcao": fn, "args": args})
-                text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:6000]}\n\nContinua (outra função ou resposta final em JSON)."
+                chamadas.append({"funcao": fn, "args": args, "resumo": (res.get("analise", "")[:600] if isinstance(res, dict) else "")})
+                text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\nContinua (outra função ou resposta final em JSON)."
             elif fn in WRITE_ACTIONS:
                 a = await _queue(fn, args)
                 pendentes.append(a)
