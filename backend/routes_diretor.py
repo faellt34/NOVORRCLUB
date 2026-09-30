@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import os
 import re
@@ -38,6 +39,9 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- subagente_marketing(pergunta): analisa campanhas, cliques, conversão, origens e propõe ações\n"
           "- subagente_frontend(pergunta): lê o código React em frontend/src e analisa UI/UX, bugs, melhorias (pode indicar ficheiro)\n"
           "- subagente_backend(pergunta): lê o código FastAPI em backend/ e analisa API, segurança, performance (pode indicar ficheiro)\n"
+          "- listar_ficheiros_github(pasta): lista ficheiros/pastas do repositório GitHub do projeto (pasta vazia = raiz)\n"
+          "- ler_codigo_github(caminho): devolve o conteúdo de um ficheiro do repositório GitHub (ex.: backend/server.py)\n"
+          "- procurar_codigo_github(termo): procura um termo no código do repositório GitHub e devolve os ficheiros onde aparece\n"
           "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código sugerida pelos subagentes em ações pendentes (area: frontend|backend; diff em formato unified). NÃO altera código até aprovação.\n"
           "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', chama propor_correcao com esses dados.")
 
@@ -128,6 +132,81 @@ def _pick_files(area: str, pergunta: str, ficheiro: str) -> list[str]:
     return list(dict.fromkeys(scored[:2] + default))[:4]
 
 
+GH_REPO = os.environ.get("GITHUB_REPO", "")
+GH_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+
+
+def _gh_headers() -> dict:
+    h = {"Accept": "application/vnd.github+json", "User-Agent": "rrclub-diretor"}
+    if os.environ.get("GITHUB_TOKEN"):
+        h["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    return h
+
+
+async def _gh(url: str, params: dict = None) -> tuple[int, object]:
+    import httpx
+    async with httpx.AsyncClient(timeout=20) as c:
+        r = await c.get(url, headers=_gh_headers(), params=params)
+    try:
+        return r.status_code, r.json()
+    except Exception:
+        return r.status_code, {"message": r.text[:200]}
+
+
+def _gh_path(p: str) -> str:
+    p = os.path.normpath("/" + str(p or "")).lstrip("/")
+    return "" if p == "." else p
+
+
+async def listar_ficheiros_github(pasta: str = "", **_):
+    if not GH_REPO:
+        return {"erro": "GITHUB_REPO não configurado"}
+    st, data = await _gh(f"https://api.github.com/repos/{GH_REPO}/contents/{_gh_path(pasta)}", {"ref": GH_BRANCH})
+    if st != 200:
+        return {"erro": f"GitHub {st}: {data.get('message', '') if isinstance(data, dict) else ''}"}
+    items = data if isinstance(data, list) else [data]
+    return {"repo": GH_REPO, "branch": GH_BRANCH, "pasta": _gh_path(pasta) or "/", "itens": [{"nome": i["name"], "tipo": i["type"], "caminho": i["path"], "tamanho": i.get("size")} for i in items][:200]}
+
+
+async def ler_codigo_github(caminho: str = "", **_):
+    if not GH_REPO:
+        return {"erro": "GITHUB_REPO não configurado"}
+    path = _gh_path(caminho)
+    if not path:
+        return {"erro": "indica o caminho do ficheiro (ex.: backend/server.py)"}
+    st, data = await _gh(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", {"ref": GH_BRANCH})
+    if st != 200 or not isinstance(data, dict) or data.get("type") != "file":
+        return {"erro": f"ficheiro não encontrado ({st}); usa listar_ficheiros_github(pasta)"}
+    content = base64.b64decode(data.get("content", "")).decode("utf-8", errors="ignore") if data.get("encoding") == "base64" else ""
+    return {"repo": GH_REPO, "caminho": path, "tamanho": data.get("size"), "sha": data.get("sha"), "conteudo": content[:20000], "truncado": len(content) > 20000}
+
+
+async def procurar_codigo_github(termo: str = "", **_):
+    if not GH_REPO:
+        return {"erro": "GITHUB_REPO não configurado"}
+    if not termo.strip():
+        return {"erro": "indica o termo a procurar"}
+    st, data = await _gh("https://api.github.com/search/code", {"q": f"{termo.strip()} repo:{GH_REPO}", "per_page": 20})
+    if st == 200:
+        return {"repo": GH_REPO, "termo": termo, "total": data.get("total_count", 0), "resultados": [{"ficheiro": i["path"], "nome": i["name"]} for i in data.get("items", [])]}
+    st, tree = await _gh(f"https://api.github.com/repos/{GH_REPO}/git/trees/{GH_BRANCH}", {"recursive": "1"})
+    if st != 200:
+        return {"erro": f"GitHub {st}: {tree.get('message', '') if isinstance(tree, dict) else ''}"}
+    t = termo.strip().lower()
+    files = [i for i in tree.get("tree", []) if i["type"] == "blob" and "node_modules" not in i["path"] and i["path"].endswith((".py", ".js", ".jsx", ".css", ".md", ".json", ".yml", ".yaml", ".html"))]
+    hits = [{"ficheiro": i["path"], "onde": "nome"} for i in files if t in i["path"].lower()]
+    import httpx
+    async with httpx.AsyncClient(timeout=20) as c:
+        for i in [f for f in files if (f.get("size") or 0) < 60000 and not any(h["ficheiro"] == f["path"] for h in hits)][:80]:
+            r = await c.get(f"https://raw.githubusercontent.com/{GH_REPO}/{GH_BRANCH}/{i['path']}", headers=_gh_headers())
+            if r.status_code == 200 and t in r.text.lower():
+                ln = next((n for n, l in enumerate(r.text.splitlines(), 1) if t in l.lower()), None)
+                hits.append({"ficheiro": i["path"], "onde": f"linha {ln}"})
+            if len(hits) >= 20:
+                break
+    return {"repo": GH_REPO, "termo": termo, "total": len(hits), "resultados": hits, "nota": "pesquisa sem token: nome + conteúdo dos primeiros 80 ficheiros de código"}
+
+
 async def _subagent(role: str, system: str, prompt: str) -> dict:
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model("anthropic", "claude-sonnet-4-6")
@@ -160,7 +239,8 @@ async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "",
 
 
 READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
-              "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend}
+              "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend,
+              "ler_codigo_github": ler_codigo_github, "listar_ficheiros_github": listar_ficheiros_github, "procurar_codigo_github": procurar_codigo_github}
 
 
 def _parse(txt: str) -> dict:

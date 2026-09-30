@@ -183,6 +183,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Diretor: nome do `.patch` sanitizado; aprovação atómica (`a_executar`); **`POST /api/diretor/acoes/{id}/aplicar`** aplica o diff com `git apply --check` (várias estratégias de caminho), verifica (`py_compile` + `import server` + pytest se existirem testes) e reverte com `git apply -R` se falhar → `aplicacao.status ∈ {aplicada, falhou, revertida}`; botão "Aplicar ao código (com testes)" na tab Aprovadas (`acao-aplicar-{id}`)
 - Re-auditoria: os 10 achados originais desapareceram; o auditor devolve até 6 achados/ficheiro, por isso o total mantém-se ~45 alta (novos itens: TOCTOU/race conditions, paginação, rate limit nos endpoints públicos de cupão/pagamento, IDOR `qr-downloaded`, sem verificação de email no registo)
 
+### 2026-06 · Diretor lê o GitHub ✅ (self-tested)
+- Funções de leitura (sem aprovação): `listar_ficheiros_github(pasta)`, `ler_codigo_github(caminho)`, `procurar_codigo_github(termo)` via GitHub API; env `GITHUB_REPO=faellt34/NOVORRCLUB`, `GITHUB_BRANCH=main`, `GITHUB_TOKEN` opcional (sem token: repo público, 60 req/h, pesquisa por tree + raw grep em vez de /search/code)
+- **Produção**: adicionar `GITHUB_REPO` e `GITHUB_BRANCH` aos secrets
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
