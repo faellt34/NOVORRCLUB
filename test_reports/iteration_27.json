@@ -1,0 +1,23 @@
+{
+  "summary": "Iter 27 — Diretor IA (Gemini 2.5 Flash via emergentintegrations, JSON function-calling loop). Backend 6/6 pytest passed in 26s: (1) partner token -> 403 on /api/diretor/conversar; (2) POST conversar 'Faz um resumo do dashboard' -> 200 with non-empty PT resposta and chamadas includes ler_dashboard; (3) POST conversar 'Cria campanha Teste Diretor…' -> acoes_pendentes[0].tipo_acao=criar_campanha status=pendente, GET /api/diretor/acoes?status=pendente lists it, POST /aprovar -> ok with resultado.cupom, second /aprovar -> 404, GET /api/admin/campanhas contains the new cupom/nome; (4) POST conversar 'Gera contrato… split 75/5/10/10 90 dias' -> gerar_contrato pendente, /rejeitar -> ok, appears in ?status=rejeitada; (5) GET /diretor/conversas returns history (>=2 items). Frontend E2E: login admin -> sidebar 'Diretor IA' -> /admin/diretor loads (diretor-page); suggestion chip 'Faz um resumo do dashboard' triggers diretor-thinking then diretor-msg-diretor within ~30s; diretor-input + diretor-send with explicit criar_campanha prompt yields acao card in Pendentes (acoes-pendentes-count=2); acao-aprovar-{id} click -> resultado.cupom EXEMPL-F40B rendered, card moved to acoes-tab-aprovada; no console errors. Cleanup performed: DELETE /api/admin/campanhas for all 'Diretor' / 'UI Diretor' / 'Teste Diretor' / 'Outubro 2026' campaigns.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter27_diretor.py", "/app/test_reports/pytest/iter27.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_diretor.conversar: no per-user rate limiting; each call runs up to 6 Gemini turns (cost/latency risk). Consider cooldown or max-tokens guard.",
+    "acoes_pendentes documents include admin's user_id via audit only — the queue doc itself has no 'created_by'. If multiple admins use Diretor, provenance of a pending action is lost.",
+    "_executar('enviar_email'): passes assunto as both subject and html — likely a bug (should send corpo as html/body). Currently uncovered by tests since email is queued only when LLM decides.",
+    "conversas_diretor grows unbounded; only last 6 loaded for context but /conversas returns 50. Add TTL or admin-scoped filter for multi-admin future.",
+    "Frontend Diretor.jsx: SUGGESTIONS hidden as soon as any history exists — user has no way to see them again. Minor UX; consider showing them when input empty.",
+    "Diretor.jsx: no retry / abort on 120s timeout; if Gemini stalls the UI just toasts an error and busy state is cleared, but the LLM call server-side keeps running the 6-turn loop. Consider passing an AbortController + backend cancellation."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter27_diretor.py", "/app/test_reports/iteration_27.json"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com / Robson2026!; parceiro.exemplo@club.pt / parceiro123",
+  "seed_data_creation": "Test created transient campaigns via approve; all cleaned up post-run (only pre-existing 'VALENTIS DAYS' remains).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Diretor endpoints: POST /api/diretor/conversar (admin only, 120s), GET /conversas, GET /acoes?status=, POST /acoes/{id}/aprovar|rejeitar, GET /contratos. LLM = Gemini 2.5 Flash via emergentintegrations LlmChat with 6-turn function-calling loop. Write actions (criar_campanha/gerar_contrato/enviar_email/gerar_qr_code) queue in db.acoes_pendentes; only execute on /aprovar. Frontend page /admin/diretor (Diretor.jsx) with data-testid: diretor-page/title/chat/messages/suggestion/msg-user/msg-diretor/thinking/input/send, acoes-panel/pendentes-count, acoes-tab-{pendente|aprovada|rejeitada}, acao-{id}, acao-aprovar-{id}, acao-rejeitar-{id}. Gemini output is non-deterministic; give explicit ids (obtained via /api/admin/parceiros and /api/admin/influencers) and 'Chama X diretamente' instruction to force function invocation.",
+  "rca of the issue": "N/A — no defects."
+}

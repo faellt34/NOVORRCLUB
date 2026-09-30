@@ -152,6 +152,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ### 2026-06 · Gemini (Nano Banana) imagem de story para influencer ✅ (iteration_26)
 - `POST /api/influencer/ai/story-image {campaign_id, estilo}` → imagem 9:16 (gemini-3.1-flash-image-preview) com prato/ambiente do parceiro, "X% OFF", código e marca RRclub; `StoryImageDialog.jsx` (estilos Luxo/Fresco/Noite, guardar PNG, partilhar nativo)
 
+### 2026-06 · Chat "Diretor" (Gemini 2.5 Flash) com aprovação do CEO ✅ (iteration_27: backend 6/6, frontend 100%)
+- `routes_diretor.py` (`/api/diretor/*`, admin): loop de function-calling em JSON; leitura (ler_dashboard, listar_hoteis, listar_influencers, analisar_performance_hotel, consultar_financeiro) executa direto; escrita (criar_campanha, gerar_contrato, enviar_email, gerar_qr_code) vai para `acoes_pendentes` → aprovar executa (campanha real com cupão + WS; contrato em `contratos_gerados`; email via Resend; qr_code_url) / rejeitar
+- Coleções: `conversas_diretor`, `acoes_pendentes`, `contratos_gerados` (+ `campaigns` existente com `data_inicio`, `formato`, `qr_code_url`)
+- Página `/admin/diretor` ("Diretor IA" na sidebar): chat com histórico + painel Ações Pendentes/Aprovadas/Rejeitadas
+- Nota: stack real é FastAPI+React+Mongo (não Next.js); usa EMERGENT_LLM_KEY (não GEMINI_API_KEY). Dados de teste limpos. **Não publicado** — aguarda teste do utilizador.
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
