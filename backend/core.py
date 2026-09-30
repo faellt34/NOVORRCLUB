@@ -31,9 +31,13 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+TOKEN_TTL = timedelta(hours=24)
+ROLES = ("admin", "influencer", "partner")
+
+
 def create_access_token(user_id: str, email: str, role: str) -> str:
-    payload = {"sub": user_id, "email": email, "role": role, "type": "access",
-               "exp": datetime.now(timezone.utc) + timedelta(days=7)}
+    now = datetime.now(timezone.utc)
+    payload = {"sub": user_id, "email": email, "role": role, "type": "access", "jti": uuid.uuid4().hex, "iat": now, "exp": now + TOKEN_TTL}
     return jwt.encode(payload, os.environ["JWT_SECRET"], algorithm=JWT_ALGORITHM)
 
 
@@ -42,28 +46,73 @@ def public_user(user: dict) -> dict:
     return u
 
 
-async def get_current_user(request: Request) -> dict:
+def request_token(request: Request) -> Optional[str]:
     token = request.cookies.get("access_token")
     if not token:
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             token = auth[7:]
-    if not token:
-        raise HTTPException(status_code=401, detail="Não autenticado")
+    return token or None
+
+
+async def decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM], options={"require": ["exp", "sub", "jti"]})
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Sessão expirada")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
-    if payload.get("type") != "access":
+    if payload.get("type") != "access" or not isinstance(payload.get("sub"), str) or payload.get("role") not in ROLES:
         raise HTTPException(status_code=401, detail="Token inválido")
+    if await db.revoked_tokens.find_one({"jti": payload["jti"]}, {"_id": 1}):
+        raise HTTPException(status_code=401, detail="Sessão terminada")
+    return payload
+
+
+async def revoke_token(token: Optional[str]):
+    if not token:
+        return
+    try:
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[JWT_ALGORITHM], options={"verify_exp": False})
+    except jwt.InvalidTokenError:
+        return
+    if payload.get("jti"):
+        await db.revoked_tokens.update_one({"jti": payload["jti"]}, {"$set": {"jti": payload["jti"], "exp": payload.get("exp"), "sub": payload.get("sub"), "date": now_iso()}}, upsert=True)
+
+
+async def user_from_token(token: str) -> dict:
+    payload = await decode_token(token)
     user = await db.users.find_one({"id": payload["sub"]})
-    if not user:
+    if not user or user.get("role") != payload["role"]:
         raise HTTPException(status_code=401, detail="Utilizador não encontrado")
     if user.get("status") == "Suspenso":
         raise HTTPException(status_code=403, detail="Conta suspensa")
+    if user.get("tokens_invalid_before") and payload.get("iat") and payload["iat"] < user["tokens_invalid_before"]:
+        raise HTTPException(status_code=401, detail="Sessão terminada")
     return public_user(user)
+
+
+async def get_current_user(request: Request) -> dict:
+    token = request_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    return await user_from_token(token)
+
+
+async def rate_limit(key: str, limit: int, window_s: int, detail: str = "Demasiados pedidos. Tente novamente mais tarde."):
+    now = datetime.now(timezone.utc)
+    doc = await db.rate_limits.find_one({"key": key})
+    if doc and datetime.fromisoformat(doc["start"]) + timedelta(seconds=window_s) > now:
+        if doc["count"] >= limit:
+            raise HTTPException(status_code=429, detail=detail)
+        await db.rate_limits.update_one({"key": key}, {"$inc": {"count": 1}})
+    else:
+        await db.rate_limits.update_one({"key": key}, {"$set": {"key": key, "start": now.isoformat(), "count": 1}}, upsert=True)
+
+
+def client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
 
 
 def require_role(*roles):

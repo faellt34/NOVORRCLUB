@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText } from "lucide-react";
+import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText, Hammer } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { SecurityAudit } from "../components/SecurityAudit";
@@ -33,6 +33,13 @@ export default function Diretor() {
   const decide = async (id, op) => {
     try { const { data } = await api.post(`/diretor/acoes/${id}/${op}`); toast.success(op === "aprovar" ? `Ação executada${data.resultado?.cupom ? ` · cupão ${data.resultado.cupom}` : ""}` : "Ação rejeitada"); load(); }
     catch (e) { toast.error(apiError(e)); }
+  };
+
+  const [applying, setApplying] = useState(null);
+  const aplicar = async (id) => {
+    setApplying(id);
+    try { const { data } = await api.post(`/diretor/acoes/${id}/aplicar`, {}, { timeout: 300000 }); data.status === "aplicada" ? toast.success(`Patch aplicado · ${data.verificacao}`) : toast.error(`Patch ${data.status}: ${data.erro?.slice(0, 120)}`); load(); }
+    catch (e) { toast.error(apiError(e)); } finally { setApplying(null); }
   };
 
   const shown = acoes.filter((a) => a.status === tab);
@@ -89,7 +96,18 @@ export default function Diretor() {
                     <button data-testid={`acao-aprovar-${a.id}`} onClick={() => decide(a.id, "aprovar")} className="py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center justify-center gap-1 btn-press"><Check className="w-3.5 h-3.5" /> Aprovar</button>
                     <button data-testid={`acao-rejeitar-${a.id}`} onClick={() => decide(a.id, "rejeitar")} className="py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold inline-flex items-center justify-center gap-1 btn-press"><X className="w-3.5 h-3.5" /> Rejeitar</button>
                   </div>
-                ) : a.resultado && <p className="text-[11px] text-emerald-700 inline-flex items-center gap-1"><FileText className="w-3 h-3" /> {JSON.stringify(a.resultado)}</p>}
+                ) : (
+                  <div className="space-y-1.5">
+                    {a.resultado && <p className="text-[11px] text-emerald-700 inline-flex items-center gap-1"><FileText className="w-3 h-3" /> {JSON.stringify(a.resultado)}</p>}
+                    {a.tipo_acao === "propor_correcao" && a.status === "aprovada" && (
+                      a.aplicacao?.status === "aplicada" ? <p data-testid={`acao-aplicada-${a.id}`} className="text-[11px] font-semibold text-emerald-700">✓ Aplicada ao código · {a.aplicacao.ficheiros?.join(", ")} · {a.aplicacao.verificacao}</p>
+                      : <div className="space-y-1">
+                          {a.aplicacao && <p data-testid={`acao-aplicacao-erro-${a.id}`} className="text-[11px] text-red-600 whitespace-pre-wrap"><b>{a.aplicacao.status}</b> ({a.aplicacao.etapa}): {a.aplicacao.erro}</p>}
+                          <button data-testid={`acao-aplicar-${a.id}`} disabled={applying === a.id} onClick={() => aplicar(a.id)} className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-700 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-1 btn-press">{applying === a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Hammer className="w-3.5 h-3.5" />} {a.aplicacao ? "Tentar aplicar novamente" : "Aplicar ao código (com testes)"}</button>
+                        </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

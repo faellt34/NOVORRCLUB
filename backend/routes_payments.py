@@ -12,7 +12,7 @@ from core import db, NO_ID, get_current_user, require_role, audit, notify, new_i
 from storage import put_object, get_object, APP_NAME
 import jwt
 
-stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
+stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 TAX_CODE_DIGITAL = "txcd_10302000"
 SUBSCRIPTION = {"lookup_key": "club_monthly", "name": "RRclub Premium (mensal)", "amount": 990, "interval": "month", "emergent_product_id": "club_monthly"}

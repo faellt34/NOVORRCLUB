@@ -3,9 +3,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from core import db, NO_ID, get_current_user, notify, new_id, now_iso
+from core import db, NO_ID, get_current_user, notify, new_id, now_iso, rate_limit
 
 router = APIRouter(prefix="/messages")
+MAX_TEXT = 2000
 
 
 async def allowed_contacts(user: dict):
@@ -80,6 +81,9 @@ async def send_message(conv_id: str, body: MsgIn, user: dict = Depends(get_curre
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Mensagem vazia")
+    if len(text) > MAX_TEXT:
+        raise HTTPException(status_code=400, detail=f"Mensagem demasiado longa (máx. {MAX_TEXT} caracteres)")
+    await rate_limit(f"msg:{user['id']}", 30, 60, "Está a enviar mensagens demasiado depressa. Aguarde um minuto.")
     conv = await db.conversations.find_one({"id": conv_id, "participants": user["id"]}, NO_ID)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversa não encontrada")

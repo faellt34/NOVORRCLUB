@@ -1,6 +1,8 @@
 import asyncio
+import html
 import logging
 import os
+import re
 
 import resend
 
@@ -23,8 +25,15 @@ def configured() -> bool:
     return bool(_settings_cache["key"])
 
 
+def _safe_url(url: str) -> str:
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    return url if url and (url.startswith("https://") and (not base or url.startswith(base))) else ""
+
+
 def _wrap(title: str, body: str, cta_label: str = None, cta_url: str = None) -> str:
-    cta = f'<tr><td style="padding:24px 0 8px"><a href="{cta_url}" style="background:#7C3AED;color:#fff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:600;display:inline-block">{cta_label}</a></td></tr>' if cta_url else ""
+    title, body, cta_label = html.escape(title or ""), html.escape(body or "").replace("\n", "<br>"), html.escape(cta_label or "Abrir")
+    cta_url = _safe_url(cta_url)
+    cta = f'<tr><td style="padding:24px 0 8px"><a href="{html.escape(cta_url, quote=True)}" style="background:#7C3AED;color:#fff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:600;display:inline-block">{cta_label}</a></td></tr>' if cta_url else ""
     return f"""<table width="100%" cellpadding="0" cellspacing="0" style="background:#F8F9FC;padding:32px 0;font-family:Arial,Helvetica,sans-serif"><tr><td align="center">
 <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;padding:32px;border:1px solid #E9E5F5">
 <tr><td style="font-size:20px;font-weight:700;color:#0C0A14;padding-bottom:4px">RRclub</td></tr>
@@ -39,7 +48,13 @@ def _wrap(title: str, body: str, cta_label: str = None, cta_url: str = None) -> 
 async def send_email(to: str, subject: str, title: str, body: str, cta_label: str = None, cta_url: str = None) -> bool:
     if not _settings_cache["loaded"]:
         await load_settings()
-    if not configured() or not to:
+    if not configured() or not to or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+        return False
+    from core import rate_limit
+    try:
+        await rate_limit(f"email:{to.lower()}", 20, 3600)
+    except Exception:
+        logger.warning(f"Limite de emails atingido para {to}")
         return False
     resend.api_key = _settings_cache["key"]
     params = {"from": _settings_cache["sender"], "to": [to], "subject": subject, "html": _wrap(title, body, cta_label, cta_url)}

@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,12 +27,12 @@ def out_user(u: dict) -> dict:
 
 async def resolve_campaign(data: dict) -> dict:
     if data.get("parceiro"):
-        p = await db.partners.find_one({"nome": {"$regex": f"^{data['parceiro'].strip()}$", "$options": "i"}}, NO_ID)
+        p = await db.partners.find_one({"nome": {"$regex": f"^{re.escape(data['parceiro'].strip())}$", "$options": "i"}}, NO_ID)
         if not p:
             raise HTTPException(status_code=400, detail=f"Parceiro '{data['parceiro']}' não existe. Crie-o primeiro em Parceiros.")
         data["parceiro_id"] = p["id"]
     if data.get("influencer"):
-        i = await db.influencers.find_one({"$or": [{"nome": {"$regex": f"^{data['influencer'].strip()}$", "$options": "i"}}, {"handle": data["influencer"].strip()}]}, NO_ID)
+        i = await db.influencers.find_one({"$or": [{"nome": {"$regex": f"^{re.escape(data['influencer'].strip())}$", "$options": "i"}}, {"handle": data["influencer"].strip()}]}, NO_ID)
         if not i:
             raise HTTPException(status_code=400, detail=f"Influencer '{data['influencer']}' não existe.")
         data["influencer_id"] = i["id"]

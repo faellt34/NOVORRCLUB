@@ -1,0 +1,8 @@
+# backend/brand.py
+# t
+
+--- a/backend/brand.py
++++ b/backend/brand.py
+@@ -1 +1,2 @@
++import nao_existe_xyz
+ from PIL import Image, ImageDraw

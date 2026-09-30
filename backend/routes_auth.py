@@ -5,7 +5,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
-from core import db, verify_password, create_access_token, public_user, get_current_user, audit, now_iso, new_id, hash_password, notify, admin_ids
+from core import db, verify_password, create_access_token, public_user, get_current_user, audit, now_iso, new_id, hash_password, notify, admin_ids, rate_limit, client_ip, request_token, revoke_token
+
+PASSWORD_RE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,128}$")
+PASSWORD_MSG = "A palavra-passe deve ter pelo menos 8 caracteres, incluindo letras e números"
+COOKIE_MAX_AGE = 24 * 3600
 
 router = APIRouter(prefix="/auth")
 
@@ -18,7 +22,8 @@ class LoginIn(BaseModel):
 @router.post("/login")
 async def login(body: LoginIn, request: Request, response: Response):
     email = body.email.strip().lower()
-    ip = request.client.host if request.client else "?"
+    ip = client_ip(request)
+    await rate_limit(f"login:{ip}", 30, 900, "Demasiadas tentativas a partir deste endereço. Tente novamente em 15 minutos.")
     ident = f"{ip}:{email}"
     attempt = await db.login_attempts.find_one({"identifier": ident})
     if attempt and attempt.get("count", 0) >= 5:
@@ -35,7 +40,7 @@ async def login(body: LoginIn, request: Request, response: Response):
         raise HTTPException(status_code=403, detail="A sua conta de parceiro aguarda aprovação da equipa RRclub. Será notificado quando estiver ativa.")
     await db.login_attempts.delete_one({"identifier": ident})
     token = create_access_token(user["id"], user["email"], user["role"])
-    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=7 * 86400, path="/")
+    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=COOKIE_MAX_AGE, path="/")
     await db.users.update_one({"id": user["id"]}, {"$set": {"last_login": now_iso()}})
     await audit("LOGIN", f"{user['nome']} · {user['role']}", public_user(user))
     return {"token": token, "user": public_user(user)}
@@ -47,7 +52,8 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response):
+    await revoke_token(request_token(request))
     response.delete_cookie("access_token", path="/")
     return {"ok": True}
 
@@ -65,14 +71,15 @@ class RegisterIn(BaseModel):
 
 
 @router.post("/register")
-async def register(body: RegisterIn, response: Response):
+async def register(body: RegisterIn, request: Request, response: Response):
+    await rate_limit(f"register:{client_ip(request)}", 5, 3600, "Demasiados registos a partir deste endereço. Tente novamente mais tarde.")
     email = body.email.strip().lower()
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+    if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise HTTPException(status_code=400, detail="Email inválido")
-    if len(body.nome.strip()) < 2:
+    if not 2 <= len(body.nome.strip()) <= 80:
         raise HTTPException(status_code=400, detail="Indique o seu nome")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="A palavra-passe deve ter pelo menos 6 caracteres")
+    if not PASSWORD_RE.match(body.password):
+        raise HTTPException(status_code=400, detail=PASSWORD_MSG)
     if body.role not in ("influencer", "partner"):
         raise HTTPException(status_code=400, detail="Tipo de conta inválido")
     if not body.aceita_termos:
@@ -102,5 +109,5 @@ async def register(body: RegisterIn, response: Response):
     if body.role == "partner":
         return {"pending": True, "user": pub, "message": "Conta criada! A equipa RRclub vai verificar o seu espaço e ativar o acesso em breve. Receberá uma notificação."}
     token = create_access_token(uid, email, body.role)
-    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=7 * 86400, path="/")
+    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=COOKIE_MAX_AGE, path="/")
     return {"pending": False, "token": token, "user": pub}

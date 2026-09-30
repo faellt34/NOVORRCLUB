@@ -1,6 +1,11 @@
+import asyncio
 import json
 import os
+import re
 import secrets
+import subprocess
+import sys
+import tempfile
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -263,7 +268,7 @@ async def _executar(a: dict, user: dict) -> dict:
     if tipo == "propor_correcao":
         pdir = os.path.join(ROOT, "memory", "patches")
         os.makedirs(pdir, exist_ok=True)
-        fname = f"{a['id']}-{os.path.basename(str(d.get('ficheiro', 'correcao')))}.patch"
+        fname = re.sub(r"[^A-Za-z0-9._-]", "_", f"{a['id']}-{os.path.basename(str(d.get('ficheiro', 'correcao')))}")[:120] + ".patch"
         with open(os.path.join(pdir, fname), "w", encoding="utf-8") as f:
             f.write(f"# {d.get('area')}/{d.get('ficheiro')}\n# {d.get('descricao')}\n\n{d.get('diff', '')}")
         await db.correcoes_aprovadas.insert_one({"id": new_id("fx"), "acao_id": a["id"], **{k: d.get(k) for k in ("area", "ficheiro", "descricao", "diff")}, "patch_file": f"memory/patches/{fname}", "status": "aprovada_para_aplicar", "timestamp": now_iso()})
@@ -276,7 +281,14 @@ async def aprovar(acao_id: str, user: dict = Depends(require_role("admin"))):
     a = await db.acoes_pendentes.find_one({"id": acao_id, "status": "pendente"}, NO_ID)
     if not a:
         raise HTTPException(status_code=404, detail="Ação pendente não encontrada")
-    res = await _executar(a, user)
+    lock = await db.acoes_pendentes.update_one({"id": acao_id, "status": "pendente"}, {"$set": {"status": "a_executar"}})
+    if not lock.matched_count:
+        raise HTTPException(status_code=409, detail="Ação já está a ser processada")
+    try:
+        res = await _executar(a, user)
+    except Exception as e:
+        await db.acoes_pendentes.update_one({"id": acao_id}, {"$set": {"status": "pendente"}})
+        raise HTTPException(status_code=500, detail=f"Falha ao executar: {str(e)[:200]}")
     await db.acoes_pendentes.update_one({"id": acao_id}, {"$set": {"status": "aprovada", "resultado": res, "aprovada_em": now_iso(), "aprovada_por": user["nome"]}})
     await audit("DIRETOR", f"Aprovada: {a['descricao']}", user, acao_id)
     return {"ok": True, "resultado": res}
@@ -289,6 +301,78 @@ async def rejeitar(acao_id: str, user: dict = Depends(require_role("admin"))):
         raise HTTPException(status_code=404, detail="Ação pendente não encontrada")
     await audit("DIRETOR", "Ação rejeitada pelo CEO", user, acao_id)
     return {"ok": True}
+
+
+def _run(cmd: list, cwd: str = None, timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True, timeout=timeout)
+
+
+def _apply_patch(area: str, diff: str) -> dict:
+    if not diff.strip() or "@@" not in diff:
+        return {"ok": False, "etapa": "validar", "erro": "O patch não é um diff unificado válido (sem hunks @@)."}
+    if not diff.endswith("\n"):
+        diff += "\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, encoding="utf-8") as f:
+        f.write(diff)
+        pf = f.name
+    sub = os.path.relpath(CODE_DIRS[area], ROOT)
+    tries = [[], ["--directory", sub], ["-p0"], ["-p2", "--directory", sub], ["--directory", sub, "--ignore-whitespace"], ["--ignore-whitespace"]]
+    for extra in tries:
+        chk = _run(["git", "apply", "--check", "--recount", *extra, pf])
+        if chk.returncode == 0:
+            res = _run(["git", "apply", "--recount", *extra, pf])
+            if res.returncode == 0:
+                names = _run(["git", "apply", "--numstat", "--recount", *extra, pf]).stdout
+                files = [ln.split("\t")[-1] for ln in names.strip().splitlines() if ln.strip()]
+                return {"ok": True, "opcoes": extra, "patch_tmp": pf, "ficheiros": files}
+    os.unlink(pf)
+    return {"ok": False, "etapa": "git apply --check", "erro": (chk.stderr or chk.stdout)[:600]}
+
+
+def _verify(files: list) -> dict:
+    py = [f for f in files if f.endswith(".py")]
+    for f in py:
+        r = _run([sys.executable, "-m", "py_compile", os.path.join(ROOT, f)])
+        if r.returncode != 0:
+            return {"ok": False, "etapa": "py_compile", "erro": r.stderr[-600:]}
+    if py:
+        r = _run([sys.executable, "-c", "import server"], cwd=CODE_DIRS["backend"], timeout=90)
+        if r.returncode != 0:
+            return {"ok": False, "etapa": "import server", "erro": r.stderr[-600:]}
+    tests_dir = os.path.join(ROOT, "tests")
+    if py and any(fn.startswith("test_") for fn in os.listdir(tests_dir)):
+        r = _run([sys.executable, "-m", "pytest", "-q", "-x", tests_dir], timeout=240)
+        if r.returncode != 0:
+            return {"ok": False, "etapa": "pytest", "erro": (r.stdout + r.stderr)[-800:]}
+        return {"ok": True, "etapa": "pytest", "saida": r.stdout[-300:]}
+    return {"ok": True, "etapa": "py_compile + import server" if py else "sem verificação automática para estes ficheiros", "saida": ""}
+
+
+@router.post("/acoes/{acao_id}/aplicar")
+async def aplicar_correcao(acao_id: str, user: dict = Depends(require_role("admin"))):
+    a = await db.acoes_pendentes.find_one({"id": acao_id, "tipo_acao": "propor_correcao", "status": "aprovada"}, NO_ID)
+    if not a:
+        raise HTTPException(status_code=404, detail="Correção aprovada não encontrada")
+    if (a.get("aplicacao") or {}).get("status") == "aplicada":
+        raise HTTPException(status_code=409, detail="Correção já aplicada")
+    d = a["dados_json"]
+    area = d.get("area") if d.get("area") in CODE_DIRS else "backend"
+    ap = await asyncio.to_thread(_apply_patch, area, str(d.get("diff") or ""))
+    result = {"timestamp": now_iso(), "por": user["nome"]}
+    if not ap["ok"]:
+        result.update({"status": "falhou", **{k: ap[k] for k in ("etapa", "erro")}})
+    else:
+        ver = await asyncio.to_thread(_verify, ap["ficheiros"])
+        if ver["ok"]:
+            result.update({"status": "aplicada", "ficheiros": ap["ficheiros"], "verificacao": ver["etapa"], "saida": ver.get("saida", "")})
+        else:
+            _run(["git", "apply", "-R", "--recount", *ap["opcoes"], ap["patch_tmp"]])
+            result.update({"status": "revertida", "ficheiros": ap["ficheiros"], "etapa": ver["etapa"], "erro": ver["erro"]})
+        os.unlink(ap["patch_tmp"])
+    await db.acoes_pendentes.update_one({"id": acao_id}, {"$set": {"aplicacao": result}})
+    await db.correcoes_aprovadas.update_one({"acao_id": acao_id}, {"$set": {"status": result["status"], "aplicacao": result}})
+    await audit("CORRECAO", f"Patch {result['status']}: {a['descricao'][:120]}", user, acao_id)
+    return result
 
 
 @router.get("/contratos")

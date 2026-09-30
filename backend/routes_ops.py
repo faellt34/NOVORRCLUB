@@ -1,3 +1,4 @@
+import re
 import os
 import secrets
 import io
@@ -48,6 +49,8 @@ async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin")))
     inf = await db.influencers.find_one({"id": body.influencer_id}, NO_ID)
     if not inf:
         raise HTTPException(status_code=404, detail="Influencer não encontrado")
+    if not re.fullmatch(r"\d{4}-\d{2}", body.month):
+        raise HTTPException(status_code=400, detail="Mês inválido (AAAA-MM)")
     total = sum([r["commission"] async for r in db.redemptions.find({"influencer_id": body.influencer_id, "date": {"$regex": f"^{body.month}"}}, {"commission": 1})])
     doc = {"id": new_id("pay"), "influencer_id": body.influencer_id, "month": body.month, "paid_at": datetime.now(timezone.utc).date().isoformat(), "amount": round(total, 2), "note": body.note, "by": user["nome"]}
     await db.payouts.insert_one(dict(doc))
@@ -117,7 +120,7 @@ async def reset_password(body: ResetIn):
         raise HTTPException(status_code=400, detail="A palavra-passe deve ter pelo menos 6 caracteres")
     await db.users.update_one({"id": t["user_id"]}, {"$set": {"password_hash": hash_password(body.password)}})
     await db.password_reset_tokens.update_one({"token": body.token}, {"$set": {"used": True, "used_at": now_iso()}})
-    await db.login_attempts.delete_many({"identifier": {"$regex": f":{t['email']}$"}})
+    await db.login_attempts.delete_many({"identifier": {"$regex": f":{re.escape(t['email'])}$"}})
     await audit("RECUPERAÇÃO", f"Palavra-passe redefinida · {t['email']}", {"id": t["user_id"], "nome": t["nome"]}, body.token[:8])
     return {"ok": True}
 

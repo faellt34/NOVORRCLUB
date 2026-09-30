@@ -98,7 +98,7 @@ export default function AdminDashboard() {
     setBusy(true);
     try {
       const { data: res } = await api.post(`/leads/${decision.lead.id}/${decision.mode}`, { note, email: email || null });
-      if (decision.mode === "approve") toast.success(`Parceiro "${res.partner.nome}" criado automaticamente${res.access_email ? ` · acesso: ${res.access_email} / parceiro123` : ""}`);
+      if (decision.mode === "approve") toast.success(`Parceiro "${res.partner.nome}" criado automaticamente${res.access_email ? ` · acesso: ${res.access_email} / palavra-passe temporária: ${res.temp_password} (também enviada por email)` : ""}`);
       else toast.success("Indicação rejeitada e influencer notificado");
       setDecision(null); load(); refreshUnread();
     } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
                 <DialogTitle>{decision.mode === "approve" ? "Aprovar indicação" : "Rejeitar indicação"}</DialogTitle>
                 <DialogDescription>
                   {decision.mode === "approve"
-                    ? `"${decision.lead.nome}" será criado automaticamente como parceiro ativo. Se indicar um email, é criada a conta de acesso (palavra-passe inicial: parceiro123).`
+                    ? `"${decision.lead.nome}" será criado automaticamente como parceiro ativo. Se indicar um email, é criada a conta de acesso (palavra-passe temporária gerada e enviada por email).`
                     : `O influencer ${decision.lead.referrer} será notificado da decisão.`}
                 </DialogDescription>
               </DialogHeader>
