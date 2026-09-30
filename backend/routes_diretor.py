@@ -294,3 +294,49 @@ async def rejeitar(acao_id: str, user: dict = Depends(require_role("admin"))):
 @router.get("/contratos")
 async def contratos():
     return await db.contratos_gerados.find({}, NO_ID).sort("timestamp", -1).to_list(100)
+
+
+async def _audit_file(rel: str) -> list:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    code = _code_read("backend", [rel], budget=30000)
+    sys_msg = ("És o subagente Backend da RRClub (FastAPI/MongoDB/Stripe/JWT). Faz auditoria de segurança do ficheiro dado. Devolve APENAS JSON: "
+               '{"achados":[{"severidade":"alta|media|baixa","funcao":"...","titulo":"...","descricao":"...","correcao":"...","diff":"<unified diff curto ou vazio>"}]}. '
+               "Foca-te em: autenticação/autorização em falta, IDOR, validação de input, segredos, injeção, rate limiting, exposição de dados, idempotência financeira. Máx. 6 achados, os mais relevantes. Português de Portugal. Sem achados → lista vazia.")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("aud"), system_message=sys_msg).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        out = _parse(await chat.send_message(UserMessage(text=f"FICHEIRO backend/{rel}\n\n{code}")))
+        items = out.get("achados", []) if isinstance(out, dict) else []
+    except Exception as e:
+        items = [{"severidade": "baixa", "funcao": "-", "titulo": "Falha na análise", "descricao": str(e)[:200], "correcao": "", "diff": ""}]
+    return [{"id": new_id("fd"), "ficheiro": rel, **{k: str(i.get(k, "")) for k in ("severidade", "funcao", "titulo", "descricao", "correcao", "diff")}} for i in items if isinstance(i, dict)]
+
+
+@router.post("/auditoria")
+async def auditoria(user: dict = Depends(require_role("admin"))):
+    import asyncio
+    files = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
+    results = await asyncio.gather(*[_audit_file(f) for f in files])
+    achados = [a for r in results for a in r]
+    order = {"alta": 0, "media": 1, "baixa": 2}
+    achados.sort(key=lambda a: order.get(a["severidade"], 3))
+    doc = {"id": new_id("audit"), "timestamp": now_iso(), "ficheiros": files, "achados": achados,
+           "resumo": {k: sum(1 for a in achados if a["severidade"] == k) for k in ("alta", "media", "baixa")}, "por": user["nome"]}
+    await db.auditorias.insert_one(dict(doc))
+    await audit("AUDITORIA", f"Auditoria de segurança: {len(achados)} achados em {len(files)} ficheiros", user, doc["id"])
+    return doc
+
+
+@router.get("/auditoria")
+async def auditoria_ultima():
+    return await db.auditorias.find_one({}, NO_ID, sort=[("timestamp", -1)]) or {}
+
+
+@router.post("/auditoria/{audit_id}/propor/{finding_id}")
+async def propor_from_finding(audit_id: str, finding_id: str, user: dict = Depends(require_role("admin"))):
+    doc = await db.auditorias.find_one({"id": audit_id}, NO_ID)
+    f = next((a for a in (doc or {}).get("achados", []) if a["id"] == finding_id), None)
+    if not f:
+        raise HTTPException(status_code=404, detail="Achado não encontrado")
+    a = await _queue("propor_correcao", {"area": "backend", "ficheiro": f["ficheiro"], "descricao": f"[{f['severidade']}] {f['titulo']} — {f['correcao']}", "diff": f.get("diff") or "", "finding_id": finding_id})
+    await db.auditorias.update_one({"id": audit_id, "achados.id": finding_id}, {"$set": {"achados.$.acao_id": a["id"]}})
+    return a

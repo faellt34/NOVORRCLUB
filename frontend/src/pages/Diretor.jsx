@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
+import { SecurityAudit } from "../components/SecurityAudit";
 
 const SUGGESTIONS = ["Resumo do dashboard", "Pede ao subagente Marketing um plano para aumentar a conversão", "Pede ao subagente Frontend uma auditoria da página pública do cupão", "Pede ao subagente Backend uma revisão de segurança dos pagamentos"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
@@ -94,6 +95,8 @@ export default function Diretor() {
           </div>
         </div>
       </div>
+
+      <SecurityAudit onProposed={load} />
     </div>
   );
 }
