@@ -149,6 +149,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ### 2026-06 · Legendas IA para influencer ✅ (iteration_25)
 - `POST /api/influencer/ai/captions {campaign_id, tom}` → 2 legendas × PT/EN/ES via Claude Sonnet 4.6 (JSON estrito); `CaptionDialog.jsx` no cartão em destaque do influencer (tons elegante/divertido/urgente, tabs de idioma, copiar com link)
 
+### 2026-06 · Gemini (Nano Banana) imagem de story para influencer ✅ (iteration_26)
+- `POST /api/influencer/ai/story-image {campaign_id, estilo}` → imagem 9:16 (gemini-3.1-flash-image-preview) com prato/ambiente do parceiro, "X% OFF", código e marca RRclub; `StoryImageDialog.jsx` (estilos Luxo/Fresco/Noite, guardar PNG, partilhar nativo)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF
