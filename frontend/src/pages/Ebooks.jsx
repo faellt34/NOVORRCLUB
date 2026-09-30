@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { StripeModeBanner } from "../components/StripeModeBanner";
 import { Lock, Eye, Crown, BookOpen, Globe, ShoppingCart, Sparkles, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -50,6 +51,7 @@ export default function Ebooks() {
 
   return (
     <div className="space-y-6">
+      <StripeModeBanner />
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 data-testid="ebooks-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("ebooksTitle")}</h1>

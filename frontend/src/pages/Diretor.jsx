@@ -3,6 +3,7 @@ import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText, Hammer } f
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { SecurityAudit } from "../components/SecurityAudit";
+import { CreditMeter } from "../components/CreditMeter";
 
 const SUGGESTIONS = ["Resumo do dashboard", "Pede ao subagente Marketing um plano para aumentar a conversão", "Pede ao subagente Frontend uma auditoria da página pública do cupão", "Pede ao subagente Backend uma revisão de segurança dos pagamentos"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
@@ -52,9 +53,12 @@ export default function Diretor() {
   const shown = acoes.filter((a) => a.status === tab);
   return (
     <div className="space-y-6" data-testid="diretor-page">
-      <div>
-        <h1 data-testid="diretor-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Diretor Geral · IA</h1>
-        <p className="text-sm text-slate-500 mt-1">Gemini 2.5 Flash com acesso aos dados reais. Ações que alteram dados só executam após a sua aprovação.</p>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <h1 data-testid="diretor-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Diretor Geral · IA</h1>
+          <p className="text-sm text-slate-500 mt-1">Gemini 2.5 Flash com acesso aos dados reais. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
+        </div>
+        <CreditMeter refreshKey={msgs.length} />
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2 card-soft p-5 flex flex-col min-h-[560px]" data-testid="diretor-chat">

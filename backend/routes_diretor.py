@@ -28,6 +28,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "2) HONESTIDADE: se não encontras algo, dizes 'Não encontrei. Preciso de mais informação.' NUNCA inventas ficheiros, funções, linhas ou números.\n"
           "3) COMUNICAÇÃO CLARA: português de Portugal, simples e direto, sem jargão técnico — explica como se o CEO não fosse programador.\n"
           "4) MEMÓRIA: antes de propor uma ação, chama consultar_licoes() e respeita as lições das propostas rejeitadas pelo CEO.\n"
+          "7) CRÉDITOS: cada subagente e cada auditoria gastam créditos do CEO. Só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
           "5) DIFFS VÁLIDOS: antes de propor uma alteração de código, lê o ficheiro real com ler_codigo_github(caminho) (ou pelo subagente) e gera um diff git correto: cabeçalhos '--- a/caminho/ficheiro' e '+++ b/caminho/ficheiro' "
           "(caminho a partir da raiz do repositório, ex.: backend/core.py), bloco '@@ -linha_inicial,contagem +linha_inicial,contagem @@' com números reais, linhas removidas com '-', adicionadas com '+', e 3 linhas de contexto antes e depois.\n"
           "6) VALIDAÇÃO OBRIGATÓRIA: chama validar_diff(ficheiro, diff) antes de propor_correcao. Só propões se devolver valido=true. Se falhar, NÃO propões e dizes ao CEO: 'Não consigo aplicar esta alteração. Motivo: <motivo>.'\n\n"
@@ -243,7 +244,29 @@ async def consultar_licoes(**_):
     return {"total": len(items), "licoes": items} if items else {"total": 0, "licoes": [], "nota": "ainda não há rejeições registadas"}
 
 
+LIMITE_DIARIO_DEFAULT = 60
+
+
+async def _llm_guard(origem: str, n: int = 1):
+    from datetime import datetime as _dt
+    hoje = _dt.now(timezone.utc).date().isoformat()
+    cfg = await db.settings.find_one({"id": "diretor"}, NO_ID) or {}
+    limite = int(cfg.get("limite_diario") or LIMITE_DIARIO_DEFAULT)
+    usado = await db.llm_usage.count_documents({"dia": hoje})
+    if usado + n > limite:
+        raise HTTPException(status_code=429, detail=f"Limite diário de créditos IA atingido ({usado}/{limite} chamadas hoje). Aumente o limite em Definições do Diretor ou tente amanhã.")
+    await db.llm_usage.insert_many([{"id": new_id("llm"), "dia": hoje, "origem": origem, "timestamp": now_iso()} for _ in range(n)])
+
+
+async def uso_hoje() -> dict:
+    hoje = datetime.now(timezone.utc).date().isoformat()
+    cfg = await db.settings.find_one({"id": "diretor"}, NO_ID) or {}
+    return {"hoje": await db.llm_usage.count_documents({"dia": hoje}), "limite": int(cfg.get("limite_diario") or LIMITE_DIARIO_DEFAULT),
+            "por_origem": {o: await db.llm_usage.count_documents({"dia": hoje, "origem": o}) for o in ("diretor", "subagente", "auditoria")}}
+
+
 async def _subagent(role: str, system: str, prompt: str) -> dict:
+    await _llm_guard("subagente")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model("anthropic", "claude-sonnet-4-6")
     txt = await chat.send_message(UserMessage(text=prompt))
@@ -303,6 +326,7 @@ async def _queue(tipo: str, args: dict) -> dict:
 
 @router.post("/conversar")
 async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
+    await _llm_guard("diretor")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     hist = await db.conversas_diretor.find({}, NO_ID).sort("timestamp", -1).to_list(6)
     prior = "\n".join(f"CEO: {h['mensagem_user']}\nDiretor: {h['resposta_diretor']}" for h in reversed(hist))
@@ -320,6 +344,8 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
                     res = await READ_FUNCS[fn](**args)
                 except TypeError:
                     res = {"erro": "argumentos inválidos"}
+                except HTTPException as e:
+                    res = {"erro": e.detail}
                 chamadas.append({"funcao": fn, "args": args, "resumo": (res.get("analise", "")[:600] if isinstance(res, dict) else "")})
                 text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\nContinua (outra função ou resposta final em JSON)."
             elif fn in WRITE_ACTIONS:
@@ -437,6 +463,25 @@ async def rejeitar(acao_id: str, body: RejeitarIn = RejeitarIn(), user: dict = D
     return {"ok": True}
 
 
+@router.get("/uso")
+async def uso():
+    files = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
+    return {**await uso_hoje(), "custo_auditoria": len(files)}
+
+
+class LimiteIn(BaseModel):
+    limite_diario: int
+
+
+@router.post("/uso/limite")
+async def set_limite(body: LimiteIn, user: dict = Depends(require_role("admin"))):
+    if not 5 <= body.limite_diario <= 1000:
+        raise HTTPException(status_code=400, detail="Limite entre 5 e 1000 chamadas/dia")
+    await db.settings.update_one({"id": "diretor"}, {"$set": {"id": "diretor", "limite_diario": body.limite_diario}}, upsert=True)
+    await audit("DIRETOR", f"Limite diário de créditos IA: {body.limite_diario}", user)
+    return await uso_hoje()
+
+
 @router.get("/licoes")
 async def licoes():
     return await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(100)
@@ -539,8 +584,8 @@ async def _audit_file(rel: str) -> list:
 
 @router.post("/auditoria")
 async def auditoria(user: dict = Depends(require_role("admin"))):
-    import asyncio
     files = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
+    await _llm_guard("auditoria", len(files))
     results = await asyncio.gather(*[_audit_file(f) for f in files])
     achados = [a for r in results for a in r]
     order = {"alta": 0, "media": 1, "baixa": 2}

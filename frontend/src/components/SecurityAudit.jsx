@@ -13,6 +13,9 @@ export const SecurityAudit = ({ onProposed }) => {
   useEffect(() => { api.get("/diretor/auditoria").then((r) => setData(r.data?.id ? r.data : null)).catch(() => {}); }, []);
 
   const run = async () => {
+    let custo = "≈14";
+    try { const { data: u } = await api.get("/diretor/uso"); custo = `${u.custo_auditoria} (usadas hoje: ${u.hoje}/${u.limite})`; } catch {}
+    if (!window.confirm(`A auditoria completa gasta ${custo} chamadas de IA dos seus créditos. Continuar?`)) return;
     setBusy(true);
     try { const { data: d } = await api.post("/diretor/auditoria", {}, { timeout: 300000 }); setData(d); toast.success(`Auditoria concluída: ${d.achados.length} achados em ${d.ficheiros.length} ficheiros`); }
     catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }

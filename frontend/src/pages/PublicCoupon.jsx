@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { StripeModeBanner } from "../components/StripeModeBanner";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -120,6 +121,7 @@ export default function PublicCoupon() {
                 {active && sessionId && !paid && <p data-testid="public-pay-polling" className="text-xs text-purple-700 bg-purple-50 rounded-xl px-3 py-2 animate-pulse">A confirmar o pagamento...</p>}
                 {active && paid?.payment_status !== "paid" && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
+                    <StripeModeBanner compact />
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
                     <div className="flex gap-2">
                       <input data-testid="public-pay-amount" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Valor da conta (€)" className="flex-1 h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />

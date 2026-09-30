@@ -18,6 +18,52 @@ TAX_CODE_DIGITAL = "txcd_10302000"
 SUBSCRIPTION = {"lookup_key": "club_monthly", "name": "RRclub Premium (mensal)", "amount": 990, "interval": "month", "emergent_product_id": "club_monthly"}
 
 router = APIRouter()
+_cfg_cache = {"at": 0, "data": None}
+
+
+def _stripe_probe() -> dict:
+    key = os.environ["STRIPE_SECRET_KEY"]
+    info = {"mode": "live" if key.startswith("sk_live") else "test", "account_ok": False, "connect_enabled": False, "webhook_configured": bool(WEBHOOK_SECRET), "account_name": None, "erro": None}
+    try:
+        acct = stripe.Account.retrieve()
+        info.update({"account_ok": True, "account_name": (acct.get("settings") or {}).get("dashboard", {}).get("display_name") or acct.get("business_profile", {}).get("name")})
+    except stripe.error.StripeError as e:
+        info["erro"] = e.user_message or str(e)[:160]
+        return info
+    try:
+        stripe.Account.list(limit=1)
+        info["connect_enabled"] = True
+    except stripe.error.StripeError:
+        info["connect_enabled"] = False
+    return info
+
+
+async def stripe_config(force: bool = False) -> dict:
+    import asyncio, time
+    if force or not _cfg_cache["data"] or time.time() - _cfg_cache["at"] > 120:
+        _cfg_cache.update({"data": await asyncio.to_thread(_stripe_probe), "at": time.time()})
+    return _cfg_cache["data"]
+
+
+@router.get("/payments/config")
+async def payments_config():
+    c = await stripe_config()
+    return {"mode": c["mode"], "available": c["account_ok"], "connect_enabled": c["connect_enabled"]}
+
+
+@router.get("/admin/stripe/status")
+async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
+    c = await stripe_config(force=True)
+    partners = await db.partners.count_documents({"status": "Ativo"})
+    connected = await db.partners.count_documents({"stripe_charges_enabled": True})
+    steps = [
+        {"id": "chave", "label": "Chave Stripe válida" + (f" · {c['account_name']}" if c.get("account_name") else ""), "ok": c["account_ok"], "action": None if c["account_ok"] else f"Verifique STRIPE_SECRET_KEY nos secrets de produção. Erro: {c.get('erro')}"},
+        {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
+        {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
+        {"id": "connect", "label": "Stripe Connect ativo (split automático 80/5/10)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
+        {"id": "parceiros", "label": f"Hotéis ligados ao Connect: {connected}/{partners}", "ok": partners > 0 and connected == partners, "action": None if partners > 0 and connected == partners else "Cada hotel liga a sua conta em Painel do Parceiro → 'Receber pagamentos' (só funciona depois do Connect estar ativo)."},
+    ]
+    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": len(steps)}
 
 
 def _product(entry_id: str, name: str):
@@ -87,6 +133,8 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
             session = stripe.checkout.Session.create(**kwargs, automatic_tax={"enabled": True}, billing_address_collection="required")
         else:
             raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=503, detail=f"Pagamentos temporariamente indisponíveis: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({
         "id": new_id("tx"), "session_id": session.id, "user_id": user["id"], "lookup_key": body.lookup_key, "ebook_id": eb["id"] if eb else None,
         "amount": (price.unit_amount or 0) / 100, "currency": price.currency, "status": "initiated", "payment_status": "pending",
@@ -295,13 +343,18 @@ async def public_pay(body: PublicPayIn):
         base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
         split = True
     session = None
-    for pm in (["card", "mb_way"], ["card"]):
-        try:
-            session = stripe.checkout.Session.create(**base, payment_method_types=pm)
-            break
-        except stripe.error.InvalidRequestError as e:
-            if pm == ["card"]:
-                raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+    try:
+        for pm in (["card", "mb_way"], ["card"]):
+            try:
+                session = stripe.checkout.Session.create(**base, payment_method_types=pm)
+                break
+            except stripe.error.InvalidRequestError as e:
+                if pm == ["card"]:
+                    raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+    except stripe.error.AuthenticationError:
+        raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
                                               "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
