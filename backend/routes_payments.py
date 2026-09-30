@@ -146,10 +146,14 @@ async def fulfil(session_id: str, extra: dict):
 
 
 @router.get("/payments/status/{session_id}")
-async def payment_status(session_id: str):
+async def payment_status(session_id: str, authorization: Optional[str] = Header(None)):
     rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
     if not rec:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    if rec.get("kind") != "coupon_pay":
+        user = await user_from_query_or_header(authorization, None)
+        if user["role"] != "admin" and rec.get("user_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Sem acesso a esta transação")
     if rec["payment_status"] != "paid":
         try:
             s = stripe.checkout.Session.retrieve(session_id)
@@ -160,12 +164,21 @@ async def payment_status(session_id: str):
             pass
     out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
     if rec.get("kind") == "coupon_pay":
-        out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": rec.get("customer_email"), "paid_at": rec.get("updated_at")})
+        out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": _mask_email(rec.get("customer_email")), "paid_at": rec.get("updated_at")})
     return out
+
+
+def _mask_email(e):
+    if not e or "@" not in e:
+        return None
+    n, d = e.split("@", 1)
+    return f"{n[:2]}***@{d}"
 
 
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook Stripe desativado: STRIPE_WEBHOOK_SECRET não configurado")
     payload = await request.body()
     try:
         event = stripe.Webhook.construct_event(payload, request.headers.get("stripe-signature", ""), WEBHOOK_SECRET)
@@ -234,8 +247,8 @@ async def user_from_query_or_header(authorization: Optional[str], auth: Optional
 
 
 @router.get("/ebooks/{ebook_id}/pdf")
-async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None), auth: Optional[str] = Query(None)):
-    user = await user_from_query_or_header(authorization, auth)
+async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None)):
+    user = await user_from_query_or_header(authorization, None)
     eb = await db.ebooks.find_one({"id": ebook_id}, NO_ID)
     if not eb or not eb.get("pdf_path"):
         raise HTTPException(status_code=404, detail="Este guia ainda não tem PDF disponível")

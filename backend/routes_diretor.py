@@ -11,7 +11,7 @@ from routes_data import since, enrich_campaigns
 
 router = APIRouter(prefix="/diretor", dependencies=[Depends(require_role("admin"))])
 MODEL = ("gemini", "gemini-2.5-flash")
-WRITE_ACTIONS = {"criar_campanha", "gerar_contrato", "enviar_email", "gerar_qr_code"}
+WRITE_ACTIONS = {"criar_campanha", "gerar_contrato", "enviar_email", "gerar_qr_code", "propor_correcao"}
 
 SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens três subagentes: Marketing (analisa campanhas), Frontend (analisa código UI), Backend (analisa código servidor). "
           "Usas as funções disponíveis para ler dados e executar ações. Ações que alteram dados vão para acoes_pendentes e só executam após aprovação do CEO. Nunca apagas dados. Sê conciso e direto.\n\n"
@@ -33,7 +33,8 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- subagente_marketing(pergunta): analisa campanhas, cliques, conversão, origens e propõe ações\n"
           "- subagente_frontend(pergunta): lê o código React em frontend/src e analisa UI/UX, bugs, melhorias (pode indicar ficheiro)\n"
           "- subagente_backend(pergunta): lê o código FastAPI em backend/ e analisa API, segurança, performance (pode indicar ficheiro)\n"
-          "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final.")
+          "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código sugerida pelos subagentes em ações pendentes (area: frontend|backend; diff em formato unified). NÃO altera código até aprovação.\n"
+          "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', chama propor_correcao com esses dados.")
 
 
 class MsgIn(BaseModel):
@@ -143,13 +144,13 @@ async def subagente_marketing(pergunta: str = "Analisa as campanhas", **_):
 
 async def subagente_frontend(pergunta: str = "Analisa a UI", ficheiro: str = "", **_):
     files = _pick_files("frontend", pergunta, ficheiro)
-    return {**await _subagent("Frontend", "És o subagente Frontend da RRClub: especialista React/Tailwind. Analisas código real e apontas bugs, riscos de UX, acessibilidade e melhorias concretas com referência a ficheiro/linha. Português de Portugal, conciso (máx. 220 palavras).",
+    return {**await _subagent("Frontend", "És o subagente Frontend da RRClub: especialista React/Tailwind. Analisas código real e apontas bugs, riscos de UX, acessibilidade e melhorias concretas com referência a ficheiro/linha. Português de Portugal, conciso (máx. 220 palavras). Se houver uma correção clara, termina com um bloco 'CORRECAO_SUGERIDA:' seguido de JSON {\"ficheiro\":..., \"descricao\":..., \"diff\": \"<unified diff curto>\"}.",
                               f"Pergunta do Diretor: {pergunta}\n\nÍNDICE (frontend/src): {', '.join(_code_index('frontend'))}\n\nCÓDIGO:\n{_code_read('frontend', files)}"), "ficheiros_lidos": files}
 
 
 async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "", **_):
     files = _pick_files("backend", pergunta, ficheiro)
-    return {**await _subagent("Backend", "És o subagente Backend da RRClub: especialista FastAPI/MongoDB/Stripe. Analisas código real e apontas bugs, falhas de segurança/autorização, performance e melhorias concretas com referência a ficheiro/função. Nunca reveles valores de segredos. Português de Portugal, conciso (máx. 220 palavras).",
+    return {**await _subagent("Backend", "És o subagente Backend da RRClub: especialista FastAPI/MongoDB/Stripe. Analisas código real e apontas bugs, falhas de segurança/autorização, performance e melhorias concretas com referência a ficheiro/função. Nunca reveles valores de segredos. Português de Portugal, conciso (máx. 220 palavras). Se houver uma correção clara, termina com um bloco 'CORRECAO_SUGERIDA:' seguido de JSON {\"ficheiro\":..., \"descricao\":..., \"diff\": \"<unified diff curto>\"}.",
                               f"Pergunta do Diretor: {pergunta}\n\nÍNDICE (backend/): {', '.join(_code_index('backend'))}\n\nCÓDIGO:\n{_code_read('backend', files)}"), "ficheiros_lidos": files}
 
 
@@ -171,7 +172,8 @@ async def _queue(tipo: str, args: dict) -> dict:
     desc = {"criar_campanha": f"Criar campanha '{args.get('nome')}' ({args.get('formato', 'QR')}) {args.get('data_inicio', '')} → {args.get('data_fim', '')}",
             "gerar_contrato": f"Contrato hotel {args.get('hotel_id')} × influencer {args.get('influencer_id')} · split {json.dumps(args.get('split', {}), ensure_ascii=False)} · {args.get('duracao', '')}",
             "enviar_email": f"Email para {args.get('destinatario')}: {args.get('assunto')}",
-            "gerar_qr_code": f"Gerar QR para influencer {args.get('influencer_id')} na campanha {args.get('campanha_id')}"}[tipo]
+            "gerar_qr_code": f"Gerar QR para influencer {args.get('influencer_id')} na campanha {args.get('campanha_id')}",
+            "propor_correcao": f"Aplicar correção em {args.get('area', '?')}/{args.get('ficheiro', '?')}: {str(args.get('descricao', ''))[:140]}"}[tipo]
     a = {"id": new_id("ac"), "tipo_acao": tipo, "descricao": desc, "dados_json": args, "status": "pendente", "timestamp": now_iso()}
     await db.acoes_pendentes.insert_one(dict(a))
     return a
@@ -258,6 +260,14 @@ async def _executar(a: dict, user: dict) -> dict:
         url = f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{c['cupom']}"
         await db.campaigns.update_one({"id": c["id"]}, {"$set": {"qr_code_url": url}})
         return {"qr_code_url": url, "cupom": c["cupom"]}
+    if tipo == "propor_correcao":
+        pdir = os.path.join(ROOT, "memory", "patches")
+        os.makedirs(pdir, exist_ok=True)
+        fname = f"{a['id']}-{os.path.basename(str(d.get('ficheiro', 'correcao')))}.patch"
+        with open(os.path.join(pdir, fname), "w", encoding="utf-8") as f:
+            f.write(f"# {d.get('area')}/{d.get('ficheiro')}\n# {d.get('descricao')}\n\n{d.get('diff', '')}")
+        await db.correcoes_aprovadas.insert_one({"id": new_id("fx"), "acao_id": a["id"], **{k: d.get(k) for k in ("area", "ficheiro", "descricao", "diff")}, "patch_file": f"memory/patches/{fname}", "status": "aprovada_para_aplicar", "timestamp": now_iso()})
+        return {"patch_file": f"memory/patches/{fname}", "nota": "Correção aprovada e guardada como patch; a aplicação ao código é feita pelo agente de desenvolvimento (peça 'aplica as correções aprovadas')."}
     return {"erro": "tipo desconhecido"}
 
 

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 
 const SUGGESTIONS = ["Resumo do dashboard", "Pede ao subagente Marketing um plano para aumentar a conversão", "Pede ao subagente Frontend uma auditoria da página pública do cupão", "Pede ao subagente Backend uma revisão de segurança dos pagamentos"];
-const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code" };
+const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
 const fmt = (d) => new Date(d).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
 export default function Diretor() {
@@ -81,7 +81,8 @@ export default function Diretor() {
               <div key={a.id} data-testid={`acao-${a.id}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-3 space-y-2 fade-up">
                 <div className="flex items-center gap-2"><span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md">{TIPO[a.tipo_acao] || a.tipo_acao}</span><span className="ml-auto text-[10px] text-slate-400">{fmt(a.timestamp)}</span></div>
                 <p className="text-sm font-semibold text-slate-900">{a.descricao}</p>
-                <pre className="text-[11px] text-slate-500 bg-white rounded-lg p-2 overflow-x-auto max-h-28">{JSON.stringify(a.dados_json, null, 1)}</pre>
+                {a.tipo_acao === "propor_correcao" && a.dados_json?.diff && <pre data-testid={`acao-diff-${a.id}`} className="text-[11px] text-emerald-300 bg-slate-900 rounded-lg p-2 overflow-x-auto max-h-40 whitespace-pre">{a.dados_json.diff}</pre>}
+                <pre className="text-[11px] text-slate-500 bg-white rounded-lg p-2 overflow-x-auto max-h-28">{JSON.stringify(a.tipo_acao === "propor_correcao" ? { area: a.dados_json?.area, ficheiro: a.dados_json?.ficheiro } : a.dados_json, null, 1)}</pre>
                 {a.status === "pendente" ? (
                   <div className="grid grid-cols-2 gap-2">
                     <button data-testid={`acao-aprovar-${a.id}`} onClick={() => decide(a.id, "aprovar")} className="py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold inline-flex items-center justify-center gap-1 btn-press"><Check className="w-3.5 h-3.5" /> Aprovar</button>
