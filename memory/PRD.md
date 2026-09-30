@@ -197,6 +197,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `licoes_aprendidas`: rejeitar pede motivo + "fazer diferente" (prompt no UI, `POST /acoes/{id}/rejeitar {motivo, fazer_diferente}`); `GET /diretor/licoes`; últimas 8 lições injetadas no prompt; `consultar_licoes()`
 - Teste: pedido "adiciona comentário na 1ª linha de backend/brand.py" → ler_codigo_github → validar_diff → proposta com hunk `@@ -1,3 +1,4 @@` correto → aprovar → aplicar = **aplicada** (py_compile + import server). Revertido após teste.
 
+### 2026-06 · Stripe explícito em todo o site + controlo de créditos IA ✅ (iteration_32: backend 8/8, frontend 100%)
+- `GET /api/payments/config` (público: mode test/live, available, connect_enabled; cache 120s) → `StripeModeBanner` em `/c/:code` (dentro do card de pagamento) e `/ebooks`; `GET /api/admin/stripe/status` → `StripeStatusCard` em Definições com 5 passos (chave, modo, webhook, Connect, hotéis ligados) e instruções sem código para passar a live; erros Stripe em checkout/public-pay → 502/503 com mensagem clara
+- Créditos IA: `llm_usage` (dia, origem diretor/subagente/auditoria); `_llm_guard` → 429 acima do limite diário (`settings.diretor.limite_diario`, default 60); `GET /diretor/uso`, `POST /diretor/uso/limite` (5–1000); `CreditMeter` no cabeçalho do Diretor (clicar altera limite); `window.confirm` com custo (14 chamadas) antes da auditoria; regra 7 no prompt (só chama subagentes se o CEO pedir explicitamente)
+- **Erro 522 (Cloudflare → origem) em rrclub.online**: pedido de RCA ao deployer em curso; código funciona em preview. Provável: DNS/proxy do domínio ou pods sem secrets obrigatórios.
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

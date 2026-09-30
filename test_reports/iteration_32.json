@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 32: Stripe status exposure + Diretor IA credit cap. Backend 8/8 pytest passed (payments/config public, admin/stripe/status with 5 steps + 403 without auth, diretor/uso GET, limit validation 3→400 & 80→200, daily cap 429 for both /conversar and /auditoria via seeded llm_usage docs, restore to 60). Frontend all 4 flows OK: /c/CLUB-10 shows stripe-test-banner, /admin/definicoes shows stripe-status-card with badge 'MODO TESTE · 3/5' and 5 stripe-step-* rows (chave/modo/webhook/connect/parceiros), refresh button works, /admin/diretor shows credit-meter-value '0/60' and audit-run triggers window.confirm 'A auditoria completa gasta 14 (usadas hoje: 0/60) chamadas de IA dos seus créditos. Continuar?' — dismissed and no audit ran (button not disabled, no loading state). /ebooks logged as admin shows stripe-test-banner at top.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter32_stripe_diretor.py",
+    "/app/test_reports/pytest/iter32.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_diretor.py:_llm_guard inserts llm_usage docs BEFORE the LLM call succeeds — a subsequent failure (network/quota) still consumes credits. Consider moving insert after successful response, or reverting on exception.",
+    "routes_payments.py:_stripe_probe uses a 2-minute cache and force=True on admin_stripe_status. Public /payments/config never forces — a stale cache could show 'available' after a key change. Acceptable given 120s TTL.",
+    "routes_diretor.py:uso endpoint uses require_role via router-level dependency, but set_limite also adds Depends(require_role('admin')) — duplicate but harmless.",
+    "routes_diretor.py: LIMITE_DIARIO_DEFAULT=60 is duplicated between _llm_guard and uso_hoje; extract as module constant used consistently (already done, just noting no drift risk).",
+    "StripeStatusCard.jsx badge shows '3/5' — 3 steps ok, 2 pending (chave OK, modo=test so not ok, webhook OK per test, connect OK, parceiros=0/0 partners with charges enabled probably ok=false). Steps rendering visually clear."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter32_stripe_diretor.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100%"},
+  "test_credentials": "admin: faellt@gmail.com / Robson2026!",
+  "seed_data_creation": "Test inserted temporary llm_usage docs with origem='teste' during daily-cap test and deleted them in finally block. Diretor limite restored to 60.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend Stripe currently in TEST mode; probe returns account_ok=true, connect_enabled=true, webhook_configured=true. Active coupon: CLUB-10 (campaign 'VALENTIS DAYS'). Diretor daily limit currently 60, usage today 0. Run: `pytest backend/tests/test_iter32_stripe_diretor.py -o asyncio_mode=auto -o addopts=''`.",
+  "rca of the issue": "N/A — no bugs found."
+}
