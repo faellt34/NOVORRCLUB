@@ -31,7 +31,14 @@ export default function Diretor() {
     } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }
   };
   const decide = async (id, op) => {
-    try { const { data } = await api.post(`/diretor/acoes/${id}/${op}`); toast.success(op === "aprovar" ? `Ação executada${data.resultado?.cupom ? ` · cupão ${data.resultado.cupom}` : ""}` : "Ação rejeitada"); load(); }
+    let body = {};
+    if (op === "rejeitar") {
+      const motivo = window.prompt("Porque rejeita esta proposta? (o Diretor vai aprender com isto)");
+      if (motivo === null) return;
+      const fazer_diferente = window.prompt("O que deveria fazer de diferente? (opcional)") || "";
+      body = { motivo, fazer_diferente };
+    }
+    try { const { data } = await api.post(`/diretor/acoes/${id}/${op}`, body); toast.success(op === "aprovar" ? `Ação executada${data.resultado?.cupom ? ` · cupão ${data.resultado.cupom}` : ""}` : "Ação rejeitada · lição guardada"); load(); }
     catch (e) { toast.error(apiError(e)); }
   };
 
@@ -98,6 +105,7 @@ export default function Diretor() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
+                    {a.status === "rejeitada" && a.motivo && <p data-testid={`acao-motivo-${a.id}`} className="text-[11px] text-red-600">Motivo: {a.motivo}</p>}
                     {a.resultado && <p className="text-[11px] text-emerald-700 inline-flex items-center gap-1"><FileText className="w-3 h-3" /> {JSON.stringify(a.resultado)}</p>}
                     {a.tipo_acao === "propor_correcao" && a.status === "aprovada" && (
                       a.aplicacao?.status === "aplicada" ? <p data-testid={`acao-aplicada-${a.id}`} className="text-[11px] font-semibold text-emerald-700">✓ Aplicada ao código · {a.aplicacao.ficheiros?.join(", ")} · {a.aplicacao.verificacao}</p>

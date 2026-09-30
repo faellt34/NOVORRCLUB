@@ -21,10 +21,20 @@ WRITE_ACTIONS = {"criar_campanha", "gerar_contrato", "enviar_email", "gerar_qr_c
 
 SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens três subagentes: Marketing (analisa campanhas), Frontend (analisa código UI), Backend (analisa código servidor). "
           "Usas as funções disponíveis para ler dados e executar ações. Ações que alteram dados vão para acoes_pendentes e só executam após aprovação do CEO. Nunca apagas dados. Sê conciso e direto.\n\n"
+          "CONTEXTO DE NEGÓCIO (sabe sempre): a RRClub é uma plataforma de hotéis em Portugal. Modelo por venda: 80% hotel / 5% influencer / 10% RRClub / 5% desconto ao cliente. "
+          "O Stripe Connect faz o split automático. Os QR codes geram o tracking (clique → QR baixado → venda). Os influencers ganham por performance (5% por venda).\n\n"
+          "REGRAS DE CONDUTA:\n"
+          "1) FOCO ÚNICO: faz apenas o que o CEO pediu. Não acrescentas melhorias, não desvias para outros assuntos nem outros ficheiros. Se pede a correção de um erro, tratas só desse erro.\n"
+          "2) HONESTIDADE: se não encontras algo, dizes 'Não encontrei. Preciso de mais informação.' NUNCA inventas ficheiros, funções, linhas ou números.\n"
+          "3) COMUNICAÇÃO CLARA: português de Portugal, simples e direto, sem jargão técnico — explica como se o CEO não fosse programador.\n"
+          "4) MEMÓRIA: antes de propor uma ação, chama consultar_licoes() e respeita as lições das propostas rejeitadas pelo CEO.\n"
+          "5) DIFFS VÁLIDOS: antes de propor uma alteração de código, lê o ficheiro real com ler_codigo_github(caminho) (ou pelo subagente) e gera um diff git correto: cabeçalhos '--- a/caminho/ficheiro' e '+++ b/caminho/ficheiro' "
+          "(caminho a partir da raiz do repositório, ex.: backend/core.py), bloco '@@ -linha_inicial,contagem +linha_inicial,contagem @@' com números reais, linhas removidas com '-', adicionadas com '+', e 3 linhas de contexto antes e depois.\n"
+          "6) VALIDAÇÃO OBRIGATÓRIA: chama validar_diff(ficheiro, diff) antes de propor_correcao. Só propões se devolver valido=true. Se falhar, NÃO propões e dizes ao CEO: 'Não consigo aplicar esta alteração. Motivo: <motivo>.'\n\n"
           "PROTOCOLO OBRIGATÓRIO: responde SEMPRE com um único JSON válido, sem texto fora dele, numa destas formas:\n"
           '1) Para chamar uma função: {"funcao": "<nome>", "args": {...}}\n'
           '2) Para responder ao CEO: {"resposta": "<texto em PT-PT, conciso, com números concretos>"}\n'
-          "Podes chamar várias funções em sequência (uma por resposta) antes de responder. Funções de escrita (criar_campanha, gerar_contrato, enviar_email, gerar_qr_code) NÃO executam: ficam pendentes de aprovação — informa o CEO disso.\n"
+          "Podes chamar várias funções em sequência (uma por resposta) antes de responder. Funções de escrita (criar_campanha, gerar_contrato, enviar_email, gerar_qr_code, propor_correcao) NÃO executam: ficam pendentes de aprovação — informa o CEO disso.\n"
           "REGRA: quando o CEO pede para criar, propor, gerar ou enviar algo, DEVES chamar a função de escrita correspondente (com ids reais obtidos via listar_hoteis/listar_influencers) — nunca apenas descrever a ação.\n\n"
           "FUNÇÕES:\n"
           "- ler_dashboard(): receita, cliques, conversão, ticket médio, influencers (30 dias)\n"
@@ -42,8 +52,10 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- listar_ficheiros_github(pasta): lista ficheiros/pastas do repositório GitHub do projeto (pasta vazia = raiz)\n"
           "- ler_codigo_github(caminho): devolve o conteúdo de um ficheiro do repositório GitHub (ex.: backend/server.py)\n"
           "- procurar_codigo_github(termo): procura um termo no código do repositório GitHub e devolve os ficheiros onde aparece\n"
-          "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código sugerida pelos subagentes em ações pendentes (area: frontend|backend; diff em formato unified). NÃO altera código até aprovação.\n"
-          "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', chama propor_correcao com esses dados.")
+          "- validar_diff(ficheiro, diff): verifica se o ficheiro existe, se as linhas do diff existem no código atual e se aplica com 'git apply --check'. Devolve {valido, motivo}.\n"
+          "- consultar_licoes(): lições aprendidas de propostas rejeitadas pelo CEO (o que foi proposto, porquê rejeitado, o que fazer diferente)\n"
+          "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código VALIDADA em ações pendentes (area: frontend|backend; ficheiro a partir da raiz, ex. backend/core.py; diff unified). NÃO altera código até aprovação. Recusada automaticamente se o diff não validar.\n"
+          "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', valida o diff e só depois chamas propor_correcao.")
 
 
 class MsgIn(BaseModel):
@@ -207,6 +219,30 @@ async def procurar_codigo_github(termo: str = "", **_):
     return {"repo": GH_REPO, "termo": termo, "total": len(hits), "resultados": hits, "nota": "pesquisa sem token: nome + conteúdo dos primeiros 80 ficheiros de código"}
 
 
+async def validar_diff(ficheiro: str = "", diff: str = "", area: str = "", **_):
+    diff = str(diff or "")
+    rel = _gh_path(ficheiro)
+    if not rel:
+        return {"valido": False, "motivo": "indica o ficheiro (ex.: backend/core.py)"}
+    if not os.path.isfile(os.path.join(ROOT, rel)):
+        return {"valido": False, "motivo": f"o ficheiro {rel} não existe no projeto"}
+    if not re.search(r"^--- a/.+\n\+\+\+ b/.+", diff, re.M):
+        return {"valido": False, "motivo": "faltam os cabeçalhos '--- a/caminho' e '+++ b/caminho'"}
+    if not re.search(r"^@@ -\d+(,\d+)? \+\d+(,\d+)? @@", diff, re.M):
+        return {"valido": False, "motivo": "falta o bloco '@@ -linha,contagem +linha,contagem @@' com números reais"}
+    src = open(os.path.join(ROOT, rel), encoding="utf-8", errors="ignore").read().splitlines()
+    missing = [l[1:] for l in diff.splitlines() if l.startswith(("-", " ")) and not l.startswith("---") and l[1:].strip() and l[1:] not in src]
+    if missing:
+        return {"valido": False, "motivo": f"estas linhas não existem no ficheiro atual: {missing[:3]}"}
+    ap = await asyncio.to_thread(_apply_patch, area if area in CODE_DIRS else rel.split("/")[0] if rel.split("/")[0] in CODE_DIRS else "backend", diff, True)
+    return {"valido": ap["ok"], "motivo": "" if ap["ok"] else f"git apply --check falhou: {ap.get('erro', '')[:300]}"}
+
+
+async def consultar_licoes(**_):
+    items = await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(20)
+    return {"total": len(items), "licoes": items} if items else {"total": 0, "licoes": [], "nota": "ainda não há rejeições registadas"}
+
+
 async def _subagent(role: str, system: str, prompt: str) -> dict:
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model("anthropic", "claude-sonnet-4-6")
@@ -240,7 +276,8 @@ async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "",
 
 READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
               "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend,
-              "ler_codigo_github": ler_codigo_github, "listar_ficheiros_github": listar_ficheiros_github, "procurar_codigo_github": procurar_codigo_github}
+              "ler_codigo_github": ler_codigo_github, "listar_ficheiros_github": listar_ficheiros_github, "procurar_codigo_github": procurar_codigo_github,
+              "validar_diff": validar_diff, "consultar_licoes": consultar_licoes}
 
 
 def _parse(txt: str) -> dict:
@@ -269,7 +306,9 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     hist = await db.conversas_diretor.find({}, NO_ID).sort("timestamp", -1).to_list(6)
     prior = "\n".join(f"CEO: {h['mensagem_user']}\nDiretor: {h['resposta_diretor']}" for h in reversed(hist))
-    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("dir"), system_message=SYSTEM).with_model(*MODEL)
+    licoes = await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(8)
+    lic_txt = "\n".join(f"- Proposto: {l['proposto'][:120]} | Rejeitado porque: {l['motivo'][:120]} | Fazer diferente: {l['fazer_diferente'][:120]}" for l in licoes)
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("dir"), system_message=SYSTEM + (f"\n\nLIÇÕES APRENDIDAS (rejeições do CEO):\n{lic_txt}" if lic_txt else "")).with_model(*MODEL)
     text = (f"Contexto recente:\n{prior}\n\n" if prior else "") + f"Hoje: {datetime.now(timezone.utc).date().isoformat()}\nCEO: {body.mensagem}"
     chamadas, pendentes, resposta = [], [], None
     for _ in range(6):
@@ -284,6 +323,12 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
                 chamadas.append({"funcao": fn, "args": args, "resumo": (res.get("analise", "")[:600] if isinstance(res, dict) else "")})
                 text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\nContinua (outra função ou resposta final em JSON)."
             elif fn in WRITE_ACTIONS:
+                if fn == "propor_correcao":
+                    v = await validar_diff(args.get("ficheiro", ""), args.get("diff", ""), args.get("area", ""))
+                    if not v["valido"]:
+                        text = f"RECUSADO: o diff não é válido — {v['motivo']}. NÃO propões esta alteração. Diz ao CEO: 'Não consigo aplicar esta alteração. Motivo: {v['motivo']}.' Responde em JSON."
+                        chamadas.append({"funcao": "validar_diff", "args": {"ficheiro": args.get("ficheiro")}, "resumo": v["motivo"]})
+                        continue
                 a = await _queue(fn, args)
                 pendentes.append(a)
                 text = f"A ação {fn} foi colocada em acoes_pendentes (id {a['id']}) e aguarda aprovação do CEO. Continua ou responde ao CEO em JSON."
@@ -374,20 +419,34 @@ async def aprovar(acao_id: str, user: dict = Depends(require_role("admin"))):
     return {"ok": True, "resultado": res}
 
 
+class RejeitarIn(BaseModel):
+    motivo: str = ""
+    fazer_diferente: str = ""
+
+
 @router.post("/acoes/{acao_id}/rejeitar")
-async def rejeitar(acao_id: str, user: dict = Depends(require_role("admin"))):
-    r = await db.acoes_pendentes.update_one({"id": acao_id, "status": "pendente"}, {"$set": {"status": "rejeitada", "rejeitada_em": now_iso(), "rejeitada_por": user["nome"]}})
-    if not r.matched_count:
+async def rejeitar(acao_id: str, body: RejeitarIn = RejeitarIn(), user: dict = Depends(require_role("admin"))):
+    a = await db.acoes_pendentes.find_one({"id": acao_id, "status": "pendente"}, NO_ID)
+    if not a:
         raise HTTPException(status_code=404, detail="Ação pendente não encontrada")
-    await audit("DIRETOR", "Ação rejeitada pelo CEO", user, acao_id)
+    await db.acoes_pendentes.update_one({"id": acao_id}, {"$set": {"status": "rejeitada", "rejeitada_em": now_iso(), "rejeitada_por": user["nome"], "motivo": body.motivo}})
+    licao = {"id": new_id("lic"), "acao_id": acao_id, "tipo_acao": a["tipo_acao"], "proposto": a["descricao"], "motivo": body.motivo.strip() or "sem motivo indicado",
+             "fazer_diferente": body.fazer_diferente.strip() or "confirmar com o CEO antes de propor algo semelhante", "timestamp": now_iso()}
+    await db.licoes_aprendidas.insert_one(dict(licao))
+    await audit("DIRETOR", f"Ação rejeitada pelo CEO: {body.motivo[:100]}", user, acao_id)
     return {"ok": True}
+
+
+@router.get("/licoes")
+async def licoes():
+    return await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(100)
 
 
 def _run(cmd: list, cwd: str = None, timeout: int = 120) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True, timeout=timeout)
 
 
-def _apply_patch(area: str, diff: str) -> dict:
+def _apply_patch(area: str, diff: str, check_only: bool = False) -> dict:
     if not diff.strip() or "@@" not in diff:
         return {"ok": False, "etapa": "validar", "erro": "O patch não é um diff unificado válido (sem hunks @@)."}
     if not diff.endswith("\n"):
@@ -400,6 +459,9 @@ def _apply_patch(area: str, diff: str) -> dict:
     for extra in tries:
         chk = _run(["git", "apply", "--check", "--recount", *extra, pf])
         if chk.returncode == 0:
+            if check_only:
+                os.unlink(pf)
+                return {"ok": True, "opcoes": extra}
             res = _run(["git", "apply", "--recount", *extra, pf])
             if res.returncode == 0:
                 names = _run(["git", "apply", "--numstat", "--recount", *extra, pf]).stdout
