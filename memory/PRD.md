@@ -162,6 +162,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `subagente_marketing(pergunta)` (dados de campanhas/funil/financeiro), `subagente_frontend(pergunta, ficheiro?)` e `subagente_backend(pergunta, ficheiro?)` (leem código real em `frontend/src` e `backend/`, só leitura, com índice + seleção de ficheiros por palavras-chave) — cada um chama Claude Sonnet 4.6; o Diretor (Gemini) integra as conclusões; `chamadas[].resumo` mostrado em painéis "🧩 Subagente" na página Diretor
 - Achados do subagente Backend a considerar: `/payments/status/{session_id}` sem auth; webhook aceita payload se `STRIPE_WEBHOOK_SECRET` vazio; token JWT em query string no PDF de e-books
 
+### 2026-06 · Correções de segurança nos pagamentos + "propor_correcao" ✅ (iteration_29: backend 5/5, frontend 100%)
+- `GET /payments/status/{id}`: e-books/subscrições exigem Bearer (dono ou admin; 401/403); cupão QR mantém-se público mas `customer_email` mascarado
+- `POST /stripe/webhook`: 503 se `STRIPE_WEBHOOK_SECRET` vazio (nunca aceita payload sem assinatura)
+- `GET /ebooks/{id}/pdf`: removido token em query string (`?auth=`); só header Authorization (frontend já o usava)
+- Diretor: subagentes Frontend/Backend podem devolver `CORRECAO_SUGERIDA`; `propor_correcao(area, ficheiro, descricao, diff)` → ação pendente com diff visível; aprovar grava `.patch` em `memory/patches/` + `correcoes_aprovadas` (aplicação ao código é feita por mim a pedido — não altera código em produção automaticamente)
+
 ## Backlog priorizado
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio
 - P2: recibo por SMS (Twilio), push notifications, relatórios por parceiro em PDF

@@ -1,0 +1,22 @@
+{
+  "summary": "Iter 29 — security fixes in backend/routes_payments.py + Diretor propor_correcao. Backend pytest 5/5 in 8.2s: (1) GET /api/payments/status/{sid} without token -> 401; admin -> 200; owner (influencer) -> 200; other user (partner) -> 403 (created a real Stripe checkout session via POST /api/payments/checkout with a premium ebook lookup_key from GET /api/ebooks); non-existent id -> 404. (2) POST /api/stripe/webhook body '{}' no signature -> 400 (WEBHOOK_SECRET is configured, so not 503). (3) GET /api/ebooks/{id}/pdf?auth=<valid token> with no Authorization header -> 401; with Authorization header -> 200/403 (no longer 401). (4) POST /api/diretor/conversar 'Chama a função propor_correcao ...' -> acoes_pendentes contains tipo_acao=propor_correcao; POST /api/diretor/acoes/{id}/aprovar -> resultado.patch_file starts with 'memory/patches/' and file exists on /app/memory/patches/; GET /api/diretor/acoes?status=aprovada includes it. Frontend E2E: admin login -> /admin/diretor -> created propor_correcao via API -> card shows tipo label 'Correção de código', <pre data-testid='acao-diff-{id}'> block with unified diff visible; Aprovar -> toast 'Ação executada', moved to Aprovadas tab with resultado JSON containing 'memory/patches/...' patch_file. Zero console errors (only a benign WS reconnect warning).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter29_sec_diretor.py", "/app/test_reports/pytest/iter29.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes_payments.payment_status: coupon_pay branch continues to be public with masked email — OK. Consider adding a rate-limit per session_id since it triggers stripe.checkout.Session.retrieve on each unauthenticated hit for coupon_pay (potential Stripe API burn).",
+    "routes_payments.read_pdf: removed ?auth= query token — good security fix. However user_from_query_or_header still accepts an 'auth' param signature; the second arg is always None. Consider removing the unused parameter to reduce misuse risk.",
+    "routes_diretor._executar propor_correcao: os.path.basename(str(d.get('ficheiro'))) prevents path traversal in filename — good. But 'diff' content is written verbatim; consider size cap (e.g., 200KB) to avoid large payloads filling /app/memory/patches.",
+    "routes_diretor.propor_correcao is added to WRITE_ACTIONS — correctly queued. TIPO map in Diretor.jsx already includes 'propor_correcao': 'Correção de código'. Consistent.",
+    "Diretor.jsx line 91 renders raw JSON.stringify(a.resultado) inline — long patch_file strings overflow the pill; consider truncating or using a code block similar to the diff pre for approved actions."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter29_sec_diretor.py", "/app/test_reports/iteration_29.json"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of scripted flows"},
+  "test_credentials": "admin faellt@gmail.com/Robson2026!, influencer.exemplo@club.pt/influencer123, parceiro.exemplo@club.pt/parceiro123",
+  "seed_data_creation": "Test-created: 1 Stripe checkout session (initiated, never paid — will expire on Stripe side); 2 propor_correcao pending actions during backend + UI tests (both approved & cleaned; patch files removed from /app/memory/patches). No persistent test pollution beyond the payment_transactions initiated row (harmless).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter 29 verified all three security fixes in routes_payments (payment_status authz, webhook 503-vs-400, PDF no query auth) and propor_correcao end-to-end. Test file: /app/backend/tests/test_iter29_sec_diretor.py. Frontend Diretor.jsx renders <pre data-testid='acao-diff-{id}'> only when tipo_acao=='propor_correcao' and dados_json.diff present; approval executes _executar which writes patch to /app/memory/patches/{acao_id}-{basename}.patch and inserts db.correcoes_aprovadas.",
+  "rca of the issue": "N/A — all features working as specified."
+}
