@@ -106,7 +106,7 @@ async def ai_story_image(body: StoryImageIn, user: dict = Depends(require_role("
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("img"), system_message="You generate polished marketing images.").with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
     _, images = await chat.send_message_multimodal_response(UserMessage(text=prompt))
     if not images:
-        raise HTTPException(status_code=502, detail="O Gemini não devolveu imagem. Tente outro estilo.")
+        raise HTTPException(status_code=409, detail="O Gemini não devolveu imagem. Tente outro estilo.")
     img = images[0]
     return Response(base64.b64decode(img["data"]), media_type=img.get("mime_type", "image/png"), headers={"Content-Disposition": f'inline; filename="story-{c["cupom"]}.png"'})
 

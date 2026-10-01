@@ -215,6 +215,13 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `InfluencerDashboard.jsx`: card "QR codes descarregados" (grid 5 colunas) + incremento realtime em `qr_baixado`
 - Produção verificada com influencer QA temporário (criado e apagado): HTTP 200 com claims/downloads separados. Nota: endpoint do dashboard está em `routes_data.py` (não em routes_ops).
 
+### 2026-06 · RCA definitivo do "502 Bad gateway" no Stripe Connect (produção) ✅
+- Causa 1 (deployer RCA): produção está em Stripe **LIVE**; a criação de contas Connect devolve `account_creation_liability_unacknowledged` até o dono aceitar as responsabilidades em dashboard.stripe.com → Settings → Connect → **Platform profile**. Em preview (test) não é exigido.
+- Causa 2 (porque aparecia página Cloudflare e não a mensagem): o backend respondia **HTTP 502** para erros Stripe e o Cloudflare substitui 502/504 da origem pela sua própria página. Todos os erros Stripe/storage/Resend/Gemini passaram a **409** com JSON; liability → 200 `{available:false, reason, codigo}`.
+- Causa 3: `KeyError partner_id` em utilizadores parceiro criados pelo admin sem estabelecimento → agora 400 com mensagem.
+- Card Stripe em Definições ganhou o passo "Perfil de plataforma Connect" (probe cria+fecha conta recipient em v2).
+- Utilizadores QA temporários criados em produção para teste foram apagados.
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

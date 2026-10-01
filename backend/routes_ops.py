@@ -219,7 +219,7 @@ async def cancel_subscription(user: dict = Depends(get_current_user)):
             s = stripe.Subscription.modify(sub["stripe_subscription_id"], cancel_at_period_end=True)
             ends = datetime.fromtimestamp(s["current_period_end"], tz=timezone.utc).date().isoformat() if s.get("current_period_end") else None
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Stripe: {e}")
+            raise HTTPException(status_code=409, detail=f"Stripe: {e}")
     await db.subscriptions.update_one({"user_id": user["id"], "status": "active"}, {"$set": {"cancel_at_period_end": True, "ends_at": ends, "cancel_requested_at": now_iso()}})
     await audit("SUBSCRIÇÃO", f"Cancelamento agendado" + (f" · termina {ends}" if ends else ""), user, sub["id"])
     return {"ok": True, "ends_at": ends}
@@ -315,7 +315,7 @@ async def test_email(user: dict = Depends(require_role("admin"))):
     await load_settings()
     ok = await send_email(user["email"], "RRclub · Email de teste", "Email configurado com sucesso", f"Olá {user['nome']}, este é um email de teste enviado pela plataforma RRclub.")
     if not ok:
-        raise HTTPException(status_code=502, detail="Não foi possível enviar. Verifique a chave Resend e o remetente (em modo teste do Resend só envia para o seu próprio email).")
+        raise HTTPException(status_code=409, detail="Não foi possível enviar. Verifique a chave Resend e o remetente (em modo teste do Resend só envia para o seu próprio email).")
     return {"ok": True}
 
 

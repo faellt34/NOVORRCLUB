@@ -35,7 +35,25 @@ def _stripe_probe() -> dict:
         info["connect_enabled"] = True
     except stripe.StripeError:
         info["connect_enabled"] = False
+    info["platform_profile_ok"] = True
+    if info["connect_enabled"]:
+        prof = await_profile_probe()
+        info["platform_profile_ok"] = prof
     return info
+
+
+def await_profile_probe() -> bool:
+    try:
+        acct = _v2().v2.core.accounts.create({"display_name": "RRclub probe", "identity": {"country": "pt", "entity_type": "company"},
+                                              "defaults": {"responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
+                                              "configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}}}})
+        try:
+            _v2().v2.core.accounts.close(acct.id, {"applied_configurations": ["recipient"]})
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        return "liability" not in str(e).lower()
 
 
 async def stripe_config(force: bool = False) -> dict:
@@ -61,6 +79,7 @@ async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
         {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
         {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
         {"id": "connect", "label": "Stripe Connect ativo (split automático 80/5/10)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
+        {"id": "perfil", "label": "Perfil de plataforma Connect concluído (responsabilidade por perdas aceite)", "ok": c.get("platform_profile_ok", True), "action": None if c.get("platform_profile_ok", True) else "Em modo live o Stripe bloqueia a criação de contas de hotéis até aceitar as responsabilidades: dashboard.stripe.com → Settings → Connect → Platform profile → concluir. Depois o hotel volta a clicar 'Ativar split automático'."},
         {"id": "parceiros", "label": f"Hotéis ligados ao Connect: {connected}/{partners}", "ok": partners > 0 and connected == partners, "action": None if partners > 0 and connected == partners else "Cada hotel liga a sua conta em Painel do Parceiro → 'Receber pagamentos' (só funciona depois do Connect estar ativo)."},
     ]
     return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": len(steps)}
@@ -132,7 +151,7 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
         if "managed payments" in msg or "ineligible" in msg:
             session = stripe.checkout.Session.create(**kwargs, automatic_tax={"enabled": True}, billing_address_collection="required")
         else:
-            raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+            raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=503, detail=f"Pagamentos temporariamente indisponíveis: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({
@@ -274,7 +293,7 @@ async def upload_pdf(ebook_id: str, file: UploadFile = File(...), user: dict = D
     try:
         res = put_object(f"{APP_NAME}/ebooks/{ebook_id}/{uuid.uuid4()}.pdf", data, "application/pdf")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Falha no armazenamento: {e}")
+        raise HTTPException(status_code=409, detail=f"Falha no armazenamento: {e}")
     await db.ebooks.update_one({"id": ebook_id}, {"$set": {"pdf_path": res["path"], "pdf_name": file.filename, "pdf_size": res.get("size", len(data)), "pdf_uploaded_at": now_iso()}})
     await audit("UPLOAD", f"PDF de '{eb['titulo']}' · {file.filename}", user, ebook_id)
     return {"ok": True, "pdf_name": file.filename, "pdf_size": res.get("size", len(data))}
@@ -307,7 +326,7 @@ async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None)):
     try:
         data, ct = get_object(eb["pdf_path"])
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Falha ao obter ficheiro: {e}")
+        raise HTTPException(status_code=409, detail=f"Falha ao obter ficheiro: {e}")
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{eb.get("pdf_name") or ebook_id}.pdf"'})
 
 
@@ -350,11 +369,11 @@ async def public_pay(body: PublicPayIn):
                 break
             except stripe.error.InvalidRequestError as e:
                 if pm == ["card"]:
-                    raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or e}")
+                    raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
     except stripe.error.AuthenticationError:
         raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=502, detail=f"Stripe: {e.user_message or str(e)[:120]}")
+        raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
                                               "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
@@ -409,6 +428,9 @@ def _connect_status(acct_id: str) -> dict:
 @router.post("/partner/connect/onboard")
 async def connect_onboard(body: dict, user: dict = Depends(require_role("partner"))):
     import asyncio
+    import logging
+    if not user.get("partner_id"):
+        raise HTTPException(status_code=400, detail="A sua conta não está ligada a um estabelecimento. Contacte o administrador.")
     partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
     origin = (body.get("origin_url") or os.environ.get("FRONTEND_URL", "")).rstrip("/")
     try:
@@ -418,11 +440,16 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role("partner
             acct_id = acct.id
             await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
         link = await asyncio.to_thread(_connect_link, acct_id, origin)
-    except stripe.StripeError as e:
-        msg = getattr(e, "user_message", None) or str(e)
-        if "signed up for Connect" in msg or "Connect" in msg and "not" in msg.lower():
-            return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve reclamar a conta Stripe e ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
-        raise HTTPException(status_code=502, detail=f"Stripe Connect indisponível: {msg[:200]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = (getattr(e, "user_message", None) or str(e) or type(e).__name__)[:300]
+        logging.getLogger(__name__).error(f"connect_onboard falhou ({type(e).__name__}): {msg}")
+        if "liability" in msg.lower() or "platform-profile" in msg:
+            return {"available": False, "reason": "O Stripe exige que o administrador da RRclub aceite as responsabilidades da plataforma (perdas de contas ligadas) antes de ligar hotéis. Admin: entrar em dashboard.stripe.com → Settings → Connect → Platform profile e concluir o perfil. Até lá, recebe por transferência para o seu IBAN.", "codigo": "liability_unacknowledged"}
+        if "Connect" in msg and ("signed up" in msg or "not enabled" in msg.lower() or "platform" in msg.lower()):
+            return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
+        raise HTTPException(status_code=409, detail=f"Stripe Connect indisponível ({type(e).__name__}): {msg}")
     await audit("CONFIGURAÇÃO", f"Onboarding Stripe Connect iniciado · {partner.get('nome')}", user, acct_id)
     return {"available": True, "url": link.url, "account_id": acct_id}
 
@@ -430,13 +457,15 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role("partner
 @router.get("/partner/connect/status")
 async def connect_status(user: dict = Depends(require_role("partner"))):
     import asyncio
+    if not user.get("partner_id"):
+        return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
     partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
     acct_id = partner.get("stripe_account_id")
     if not acct_id:
         return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
     try:
         info = await asyncio.to_thread(_connect_status, acct_id)
-    except stripe.StripeError:
+    except Exception:
         info = {"connected": True, "charges_enabled": bool(partner.get("stripe_charges_enabled")), "payouts_enabled": False}
     await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"]}})
     return info
