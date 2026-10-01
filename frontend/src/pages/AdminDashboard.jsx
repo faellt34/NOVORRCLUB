@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb, Radio, Ticket, MousePointerClick, UserX, Percent, Receipt, Target, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
+import { RevenueClicksChart } from "../components/RevenueClicksChart";
+import { Recommendations } from "../components/Recommendations";
 import { useApp } from "../context/AppContext";
 import { api, apiError, eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
@@ -141,6 +143,12 @@ export default function AdminDashboard() {
         <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="xl:col-span-2"><RevenueClicksChart series={data.chart_rc || []} /></div>
+        <Recommendations refreshKey={stats.cliques} />
+      </div>
+
 
       {origins.length > 0 && (
         <div data-testid="admin-origins-card" className="card-soft p-5">

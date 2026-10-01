@@ -252,3 +252,8 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## 2026-10-01 — Visual fintech (admin)
 - Sidebar navy #070B1F com GlobeCanvas a girar atrás do perfil (`sidebar-globe`), nav ativo indigo, card "Sistema operacional" (admin). KpiCard: layout fintech com sparkline SVG + trend inline. Header admin: eyebrow DASHBOARD, pill "Plataforma segura · Sistema operacional" (`platform-status-pill`), botões "+ Novo teste". Sem design_agent (poupança de créditos).
+
+## 2026-10-01 — Dashboard admin: gráfico + recomendações; limpeza prod
+- `RevenueClicksChart.jsx` (recharts área, 7/30 dias) alimentado por `chart_rc` em GET /api/dashboard/admin (`revenue_clicks_series`).
+- `Recommendations.jsx`: alertas do /diretor/briefing como cartões; "Ver com o Diretor" navega para /admin/diretor com state.pergunta (Diretor.jsx envia automaticamente).
+- Prod: contas teste.influencer/teste.hotel, users e test-run apagados (login 401 confirmado). Redeploy enviado (visual + gráfico + hotfix git).

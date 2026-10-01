@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Briefcase, Send, Loader2, Check, X, ClipboardList, FileText, Hammer } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
@@ -20,6 +21,8 @@ export default function Diretor() {
 
   const load = useCallback(() => Promise.all([api.get("/diretor/conversas"), api.get("/diretor/acoes")]).then(([c, a]) => { setMsgs(c.data); setAcoes(a.data); }).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { load(); }, [load]);
+  const location = useLocation();
+  useEffect(() => { const q = location.state?.pergunta; if (q) { window.history.replaceState({}, ""); send(q); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }, [msgs, busy]);
 
   const send = async (q) => {

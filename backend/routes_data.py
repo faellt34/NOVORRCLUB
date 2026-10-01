@@ -137,8 +137,19 @@ async def admin_dashboard(user: dict = Depends(require_role("admin"))):
                    "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
-        "campaigns": camps[:8], "chart": daily_series(cur, 30),
+        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30),
     }
+
+
+async def revenue_clicks_series(days: int):
+    s = since(days)
+    rev, clk = defaultdict(float), defaultdict(int)
+    async for r in db.redemptions.find({"date": {"$gte": s}}, {"_id": 0, "date": 1, "amount": 1}):
+        rev[r["date"][:10]] += r.get("amount", 0)
+    async for c in db.coupon_claims.find({"date": {"$gte": s}}, {"_id": 0, "date": 1}):
+        clk[c["date"][:10]] += 1
+    today = datetime.now(timezone.utc).date()
+    return [{"date": (d := (today - timedelta(days=i)).isoformat()), "receita": round(rev.get(d, 0), 2), "cliques": clk.get(d, 0)} for i in range(days - 1, -1, -1)]
 
 
 @router.get("/audit")
