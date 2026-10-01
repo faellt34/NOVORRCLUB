@@ -9,12 +9,12 @@ export default function AppLayout() {
   const handleRoleNavigate = () => setMobileOpen(false);
 
   return (
-    <div className="min-h-screen bg-[#F8F9FC]">
+    <div className="min-h-screen bg-[#F3F5FB]">
       <aside className="hidden lg:block fixed inset-y-0 left-0 w-[268px] z-40">
         <SidebarContent onNavigate={handleRoleNavigate} />
       </aside>
 
-      <header className="lg:hidden sticky top-0 z-50 bg-[#0C0A14] text-white flex items-center justify-between px-4 h-14">
+      <header className="lg:hidden sticky top-0 z-50 bg-[#070B1F] text-white flex items-center justify-between px-4 h-14">
         <BrandLogo size="sm" />
         <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-white/10 btn-press">
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

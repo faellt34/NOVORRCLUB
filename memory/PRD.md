@@ -249,3 +249,6 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## 2026-10-01 — Prod validada + hotfix git
 - Endpoints /diretor/briefing, /logs, /metricas OK em rrclub.online. Briefing detetou 2×500 reais: produção não tem `git` → validar_diff crashava. Fix: `_run` captura FileNotFoundError; `_git_ok()`; validar_diff faz só validação estrutural sem git. Redeploy enviado.
 - Nota: em prod existe 1 doc órfão em qr_downloads (test-run antigo apagado pela limpeza antiga) — desaparece ao apagar o influencer/hotel de teste.
+
+## 2026-10-01 — Visual fintech (admin)
+- Sidebar navy #070B1F com GlobeCanvas a girar atrás do perfil (`sidebar-globe`), nav ativo indigo, card "Sistema operacional" (admin). KpiCard: layout fintech com sparkline SVG + trend inline. Header admin: eyebrow DASHBOARD, pill "Plataforma segura · Sistema operacional" (`platform-status-pill`), botões "+ Novo teste". Sem design_agent (poupança de créditos).

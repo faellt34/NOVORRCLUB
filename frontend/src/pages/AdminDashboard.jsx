@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb, Radio, Ticket, MousePointerClick, UserX, Percent, Receipt, Target } from "lucide-react";
+import { Euro, HandCoins, Users, Store, Megaphone, ScrollText, Inbox, Check, X, KeyRound, Copy, Lightbulb, Radio, Ticket, MousePointerClick, UserX, Percent, Receipt, Target, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
@@ -109,18 +109,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
         <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600">Dashboard</p>
           <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-          <p className="text-sm text-slate-500 mt-1">Métricas globais do RRclub — receita, comissões e entidades ativas</p>
+          <p className="text-sm text-slate-500 mt-1">Performance operacional e financeira da RRClub</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 text-white text-xs font-semibold btn-press">🎬 Novo Teste</button>
-          <button data-testid="reset-all-button" onClick={() => setResetOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold btn-press">🧨 Apagar TODOS os resultados</button>
-          <span data-testid="ws-indicator" data-status={wsStatus} className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border ${wsStatus === "conectado" ? "text-emerald-700 bg-emerald-50 border-emerald-100" : wsStatus === "reconectando" ? "text-amber-700 bg-amber-50 border-amber-100" : "text-red-600 bg-red-50 border-red-100"}`}>
-            <span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : wsStatus === "reconectando" ? "bg-amber-500 live-dot" : "bg-red-500"}`} />
-            WS · {wsStatus === "conectado" ? "Conectado" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}
-          </span>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div data-testid="platform-status-pill" className="hidden sm:inline-flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-semibold text-slate-600">
+            <span className="inline-flex items-center gap-1.5 text-emerald-700"><span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center"><ShieldCheck className="w-3 h-3" /></span> Plataforma segura</span>
+            <span className="w-px h-4 bg-slate-200" />
+            <span className={`inline-flex items-center gap-1.5 ${wsStatus === "conectado" ? "text-emerald-700" : "text-amber-700"}`} data-testid="ws-indicator" data-status={wsStatus}><span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : "bg-amber-500"}`} /> {wsStatus === "conectado" ? "Sistema operacional" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}</span>
+          </div>
+          <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold btn-press">+ Novo teste</button>
+          <button data-testid="reset-all-button" onClick={() => setResetOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold btn-press">Apagar TODOS os resultados</button>
         </div>
       </div>
 
