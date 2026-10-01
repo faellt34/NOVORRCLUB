@@ -245,3 +245,7 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `backend/diretor_tools.py`: ferramentas `consultar_logs`, `metricas_granulares` (campanha|influencer|hotel|qr), `diagnosticar_sistema`, `briefing` (alertas sem LLM).
 - Rotas: GET /api/diretor/briefing, /logs, /metricas. SYSTEM prompt regra 8 (proatividade: investiga antes de responder, termina com "Alertas:").
 - Frontend: `DiretorBriefing.jsx` em /admin/diretor com KPIs, alertas e botão Investigar → envia pergunta ao chat.
+
+## 2026-10-01 — Prod validada + hotfix git
+- Endpoints /diretor/briefing, /logs, /metricas OK em rrclub.online. Briefing detetou 2×500 reais: produção não tem `git` → validar_diff crashava. Fix: `_run` captura FileNotFoundError; `_git_ok()`; validar_diff faz só validação estrutural sem git. Redeploy enviado.
+- Nota: em prod existe 1 doc órfão em qr_downloads (test-run antigo apagado pela limpeza antiga) — desaparece ao apagar o influencer/hotel de teste.

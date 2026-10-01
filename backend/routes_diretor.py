@@ -241,6 +241,8 @@ async def validar_diff(ficheiro: str = "", diff: str = "", area: str = "", **_):
     missing = [l[1:] for l in diff.splitlines() if l.startswith(("-", " ")) and not l.startswith("---") and l[1:].strip() and l[1:] not in src]
     if missing:
         return {"valido": False, "motivo": f"estas linhas não existem no ficheiro atual: {missing[:3]}"}
+    if not await asyncio.to_thread(_git_ok):
+        return {"valido": True, "motivo": "", "nota": "git indisponível neste ambiente: validação estrutural apenas; a aplicação do patch só é possível no ambiente de desenvolvimento"}
     ap = await asyncio.to_thread(_apply_patch, area if area in CODE_DIRS else rel.split("/")[0] if rel.split("/")[0] in CODE_DIRS else "backend", diff, True)
     return {"valido": ap["ok"], "motivo": "" if ap["ok"] else f"git apply --check falhou: {ap.get('erro', '')[:300]}"}
 
@@ -510,7 +512,14 @@ async def licoes():
 
 
 def _run(cmd: list, cwd: str = None, timeout: int = 120) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True, timeout=timeout)
+    try:
+        return subprocess.run(cmd, cwd=cwd or ROOT, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(cmd, 127, "", f"'{cmd[0]}' não está disponível neste ambiente (produção). Alterações de código só podem ser aplicadas no ambiente de desenvolvimento.")
+
+
+def _git_ok() -> bool:
+    return _run(["git", "--version"]).returncode == 0
 
 
 def _apply_patch(area: str, diff: str, check_only: bool = False) -> dict:
