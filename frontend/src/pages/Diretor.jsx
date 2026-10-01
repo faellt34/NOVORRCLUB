@@ -4,8 +4,9 @@ import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { SecurityAudit } from "../components/SecurityAudit";
 import { CreditMeter } from "../components/CreditMeter";
+import { DiretorBriefing } from "../components/DiretorBriefing";
 
-const SUGGESTIONS = ["Resumo do dashboard", "Pede ao subagente Marketing um plano para aumentar a conversão", "Pede ao subagente Frontend uma auditoria da página pública do cupão", "Pede ao subagente Backend uma revisão de segurança dos pagamentos"];
+const SUGGESTIONS = ["Como estamos? Diagnostica o sistema e diz-me o que preciso saber", "Mostra as métricas por campanha dos últimos 30 dias", "Há erros nos logs das últimas 24h?", "Analisa o funil QR: cliques, downloads e vendas por origem", "Pede ao subagente Marketing um plano para aumentar a conversão"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
 const fmt = (d) => new Date(d).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -56,10 +57,11 @@ export default function Diretor() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <h1 data-testid="diretor-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Diretor Geral · IA</h1>
-          <p className="text-sm text-slate-500 mt-1">Gemini 2.5 Flash com acesso aos dados reais. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
+          <p className="text-sm text-slate-500 mt-1">Gemini 2.5 Flash com acesso a dados reais, logs detalhados e métricas por campanha/influencer/hotel. Vigia o sistema de forma proativa. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
         </div>
         <CreditMeter refreshKey={msgs.length} />
       </div>
+      <DiretorBriefing onAsk={send} refreshKey={msgs.length} />
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2 card-soft p-5 flex flex-col min-h-[560px]" data-testid="diretor-chat">
           <div className="flex items-center gap-2 mb-3"><span className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#B47BFF] to-[#6E2BFF] text-white flex items-center justify-center"><Briefcase className="w-4 h-4" /></span><h3 className="text-lg font-semibold text-slate-900">Conversa com o Diretor</h3></div>

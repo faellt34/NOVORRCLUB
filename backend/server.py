@@ -15,8 +15,10 @@ from seed import seed
 import routes_auth, routes_data, routes_admin, routes_leads, routes_messages, routes_payments, routes_ops, realtime, routes_test, routes_ai, routes_diretor
 from routes_payments import ensure_tax_settings, ensure_price, SUBSCRIPTION
 from storage import init_storage
+from observability import RequestLogMiddleware, ensure_indexes as ensure_log_indexes
 
 app = FastAPI(title="Robson Club API")
+app.add_middleware(RequestLogMiddleware)
 api_router = APIRouter(prefix="/api")
 
 
@@ -49,6 +51,7 @@ async def on_startup():
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.password_reset_tokens.create_index("token", unique=True)
     await db.payouts.create_index([("influencer_id", 1), ("month", 1)], unique=True)
+    await ensure_log_indexes()
     try:
         init_storage()
     except Exception as e:

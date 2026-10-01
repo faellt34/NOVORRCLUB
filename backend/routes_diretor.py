@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from core import db, NO_ID, require_role, audit, new_id, now_iso
 from routes_data import since, enrich_campaigns
+from diretor_tools import consultar_logs, metricas_granulares, diagnosticar_sistema, briefing as _briefing
 
 router = APIRouter(prefix="/diretor", dependencies=[Depends(require_role("admin"))])
 MODEL = ("gemini", "gemini-2.5-flash")
@@ -28,7 +29,9 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "2) HONESTIDADE: se não encontras algo, dizes 'Não encontrei. Preciso de mais informação.' NUNCA inventas ficheiros, funções, linhas ou números.\n"
           "3) COMUNICAÇÃO CLARA: português de Portugal, simples e direto, sem jargão técnico — explica como se o CEO não fosse programador.\n"
           "4) MEMÓRIA: antes de propor uma ação, chama consultar_licoes() e respeita as lições das propostas rejeitadas pelo CEO.\n"
-          "7) CRÉDITOS: cada subagente e cada auditoria gastam créditos do CEO. Só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
+          "7) CRÉDITOS: cada subagente e cada auditoria gastam créditos do CEO. Só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*, metricas_granulares, consultar_logs, diagnosticar_sistema). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
+          "8) PROATIVIDADE INTELIGENTE: não esperas que o CEO adivinhe o que perguntar. Antes de responder a perguntas de desempenho, problemas, 'o que se passa', 'como estamos' ou pedidos vagos, investiga primeiro: chama diagnosticar_sistema() e/ou metricas_granulares(dimensao) para encontrar anomalias (erros 500, rotas lentas, hotéis sem Stripe Connect, campanhas com cliques mas sem QR/vendas, campanhas expiradas). "
+          "Se o CEO reporta um erro ou algo 'não funciona', chama SEMPRE consultar_logs(nivel='error', termo=<palavra-chave>) antes de opinar — nunca adivinhes a causa sem ver os logs. Na resposta final, para além do que foi pedido, termina com uma secção curta 'Alertas:' com no máximo 3 pontos concretos que o CEO deve saber (só se existirem). Isto não é desvio de foco: é dever de informar.\n"
           "5) DIFFS VÁLIDOS: antes de propor uma alteração de código, lê o ficheiro real com ler_codigo_github(caminho) (ou pelo subagente) e gera um diff git correto: cabeçalhos '--- a/caminho/ficheiro' e '+++ b/caminho/ficheiro' "
           "(caminho a partir da raiz do repositório, ex.: backend/core.py), bloco '@@ -linha_inicial,contagem +linha_inicial,contagem @@' com números reais, linhas removidas com '-', adicionadas com '+', e 3 linhas de contexto antes e depois.\n"
           "6) VALIDAÇÃO OBRIGATÓRIA: chama validar_diff(ficheiro, diff) antes de propor_correcao. Só propões se devolver valido=true. Se falhar, NÃO propões e dizes ao CEO: 'Não consigo aplicar esta alteração. Motivo: <motivo>.'\n\n"
@@ -55,6 +58,9 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- procurar_codigo_github(termo): procura um termo no código do repositório GitHub e devolve os ficheiros onde aparece\n"
           "- validar_diff(ficheiro, diff): verifica se o ficheiro existe, se as linhas do diff existem no código atual e se aplica com 'git apply --check'. Devolve {valido, motivo}.\n"
           "- consultar_licoes(): lições aprendidas de propostas rejeitadas pelo CEO (o que foi proposto, porquê rejeitado, o que fazer diferente)\n"
+          "- consultar_logs(nivel, termo, horas, limite): logs detalhados do sistema (nivel: error|warn|''; termo filtra mensagem/rota/traceback; horas até 336). Devolve erros 500 com traceback, 4xx, pedidos lentos, rotas mais afetadas e auditoria recente. USA quando algo 'não funciona'.\n"
+          "- metricas_granulares(dimensao, dias): funil cliques → QR baixados → vendas → receita por 'campanha' | 'influencer' | 'hotel', com taxa_qr_pct, conversao_pct, ticket_medio e campo 'alerta' por item; dimensao 'qr' dá o funil global, por origem, por dia e tempo médio QR→venda.\n"
+          "- diagnosticar_sistema(): saúde 24h (erros 500, 4xx, pedidos lentos, rotas mais lentas), estado Stripe (modo, hotéis sem Connect/incompletos, último pagamento) e operação (parceiros pendentes, campanhas expiradas/a expirar, ações pendentes).\n"
           "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código VALIDADA em ações pendentes (area: frontend|backend; ficheiro a partir da raiz, ex. backend/core.py; diff unified). NÃO altera código até aprovação. Recusada automaticamente se o diff não validar.\n"
           "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', valida o diff e só depois chamas propor_correcao.")
 
@@ -300,7 +306,7 @@ async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "",
 READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
               "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend,
               "ler_codigo_github": ler_codigo_github, "listar_ficheiros_github": listar_ficheiros_github, "procurar_codigo_github": procurar_codigo_github,
-              "validar_diff": validar_diff, "consultar_licoes": consultar_licoes}
+              "validar_diff": validar_diff, "consultar_licoes": consultar_licoes, "consultar_logs": consultar_logs, "metricas_granulares": metricas_granulares, "diagnosticar_sistema": diagnosticar_sistema}
 
 
 def _parse(txt: str) -> dict:
@@ -374,6 +380,22 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
 async def conversas():
     items = await db.conversas_diretor.find({}, {"_id": 0, "user_id": 0}).sort("timestamp", -1).to_list(50)
     return list(reversed(items))
+
+
+@router.get("/briefing")
+async def briefing():
+    return await _briefing()
+
+
+@router.get("/logs")
+async def logs(nivel: str = "", termo: str = "", horas: int = 24, limite: int = 60):
+    return await consultar_logs(nivel, termo, horas, limite)
+
+
+@router.get("/metricas")
+async def metricas(dimensao: str = "campanha", dias: int = 30):
+    return await metricas_granulares(dimensao, dias)
+
 
 
 @router.get("/acoes")
