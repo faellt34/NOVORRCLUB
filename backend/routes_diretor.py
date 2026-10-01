@@ -536,13 +536,16 @@ def _git_ok() -> bool:
 
 def _apply_internal(area: str, diff: str, check_only: bool) -> dict:
     import patch_engine
+    roots = [ROOT, CODE_DIRS.get(area, CODE_DIRS["backend"]), CODE_DIRS["backend"], CODE_DIRS["frontend"]]
     backup = {}
     for f in patch_engine.parse(diff):
-        rel = patch_engine._rel(f["new"] or f["old"], 1)
-        p = os.path.join(ROOT, rel)
-        if os.path.isfile(p):
-            backup[rel] = open(p, encoding="utf-8", errors="ignore").read()
-    r = patch_engine.run(diff, ROOT, 1, write=not check_only)
+        name = f["new"] or f["old"]
+        for base in roots:
+            for st in (1, 0, 2):
+                p = os.path.join(base, patch_engine._rel(name, st))
+                if os.path.isfile(p):
+                    backup[os.path.relpath(p, ROOT)] = open(p, encoding="utf-8", errors="ignore").read(); break
+    r = patch_engine.run(diff, ROOT, 1, write=not check_only, roots=roots)
     if not r["ok"]:
         return {"ok": False, "etapa": "motor interno (sem git)", "erro": r["erro"]}
     return {"ok": True, "opcoes": ["interno"], "patch_tmp": None, "ficheiros": r["ficheiros"], "backup": backup, "motor": "interno"}

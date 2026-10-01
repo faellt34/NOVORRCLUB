@@ -276,3 +276,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `diretor_tools.py`: ARRANQUE (hora de arranque do processo) → erros_500_desde_deploy_atual vs erros_500_24h; logs com anterior_ao_deploy_atual; rotas IA (conversar/auditoria/ai) marcadas esperado=true e excluídas do alerta de lentidão; motor_patches git|interno; avisos_4xx_por_status.
 - Prompt regra 9: nunca chamar erros antigos de persistentes; latência IA é normal; motor interno é solução; analise_401.
 - Briefing: erros antigos viram alerta info "já corrigidos". Redeploy enviado.
+
+## 2026-10-01 — Botão "Aplicar ao código" em produção
+- Teste real em prod (ac-3318eeba3a, ac-5dacc96ac1): HTTP 200 sem crash, mas falhou "ficheiro routes_data.py não existe" → diffs do Diretor usam caminhos relativos à área (a/routes_data.py). Fix: patch_engine.run(roots=[ROOT, backend, frontend/src], strip 1/0/2) + _apply_internal idem. Testado com 3 formatos de cabeçalho. Redeploy enviado.
+- LIMITAÇÃO ESTRUTURAL: em produção o ficheiro alterado não recarrega (uvicorn sem reload) e perde-se no próximo deploy. Aplicação persistente de patches deve ser feita no ambiente de desenvolvimento (/app) e depois publicada.
+- 60+ ações propor_correcao aprovadas e nunca aplicadas (muitas da auditoria, provavelmente desatualizadas face ao código atual).
+- Pedido de reembolso: encaminhado via support_agent → support@emergent.sh.

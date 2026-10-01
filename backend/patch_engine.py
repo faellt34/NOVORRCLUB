@@ -45,15 +45,22 @@ def _apply_hunks(src: list[str], hunks: list[dict]) -> list[str]:
     return out
 
 
-def run(diff: str, root: str, strip: int = 1, write: bool = False) -> dict:
+def run(diff: str, root: str, strip: int = 1, write: bool = False, roots: list[str] | None = None) -> dict:
     files = parse(diff)
     if not files or not any(f["hunks"] for f in files):
         return {"ok": False, "erro": "diff sem ficheiros/hunks reconhecíveis"}
     results, touched = {}, []
     for f in files:
-        rel = _rel(f["new"] or f["old"], strip)
-        path = os.path.join(root, rel)
-        if not os.path.isfile(path):
+        name = f["new"] or f["old"]
+        path, rel = None, _rel(name, strip)
+        for base in (roots or [root]):
+            for st in (strip, 0, 2):
+                cand = os.path.join(base, _rel(name, st))
+                if os.path.isfile(cand):
+                    path, rel = cand, os.path.relpath(cand, root); break
+            if path:
+                break
+        if not path:
             return {"ok": False, "erro": f"ficheiro {rel} não existe"}
         with open(path, encoding="utf-8", errors="ignore") as fh:
             src = fh.read().split("\n")
