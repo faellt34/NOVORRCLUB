@@ -242,7 +242,8 @@ async def validar_diff(ficheiro: str = "", diff: str = "", area: str = "", **_):
     if missing:
         return {"valido": False, "motivo": f"estas linhas não existem no ficheiro atual: {missing[:3]}"}
     if not await asyncio.to_thread(_git_ok):
-        return {"valido": True, "motivo": "", "nota": "git indisponível neste ambiente: validação estrutural apenas; a aplicação do patch só é possível no ambiente de desenvolvimento"}
+        r = await asyncio.to_thread(_apply_patch, area if area in CODE_DIRS else "backend", diff, True)
+        return {"valido": r["ok"], "motivo": "" if r["ok"] else f"motor interno: {r.get('erro', '')[:300]}", "nota": "validado pelo motor interno de patches (git indisponível)"}
     ap = await asyncio.to_thread(_apply_patch, area if area in CODE_DIRS else rel.split("/")[0] if rel.split("/")[0] in CODE_DIRS else "backend", diff, True)
     return {"valido": ap["ok"], "motivo": "" if ap["ok"] else f"git apply --check falhou: {ap.get('erro', '')[:300]}"}
 
@@ -532,11 +533,36 @@ def _git_ok() -> bool:
     return _run(["git", "--version"]).returncode == 0
 
 
+def _apply_internal(area: str, diff: str, check_only: bool) -> dict:
+    import patch_engine
+    backup = {}
+    for f in patch_engine.parse(diff):
+        rel = patch_engine._rel(f["new"] or f["old"], 1)
+        p = os.path.join(ROOT, rel)
+        if os.path.isfile(p):
+            backup[rel] = open(p, encoding="utf-8", errors="ignore").read()
+    r = patch_engine.run(diff, ROOT, 1, write=not check_only)
+    if not r["ok"]:
+        return {"ok": False, "etapa": "motor interno (sem git)", "erro": r["erro"]}
+    return {"ok": True, "opcoes": ["interno"], "patch_tmp": None, "ficheiros": r["ficheiros"], "backup": backup, "motor": "interno"}
+
+
+def _revert(ap: dict):
+    if ap.get("motor") == "interno":
+        for rel, content in ap.get("backup", {}).items():
+            with open(os.path.join(ROOT, rel), "w", encoding="utf-8") as fh:
+                fh.write(content)
+    else:
+        _run(["git", "apply", "-R", "--recount", *ap["opcoes"], ap["patch_tmp"]])
+
+
 def _apply_patch(area: str, diff: str, check_only: bool = False) -> dict:
     if not diff.strip() or "@@" not in diff:
         return {"ok": False, "etapa": "validar", "erro": "O patch não é um diff unificado válido (sem hunks @@)."}
     if not diff.endswith("\n"):
         diff += "\n"
+    if not _git_ok():
+        return _apply_internal(area, diff, check_only)
     with tempfile.NamedTemporaryFile("w", suffix=".patch", delete=False, encoding="utf-8") as f:
         f.write(diff)
         pf = f.name
@@ -594,9 +620,10 @@ async def aplicar_correcao(acao_id: str, user: dict = Depends(require_role("admi
         if ver["ok"]:
             result.update({"status": "aplicada", "ficheiros": ap["ficheiros"], "verificacao": ver["etapa"], "saida": ver.get("saida", "")})
         else:
-            _run(["git", "apply", "-R", "--recount", *ap["opcoes"], ap["patch_tmp"]])
+            _revert(ap)
             result.update({"status": "revertida", "ficheiros": ap["ficheiros"], "etapa": ver["etapa"], "erro": ver["erro"]})
-        os.unlink(ap["patch_tmp"])
+        if ap.get("patch_tmp"):
+            os.unlink(ap["patch_tmp"])
     await db.acoes_pendentes.update_one({"id": acao_id}, {"$set": {"aplicacao": result}})
     await db.correcoes_aprovadas.update_one({"acao_id": acao_id}, {"$set": {"status": result["status"], "aplicacao": result}})
     await audit("CORRECAO", f"Patch {result['status']}: {a['descricao'][:120]}", user, acao_id)

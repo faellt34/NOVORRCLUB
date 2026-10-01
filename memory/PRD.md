@@ -264,3 +264,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## 2026-10-01 — Passo "parceiros" do Stripe status
 - Label genérico (hotéis, rooftops, restaurantes), lista parceiros em falta e indica o botão real "Ativar split automático" (secção Pagamentos do Painel do Parceiro).
+
+## 2026-10-01 — git em produção: causa raiz e solução definitiva
+- RCA deployer: a build de produção NÃO lê `.emergent/system_deps.txt` (sem apt step). Linha git removida.
+- Solução em código: `backend/patch_engine.py` (parse/apply unified diff em Python puro, com fuzz de contexto). `_apply_patch` usa git se existir, senão motor interno; `_revert` restaura backup. validar_diff usa o motor interno. Testado: validar OK/mau, apply, revert.
+- `/diretor/conversar`: try/except global → nunca 500; erro registado em system_logs origem=diretor. Loop 6→5, prompt pede ≤2 funções por pedido (créditos).
+- Paleta: tailwind `purple` → indigo (fintech, igual à foto). Redeploy enviado.

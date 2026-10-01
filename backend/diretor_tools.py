@@ -128,7 +128,7 @@ async def briefing() -> dict:
         ult = (s.get("ultimo_erro_500") or {}).get("timestamp", "")[11:16]
         alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 nas últimas 24h" + (f" · último às {ult} UTC" if ult else ""), "detalhe": (s.get("ultimo_erro_500") or {}).get("mensagem", "")[:110], "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
     if not s.get("git_disponivel", True):
-        alertas.append({"nivel": "warn", "titulo": "git indisponível no servidor", "detalhe": "O Diretor valida diffs sem git; aplicar patches só em desenvolvimento", "acao": None})
+        alertas.append({"nivel": "warn", "titulo": "git indisponível no servidor — a usar motor interno de patches", "detalhe": "O Diretor valida e aplica diffs com o motor interno de patches; sem impacto para o CEO", "acao": None})
     if s["pedidos_lentos_1500ms"] > 5:
         alertas.append({"nivel": "warn", "titulo": f"{s['pedidos_lentos_1500ms']} pedidos lentos (>1,5s)", "detalhe": ", ".join(r["rota"] for r in s["rotas_mais_lentas"][:3]), "acao": "diagnostica o sistema e identifica as rotas mais lentas"})
     for n in diag["stripe"]["hoteis_sem_connect"][:5]:
