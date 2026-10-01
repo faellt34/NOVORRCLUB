@@ -1,4 +1,5 @@
 import os
+import shutil
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
@@ -108,7 +109,9 @@ async def diagnosticar_sistema(**_):
     em7 = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
     camps = await db.campaigns.find({"status": "Ativa"}, {"_id": 0, "id": 1, "nome": 1, "validade": 1}).to_list(1000)
     ultimo_webhook = await db.payment_transactions.find_one({}, {"_id": 0, "created_at": 1}, sort=[("created_at", -1)])
-    return {"janela": "24h", "saude": {"pedidos_api": reqs, "erros_500": erros, "avisos_4xx": avisos, "pedidos_lentos_1500ms": lentos, "rotas_mais_lentas": rotas_lentas},
+    ultimo_erro = await db.system_logs.find_one({"nivel": "error"}, {"_id": 0, "timestamp": 1, "mensagem": 1}, sort=[("timestamp", -1)])
+    git_ok = shutil.which("git") is not None
+    return {"janela": "24h", "saude": {"pedidos_api": reqs, "erros_500": erros, "avisos_4xx": avisos, "pedidos_lentos_1500ms": lentos, "rotas_mais_lentas": rotas_lentas, "ultimo_erro_500": ultimo_erro, "git_disponivel": git_ok},
             "stripe": {"modo": os.environ.get("STRIPE_MODE", "?"), "hoteis_ativos": sum(1 for p in parts if p.get("status") == "Ativo"),
                        "hoteis_sem_connect": [p["nome"] for p in parts if p.get("status") == "Ativo" and not p.get("stripe_account_id")],
                        "hoteis_connect_incompleto": [p["nome"] for p in parts if p.get("stripe_account_id") and not p.get("stripe_charges_enabled")], "ultimo_pagamento": (ultimo_webhook or {}).get("created_at")},
@@ -122,7 +125,10 @@ async def briefing() -> dict:
     alertas = []
     s = diag["saude"]
     if s["erros_500"]:
-        alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 nas últimas 24h", "detalhe": "Pede ao Diretor: 'consulta os logs de erro das últimas 24h'", "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
+        ult = (s.get("ultimo_erro_500") or {}).get("timestamp", "")[11:16]
+        alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 nas últimas 24h" + (f" · último às {ult} UTC" if ult else ""), "detalhe": (s.get("ultimo_erro_500") or {}).get("mensagem", "")[:110], "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
+    if not s.get("git_disponivel", True):
+        alertas.append({"nivel": "warn", "titulo": "git indisponível no servidor", "detalhe": "O Diretor valida diffs sem git; aplicar patches só em desenvolvimento", "acao": None})
     if s["pedidos_lentos_1500ms"] > 5:
         alertas.append({"nivel": "warn", "titulo": f"{s['pedidos_lentos_1500ms']} pedidos lentos (>1,5s)", "detalhe": ", ".join(r["rota"] for r in s["rotas_mais_lentas"][:3]), "acao": "diagnostica o sistema e identifica as rotas mais lentas"})
     for n in diag["stripe"]["hoteis_sem_connect"][:5]:
