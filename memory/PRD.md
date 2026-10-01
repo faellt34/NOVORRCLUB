@@ -257,3 +257,7 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - `RevenueClicksChart.jsx` (recharts área, 7/30 dias) alimentado por `chart_rc` em GET /api/dashboard/admin (`revenue_clicks_series`).
 - `Recommendations.jsx`: alertas do /diretor/briefing como cartões; "Ver com o Diretor" navega para /admin/diretor com state.pergunta (Diretor.jsx envia automaticamente).
 - Prod: contas teste.influencer/teste.hotel, users e test-run apagados (login 401 confirmado). Redeploy enviado (visual + gráfico + hotfix git).
+
+## 2026-10-01 — Erros 500 (git) e 401
+- `.emergent/system_deps.txt` += git (raiz dos 500 em /diretor/conversar). Fallback sem git mantido.
+- 401 em prod: 18 em rajada às 20h, todas em rotas de polling autenticadas (unread-count, notifications, diretor/*), 0 em /auth/login → token expirado/revogado com tab aberta, não ataque. Fix: interceptor 401 em `lib/api.js` limpa token e redireciona /login?expirou=1 (1 vez). Logs 4xx/5xx agora com ip/user_agent/com_token; consultar_logs devolve `analise_401` e `ips_mais_frequentes`.

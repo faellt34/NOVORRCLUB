@@ -41,7 +41,9 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         ms = round((time.perf_counter() - t0) * 1000)
         lvl = _level(resp.status_code)
         if lvl != "info" or ms > 1500:
-            await record(lvl if lvl != "info" else "warn", "http", f"{request.method} {path} → {resp.status_code}" + (f" · lento {ms}ms" if ms > 1500 else ""), metodo=request.method, caminho=path, status=resp.status_code, duracao_ms=ms)
+            ip = (request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?"))
+            await record(lvl if lvl != "info" else "warn", "http", f"{request.method} {path} → {resp.status_code}" + (f" · lento {ms}ms" if ms > 1500 else ""), metodo=request.method, caminho=path, status=resp.status_code, duracao_ms=ms,
+                         ip=ip, user_agent=request.headers.get("user-agent", "")[:160], com_token=bool(request.headers.get("authorization") or request.cookies.get("access_token")))
         try:
             await db.request_metrics.insert_one({"id": new_id("rm"), "metodo": request.method, "caminho": path, "status": resp.status_code, "duracao_ms": ms, "timestamp": now_iso(), "ts": datetime.now(timezone.utc)})
         except Exception:

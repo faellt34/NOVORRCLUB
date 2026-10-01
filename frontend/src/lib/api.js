@@ -13,6 +13,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use((r) => r, (e) => {
+  const url = e?.config?.url || "";
+  if (e?.response?.status === 401 && getToken() && !url.startsWith("/auth/") && !url.startsWith("/public/")) {
+    setToken(null);
+    if (!window.location.pathname.startsWith("/login")) window.location.assign("/login?expirou=1");
+  }
+  return Promise.reject(e);
+});
+
 export const apiError = (e, fallback = "Ocorreu um erro. Tente novamente.") => {
   const d = e?.response?.data?.detail;
   if (!d) return e?.message || fallback;

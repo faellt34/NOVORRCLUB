@@ -25,11 +25,18 @@ async def consultar_logs(nivel: str = "", termo: str = "", horas: int = 24, limi
             i["traceback"] = i["traceback"][-600:]
     por_nivel = {n: await db.system_logs.count_documents({**q, "nivel": n}) for n in ("error", "warn")}
     por_rota = defaultdict(int)
+    por_ip = defaultdict(int)
     for i in items:
         if i.get("caminho"):
             por_rota[f"{i.get('metodo')} {i['caminho']}"] += 1
+        if i.get("ip"):
+            por_ip[i["ip"]] += 1
+    n401 = [i for i in items if i.get("status") == 401]
+    auth401 = {"total": len(n401), "com_token_expirado_ou_revogado": sum(1 for i in n401 if i.get("com_token")), "sem_token": sum(1 for i in n401 if i.get("com_token") is False),
+               "em_login": sum(1 for i in n401 if "/auth/login" in (i.get("caminho") or "")), "ips": dict(__import__("collections").Counter(i["ip"] for i in n401 if i.get("ip")).most_common(5))}
     aud = await db.audit_log.find({"timestamp": q["timestamp"]} if not termo else {"timestamp": q["timestamp"], "detail": {"$regex": termo, "$options": "i"}}, NO_ID).sort("timestamp", -1).to_list(15)
-    return {"janela_horas": horas, "totais": por_nivel, "rotas_mais_afetadas": dict(sorted(por_rota.items(), key=lambda x: -x[1])[:8]), "logs": items, "auditoria_recente": aud}
+    return {"janela_horas": horas, "totais": por_nivel, "rotas_mais_afetadas": dict(sorted(por_rota.items(), key=lambda x: -x[1])[:8]), "ips_mais_frequentes": dict(sorted(por_ip.items(), key=lambda x: -x[1])[:5]),
+            "analise_401": auth401, "logs": items, "auditoria_recente": aud}
 
 
 async def metricas_granulares(dimensao: str = "campanha", dias: int = 30, **_):
