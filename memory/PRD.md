@@ -270,3 +270,4 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Solução em código: `backend/patch_engine.py` (parse/apply unified diff em Python puro, com fuzz de contexto). `_apply_patch` usa git se existir, senão motor interno; `_revert` restaura backup. validar_diff usa o motor interno. Testado: validar OK/mau, apply, revert.
 - `/diretor/conversar`: try/except global → nunca 500; erro registado em system_logs origem=diretor. Loop 6→5, prompt pede ≤2 funções por pedido (créditos).
 - Paleta: tailwind `purple` → indigo (fintech, igual à foto). Redeploy enviado.
+- 2026-10-01 PROD validado: build com patch_engine live; Diretor validou diff via motor interno (HTTP 200, 1 crédito); 0 erros 500 nas últimas 2h. Uso: 260/1000.
