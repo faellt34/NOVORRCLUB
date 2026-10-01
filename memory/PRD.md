@@ -209,6 +209,12 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 - `GET /api/campaigns/list_ids` (admin, em `routes_ops.py`) → lista simples de ids `["c-..."]` (alterado a pedido; antes devolvia objetos). Deploy dispachado.
 
+### 2026-06 · Tracking de downloads de QR separado dos claims ✅ (testado em preview + produção)
+- Coleção `qr_downloads` {id, influencer_id, campaign_id, partner_id, claim_id, coupon, date}, escrita (1 por claim, idempotente) em `POST /public/coupon/{code}/qr-downloaded` (`routes_data.py`)
+- `GET /dashboard/influencer`: `kpis.claims`, `kpis.downloads` + `trend.claims`/`trend.downloads` (vs período anterior); `campaigns[].downloads`; `customers` mantido por compatibilidade
+- `InfluencerDashboard.jsx`: card "QR codes descarregados" (grid 5 colunas) + incremento realtime em `qr_baixado`
+- Produção verificada com influencer QA temporário (criado e apagado): HTTP 200 com claims/downloads separados. Nota: endpoint do dashboard está em `routes_data.py` (não em routes_ops).
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

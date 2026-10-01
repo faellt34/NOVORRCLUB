@@ -73,20 +73,28 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
     parts = {p["id"]: p async for p in db.partners.find({}, NO_ID)}
     top = sorted([{**parts.get(pid, {"id": pid, "nome": "—"}), **v} for pid, v in by_partner.items()], key=lambda x: -x["revenue"])[:5]
     claim_q = {"influencer_id": inf_id, "date": {"$gte": since(period)}}
+    prev_q = {"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}}
     claims = await db.coupon_claims.count_documents(claim_q)
-    claims_prev = await db.coupon_claims.count_documents({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}})
+    claims_prev = await db.coupon_claims.count_documents(prev_q)
+    downloads = await db.qr_downloads.count_documents(claim_q)
+    downloads_prev = await db.qr_downloads.count_documents(prev_q)
     claims_by_campaign = defaultdict(int)
     async for cl in db.coupon_claims.find(claim_q, {"campaign_id": 1}):
         claims_by_campaign[cl["campaign_id"]] += 1
+    downloads_by_campaign = defaultdict(int)
+    async for d in db.qr_downloads.find(claim_q, {"campaign_id": 1}):
+        downloads_by_campaign[d["campaign_id"]] += 1
     for c in camps:
         c["claims"] = claims_by_campaign[c["id"]]
+        c["downloads"] = downloads_by_campaign[c["id"]]
     active = [c for c in camps if c["status"] == "Ativa"]
     featured = max(active, key=lambda c: c["uses"]) if active else None
     avg_rate = (t["commission"] / t["revenue"] * 100) if t["revenue"] else 10
     return {
-        "kpis": {"uses": t["count"], "customers": claims, "revenue": t["revenue"], "commission": t["commission"], "rate": round(avg_rate),
-                 "conversion": round(t["count"] / claims * 100, 1) if claims else None,
-                 "trend": {"uses": trend(t["count"], tp["count"]), "revenue": trend(t["revenue"], tp["revenue"]), "commission": trend(t["commission"], tp["commission"]), "customers": trend(claims, claims_prev)}},
+        "kpis": {"uses": t["count"], "customers": claims, "claims": claims, "downloads": downloads, "revenue": t["revenue"], "commission": t["commission"], "rate": round(avg_rate),
+                 "conversion": round(t["count"] / claims * 100 if claims else 0, 1) if claims else None,
+                 "trend": {"uses": trend(t["count"], tp["count"]), "revenue": trend(t["revenue"], tp["revenue"]), "commission": trend(t["commission"], tp["commission"]),
+                           "customers": trend(claims, claims_prev), "claims": trend(claims, claims_prev), "downloads": trend(downloads, downloads_prev)}},
         "chart": daily_series(reds, period), "topPartners": top, "campaigns": camps, "featured": featured,
     }
 
@@ -324,8 +332,10 @@ async def public_qr_downloaded(code: str, body: dict):
     cl = await db.coupon_claims.find_one({"id": body.get("claim_id"), "coupon": code.strip().upper()}, NO_ID)
     if not cl:
         raise HTTPException(status_code=404, detail="Clique não encontrado")
+    ts = now_iso()
+    if not await db.qr_downloads.find_one({"claim_id": cl["id"]}, {"_id": 1}):
+        await db.qr_downloads.insert_one({"id": new_id("qrd"), "influencer_id": cl.get("influencer_id"), "campaign_id": cl.get("campaign_id"), "partner_id": cl.get("partner_id"), "claim_id": cl["id"], "coupon": cl["coupon"], "date": ts})
     if not cl.get("qr_downloaded"):
-        ts = now_iso()
         await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"qr_downloaded": True, "qr_downloaded_at": ts}})
         from realtime import emit
         emit("qr_baixado", claim_id=cl["id"], cupom=cl["coupon"], at=ts, influencer_id=cl.get("influencer_id"), partner_id=cl.get("partner_id"))

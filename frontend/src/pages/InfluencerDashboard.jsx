@@ -35,6 +35,9 @@ export default function InfluencerDashboard() {
     } else if (ev.tipo === "clique_cupao") {
       setData((d) => d && { ...d, kpis: { ...d.kpis, customers: d.kpis.customers + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, claims: (c.claims || 0) + 1 } : c) });
       triggerFlash("customers");
+    } else if (ev.tipo === "qr_baixado") {
+      setData((d) => d && { ...d, kpis: { ...d.kpis, downloads: (d.kpis.downloads || 0) + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, downloads: (c.downloads || 0) + 1 } : c) });
+      triggerFlash("downloads");
     }
   });
   const [videoBusy, setVideoBusy] = useState(false);
@@ -141,9 +144,10 @@ export default function InfluencerDashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
         <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
+        <KpiCard id="qr-descarregados" icon={QrCode} label="QR codes descarregados" live={kpis.downloads || 0} format={num} flash={flash.downloads} trend={kpis.trend.downloads} period="guardaram o QR no telemóvel" />
         <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" live={kpis.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={kpis.trend.revenue} />
         <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={kpis.trend.commission} />
       </div>
