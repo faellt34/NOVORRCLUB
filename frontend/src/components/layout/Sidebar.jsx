@@ -110,7 +110,7 @@ export const SidebarContent = ({ onNavigate }) => {
           </div>
         )}
         {user.role !== "admin" && (
-          <div data-testid="referral-card" className="p-4 rounded-2xl bg-gradient-to-br from-purple-900/50 via-purple-950/40 to-[#120F24] border border-purple-500/20">
+          <div data-testid="referral-card" className="p-4 rounded-2xl bg-gradient-to-br from-purple-900/50 via-purple-950/40 to-[#0B1030] border border-purple-500/20">
             <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center mb-3"><Gift className="text-purple-300" style={{ width: 18, height: 18 }} /></div>
             <p className="text-sm font-semibold text-white mb-1">{t("referTitle")}</p>
             <p className="text-xs text-slate-400 mb-3 leading-relaxed">{t("referText")}</p>

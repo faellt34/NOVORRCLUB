@@ -29,7 +29,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "2) HONESTIDADE: se não encontras algo, dizes 'Não encontrei. Preciso de mais informação.' NUNCA inventas ficheiros, funções, linhas ou números.\n"
           "3) COMUNICAÇÃO CLARA: português de Portugal, simples e direto, sem jargão técnico — explica como se o CEO não fosse programador.\n"
           "4) MEMÓRIA: antes de propor uma ação, chama consultar_licoes() e respeita as lições das propostas rejeitadas pelo CEO.\n"
-          "7) CRÉDITOS: cada subagente e cada auditoria gastam créditos do CEO. Só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*, metricas_granulares, consultar_logs, diagnosticar_sistema). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
+          "7) CRÉDITOS: cada chamada tua, cada subagente e cada auditoria gastam créditos do CEO. Sê eficiente: resolve a maioria dos pedidos com no máximo 2 funções antes de responder; nunca repitas uma função com os mesmos argumentos; só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*, metricas_granulares, consultar_logs, diagnosticar_sistema). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
           "8) PROATIVIDADE INTELIGENTE: não esperas que o CEO adivinhe o que perguntar. Antes de responder a perguntas de desempenho, problemas, 'o que se passa', 'como estamos' ou pedidos vagos, investiga primeiro: chama diagnosticar_sistema() e/ou metricas_granulares(dimensao) para encontrar anomalias (erros 500, rotas lentas, hotéis sem Stripe Connect, campanhas com cliques mas sem QR/vendas, campanhas expiradas). "
           "Se o CEO reporta um erro ou algo 'não funciona', chama SEMPRE consultar_logs(nivel='error', termo=<palavra-chave>) antes de opinar — nunca adivinhes a causa sem ver os logs. Na resposta final, para além do que foi pedido, termina com uma secção curta 'Alertas:' com no máximo 3 pontos concretos que o CEO deve saber (só se existirem). Isto não é desvio de foco: é dever de informar.\n"
           "5) DIFFS VÁLIDOS: antes de propor uma alteração de código, lê o ficheiro real com ler_codigo_github(caminho) (ou pelo subagente) e gera um diff git correto: cabeçalhos '--- a/caminho/ficheiro' e '+++ b/caminho/ficheiro' "
@@ -343,7 +343,8 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("dir"), system_message=SYSTEM + (f"\n\nLIÇÕES APRENDIDAS (rejeições do CEO):\n{lic_txt}" if lic_txt else "")).with_model(*MODEL)
     text = (f"Contexto recente:\n{prior}\n\n" if prior else "") + f"Hoje: {datetime.now(timezone.utc).date().isoformat()}\nCEO: {body.mensagem}"
     chamadas, pendentes, resposta = [], [], None
-    for _ in range(6):
+    try:
+      for _ in range(5):
         out = _parse(await chat.send_message(UserMessage(text=text)))
         if "funcao" in out:
             fn, args = out["funcao"], out.get("args") or {}
@@ -354,11 +355,16 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
                     res = {"erro": "argumentos inválidos"}
                 except HTTPException as e:
                     res = {"erro": e.detail}
+                except Exception as e:
+                    res = {"erro": f"falha interna em {fn}: {type(e).__name__}: {str(e)[:200]}"}
                 chamadas.append({"funcao": fn, "args": args, "resumo": (res.get("analise", "")[:600] if isinstance(res, dict) else "")})
                 text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\nContinua (outra função ou resposta final em JSON)."
             elif fn in WRITE_ACTIONS:
                 if fn == "propor_correcao":
-                    v = await validar_diff(args.get("ficheiro", ""), args.get("diff", ""), args.get("area", ""))
+                    try:
+                        v = await validar_diff(args.get("ficheiro", ""), args.get("diff", ""), args.get("area", ""))
+                    except Exception as e:
+                        v = {"valido": False, "motivo": f"validação indisponível: {type(e).__name__}"}
                     if not v["valido"]:
                         text = f"RECUSADO: o diff não é válido — {v['motivo']}. NÃO propões esta alteração. Diz ao CEO: 'Não consigo aplicar esta alteração. Motivo: {v['motivo']}.' Responde em JSON."
                         chamadas.append({"funcao": "validar_diff", "args": {"ficheiro": args.get("ficheiro")}, "resumo": v["motivo"]})
@@ -371,6 +377,10 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
             continue
         resposta = out.get("resposta") or json.dumps(out, ensure_ascii=False)
         break
+    except Exception as e:
+      resposta = f"Erro técnico ao processar o pedido ({type(e).__name__}). A equipa técnica foi notificada; tente novamente."
+      from observability import record
+      await record("error", "diretor", f"conversar falhou: {type(e).__name__}: {str(e)[:300]}", caminho="/api/diretor/conversar", status=200)
     resposta = resposta or "Não consegui concluir a análise. Tente reformular."
     conv = {"id": new_id("cv"), "mensagem_user": body.mensagem, "resposta_diretor": resposta, "chamadas": chamadas, "acoes_ids": [a["id"] for a in pendentes], "timestamp": now_iso(), "user_id": user["id"]}
     await db.conversas_diretor.insert_one(dict(conv))

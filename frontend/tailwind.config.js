@@ -1,4 +1,5 @@
 /** @type {import('tailwindcss').Config} */
+const colors = require('tailwindcss/colors');
 module.exports = {
     // `overline` is a Tailwind utility; without this an app's own eyebrow-label class draws a line above the text.
     blocklist: ["overline"],
@@ -15,6 +16,7 @@ module.exports = {
         sm: 'calc(var(--radius) - 4px)'
       },
       colors: {
+        purple: colors.indigo,
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {

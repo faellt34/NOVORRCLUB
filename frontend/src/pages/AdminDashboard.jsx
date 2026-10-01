@@ -161,7 +161,7 @@ export default function AdminDashboard() {
             {origins.map((o) => (
               <div key={o.origem} data-testid={`origin-${o.origem.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
                 <div className="flex items-center justify-between text-xs mb-1"><span className="font-semibold text-slate-700">{o.origem}</span><span className="text-slate-500">{o.clicks} · {stats.cliques ? Math.round(o.clicks / stats.cliques * 100) : 0}%</span></div>
-                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#B47BFF] to-[#6E2BFF] transition-all duration-700" style={{ width: `${stats.cliques ? o.clicks / stats.cliques * 100 : 0}%` }} /></div>
+                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#818CF8] to-[#4F46E5] transition-all duration-700" style={{ width: `${stats.cliques ? o.clicks / stats.cliques * 100 : 0}%` }} /></div>
               </div>
             ))}
           </div>
