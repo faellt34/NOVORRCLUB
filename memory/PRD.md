@@ -230,3 +230,6 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## Notas
 - Seed corre só se coleções vazias; dropar DB para reseed.
 - Cupões válidos no Tivoli: ROBSON-LUXE-25, MARTA-SKY-10, DIOGO-SKY-15.
+
+## 2026-06 — GitHub Actions workflow
+- Criado `.github/workflows/frontend-build.yml`: working-directory `./frontend`, Yarn (`--frozen-lockfile`) + `yarn build` (CRACO), matriz Node 18/20/22. Build local validado OK. Workflow antigo (npm/npx webpack na raiz) existia só no GitHub — deve ser removido/substituído lá via "Save to Github".
