@@ -261,3 +261,6 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## 2026-10-01 — Erros 500 (git) e 401
 - `.emergent/system_deps.txt` += git (raiz dos 500 em /diretor/conversar). Fallback sem git mantido.
 - 401 em prod: 18 em rajada às 20h, todas em rotas de polling autenticadas (unread-count, notifications, diretor/*), 0 em /auth/login → token expirado/revogado com tab aberta, não ataque. Fix: interceptor 401 em `lib/api.js` limpa token e redireciona /login?expirou=1 (1 vez). Logs 4xx/5xx agora com ip/user_agent/com_token; consultar_logs devolve `analise_401` e `ips_mais_frequentes`.
+
+## 2026-10-01 — Passo "parceiros" do Stripe status
+- Label genérico (hotéis, rooftops, restaurantes), lista parceiros em falta e indica o botão real "Ativar split automático" (secção Pagamentos do Painel do Parceiro).
