@@ -233,3 +233,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## 2026-06 — GitHub Actions workflow
 - Criado `.github/workflows/frontend-build.yml`: working-directory `./frontend`, Yarn (`--frozen-lockfile`) + `yarn build` (CRACO), matriz Node 18/20/22. Build local validado OK. Workflow antigo (npm/npx webpack na raiz) existia só no GitHub — deve ser removido/substituído lá via "Save to Github".
+
+## 2026-10-01 — Validações em produção
+- Stripe Connect LIVE: onboarding `/api/partner/connect/onboard` devolve 200 + URL (Platform Profile concluído pelo utilizador). Falta o hotel completar o KYC no link Stripe.
+- QR tracking prod: claims=1 / downloads=1 separados no dashboard influencer (test-run test-85844abc6f, cupom TEST-6D14F1). Fix: test-run agora grava em `qr_downloads` e a limpeza apaga-os.
+- Workflow CI: artefacto `frontend-build-node-*` via upload-artifact@v4.
+- Contas de teste em prod a apagar: influencer if-a8504b1576 / usr-ce65e38fd6, hotel p-43abce62de / usr-c91d46af44, test-run test-85844abc6f.

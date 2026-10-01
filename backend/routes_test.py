@@ -61,6 +61,7 @@ async def test_run(body: dict, user: dict = Depends(require_role("admin"))):
     await asyncio.sleep(0.7)
     qts = now_iso()
     await db.coupon_claims.update_one({"id": cl["id"]}, {"$set": {"qr_downloaded": True, "qr_downloaded_at": qts}})
+    await db.qr_downloads.insert_one({"id": new_id("qrd"), "influencer_id": inf["id"], "campaign_id": camp["id"], "partner_id": partner["id"], "claim_id": cl["id"], "coupon": cupom, "date": qts, "is_test": True, "test_run_id": run_id})
     emit("qr_baixado", claim_id=cl["id"], cupom_id=cl["id"], cupom=cupom, at=qts, influencer_id=inf["id"], partner_id=partner["id"])
     await _step(run_id, 4, "QR baixado", "ok")
     await _step(run_id, 5, "A simular pagamento Stripe (modo teste)...", "run")
@@ -95,7 +96,7 @@ async def _delete_test(q: dict):
 @router.delete("/admin/test-run/{run_id}")
 async def delete_test_run(run_id: str, user: dict = Depends(require_role("admin"))):
     reds = await db.redemptions.distinct("id", {"test_run_id": run_id})
-    out = {c: (await db[c].delete_many({"test_run_id": run_id})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions")}
+    out = {c: (await db[c].delete_many({"test_run_id": run_id})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions", "qr_downloads")}
     out["audit_log"] = (await db.audit_log.delete_many({"ref": {"$in": reds}})).deleted_count
     emit("teste_limpo", run_id=run_id)
     return {"ok": True, "removed": out}
@@ -106,7 +107,7 @@ async def clear_all_tests(body: dict, user: dict = Depends(require_role("admin")
     if body.get("confirm") != "LIMPAR":
         raise HTTPException(status_code=400, detail='Escreva "LIMPAR" para confirmar')
     reds = await db.redemptions.distinct("id", {"is_test": True})
-    out = {c: (await db[c].delete_many({"is_test": True})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions")}
+    out = {c: (await db[c].delete_many({"is_test": True})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions", "qr_downloads")}
     out["audit_log"] = (await db.audit_log.delete_many({"$or": [{"ref": {"$in": reds}}, {"detail": {"$regex": "· TESTE ·"}}]})).deleted_count
     out["notifications"] = (await db.notifications.delete_many({"texto": {"$regex": "TEST-"}})).deleted_count
     emit("teste_limpo", run_id="all")

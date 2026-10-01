@@ -36,3 +36,10 @@ jobs:
         env:
           CI: false
           REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-node-${{ matrix.node-version }}
+          path: frontend/build
+          retention-days: 14
