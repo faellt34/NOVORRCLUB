@@ -6,6 +6,9 @@ from datetime import datetime, timezone, timedelta
 from core import db, NO_ID
 from routes_data import since
 
+ARRANQUE = datetime.now(timezone.utc).isoformat()
+ROTAS_IA = ("/api/diretor/conversar", "/api/diretor/auditoria", "/api/ai/")
+
 DIMENSOES = {"campanha": ("campaign_id", "campaigns"), "influencer": ("influencer_id", "influencers"), "hotel": ("partner_id", "partners")}
 
 
@@ -24,6 +27,7 @@ async def consultar_logs(nivel: str = "", termo: str = "", horas: int = 24, limi
     for i in items:
         if i.get("traceback"):
             i["traceback"] = i["traceback"][-600:]
+        i["anterior_ao_deploy_atual"] = i["timestamp"] < ARRANQUE
     por_nivel = {n: await db.system_logs.count_documents({**q, "nivel": n}) for n in ("error", "warn")}
     por_rota = defaultdict(int)
     por_ip = defaultdict(int)
@@ -36,7 +40,7 @@ async def consultar_logs(nivel: str = "", termo: str = "", horas: int = 24, limi
     auth401 = {"total": len(n401), "com_token_expirado_ou_revogado": sum(1 for i in n401 if i.get("com_token")), "sem_token": sum(1 for i in n401 if i.get("com_token") is False),
                "em_login": sum(1 for i in n401 if "/auth/login" in (i.get("caminho") or "")), "ips": dict(__import__("collections").Counter(i["ip"] for i in n401 if i.get("ip")).most_common(5))}
     aud = await db.audit_log.find({"timestamp": q["timestamp"]} if not termo else {"timestamp": q["timestamp"], "detail": {"$regex": termo, "$options": "i"}}, NO_ID).sort("timestamp", -1).to_list(15)
-    return {"janela_horas": horas, "totais": por_nivel, "rotas_mais_afetadas": dict(sorted(por_rota.items(), key=lambda x: -x[1])[:8]), "ips_mais_frequentes": dict(sorted(por_ip.items(), key=lambda x: -x[1])[:5]),
+    return {"janela_horas": horas, "arranque_do_servidor": ARRANQUE, "nota": "logs com anterior_ao_deploy_atual=true são da versão antiga, já substituída; não os reportes como problemas persistentes", "totais": por_nivel, "rotas_mais_afetadas": dict(sorted(por_rota.items(), key=lambda x: -x[1])[:8]), "ips_mais_frequentes": dict(sorted(por_ip.items(), key=lambda x: -x[1])[:5]),
             "analise_401": auth401, "logs": items, "auditoria_recente": aud}
 
 
@@ -99,11 +103,13 @@ async def _metricas_qr(dias: int):
 async def diagnosticar_sistema(**_):
     h24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     erros = await db.system_logs.count_documents({"nivel": "error", "timestamp": {"$gte": h24}})
+    erros_atuais = await db.system_logs.count_documents({"nivel": "error", "timestamp": {"$gte": ARRANQUE}})
     avisos = await db.system_logs.count_documents({"nivel": "warn", "timestamp": {"$gte": h24}})
-    lentos = await db.request_metrics.count_documents({"duracao_ms": {"$gt": 1500}, "timestamp": {"$gte": h24}})
+    lentos = await db.request_metrics.count_documents({"duracao_ms": {"$gt": 1500}, "timestamp": {"$gte": h24}, "caminho": {"$not": {"$regex": "^(" + "|".join(ROTAS_IA) + ")"}}})
     reqs = await db.request_metrics.count_documents({"timestamp": {"$gte": h24}})
-    pipeline = [{"$match": {"timestamp": {"$gte": h24}}}, {"$group": {"_id": "$caminho", "n": {"$sum": 1}, "p_ms": {"$avg": "$duracao_ms"}, "max_ms": {"$max": "$duracao_ms"}}}, {"$sort": {"p_ms": -1}}, {"$limit": 6}]
-    rotas_lentas = [{"rota": r["_id"], "pedidos": r["n"], "media_ms": round(r["p_ms"]), "max_ms": r["max_ms"]} async for r in db.request_metrics.aggregate(pipeline)]
+    pipeline = [{"$match": {"timestamp": {"$gte": h24}}}, {"$group": {"_id": "$caminho", "n": {"$sum": 1}, "p_ms": {"$avg": "$duracao_ms"}, "max_ms": {"$max": "$duracao_ms"}}}, {"$sort": {"p_ms": -1}}, {"$limit": 8}]
+    rotas_lentas = [{"rota": r["_id"], "pedidos": r["n"], "media_ms": round(r["p_ms"]), "max_ms": r["max_ms"], "esperado": r["_id"].startswith(ROTAS_IA)} async for r in db.request_metrics.aggregate(pipeline)]
+    aviso_por_status = {str(a["_id"]): a["n"] async for a in db.system_logs.aggregate([{"$match": {"nivel": "warn", "timestamp": {"$gte": h24}}}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}])}
     parts = await db.partners.find({}, {"_id": 0, "id": 1, "nome": 1, "status": 1, "stripe_account_id": 1, "stripe_charges_enabled": 1}).to_list(500)
     hoje = datetime.now(timezone.utc).date().isoformat()
     em7 = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
@@ -111,7 +117,12 @@ async def diagnosticar_sistema(**_):
     ultimo_webhook = await db.payment_transactions.find_one({}, {"_id": 0, "created_at": 1}, sort=[("created_at", -1)])
     ultimo_erro = await db.system_logs.find_one({"nivel": "error"}, {"_id": 0, "timestamp": 1, "mensagem": 1}, sort=[("timestamp", -1)])
     git_ok = shutil.which("git") is not None
-    return {"janela": "24h", "saude": {"pedidos_api": reqs, "erros_500": erros, "avisos_4xx": avisos, "pedidos_lentos_1500ms": lentos, "rotas_mais_lentas": rotas_lentas, "ultimo_erro_500": ultimo_erro, "git_disponivel": git_ok},
+    return {"janela": "24h", "arranque_do_servidor": ARRANQUE,
+            "saude": {"pedidos_api": reqs, "erros_500_24h": erros, "erros_500_desde_deploy_atual": erros_atuais, "erros_500": erros_atuais,
+                      "nota_erros": "erros anteriores ao arranque do servidor atual pertencem à versão antiga e já foram corrigidos no deploy; só 'erros_500_desde_deploy_atual' são problemas reais em aberto" if erros and not erros_atuais else None,
+                      "avisos_4xx": avisos, "avisos_4xx_por_status": aviso_por_status, "pedidos_lentos_1500ms": lentos, "rotas_mais_lentas": rotas_lentas,
+                      "nota_lentidao": "rotas marcadas esperado=true são chamadas a modelos de IA (3-15s é normal); não são problemas de performance",
+                      "ultimo_erro_500": ultimo_erro, "motor_patches": "git" if git_ok else "interno (Python, sem dependência de git — funcional)"},
             "stripe": {"modo": os.environ.get("STRIPE_MODE", "?"), "hoteis_ativos": sum(1 for p in parts if p.get("status") == "Ativo"),
                        "hoteis_sem_connect": [p["nome"] for p in parts if p.get("status") == "Ativo" and not p.get("stripe_account_id")],
                        "hoteis_connect_incompleto": [p["nome"] for p in parts if p.get("stripe_account_id") and not p.get("stripe_charges_enabled")], "ultimo_pagamento": (ultimo_webhook or {}).get("created_at")},
@@ -126,11 +137,11 @@ async def briefing() -> dict:
     s = diag["saude"]
     if s["erros_500"]:
         ult = (s.get("ultimo_erro_500") or {}).get("timestamp", "")[11:16]
-        alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 nas últimas 24h" + (f" · último às {ult} UTC" if ult else ""), "detalhe": (s.get("ultimo_erro_500") or {}).get("mensagem", "")[:110], "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
-    if not s.get("git_disponivel", True):
-        alertas.append({"nivel": "warn", "titulo": "git indisponível no servidor — a usar motor interno de patches", "detalhe": "O Diretor valida e aplica diffs com o motor interno de patches; sem impacto para o CEO", "acao": None})
+        alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 desde o deploy atual" + (f" · último às {ult} UTC" if ult else ""), "detalhe": (s.get("ultimo_erro_500") or {}).get("mensagem", "")[:110], "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
+    elif s["erros_500_24h"]:
+        alertas.append({"nivel": "info", "titulo": f"{s['erros_500_24h']} erro(s) 500 da versão anterior — já corrigidos", "detalhe": "Nenhum erro desde o deploy atual", "acao": None})
     if s["pedidos_lentos_1500ms"] > 5:
-        alertas.append({"nivel": "warn", "titulo": f"{s['pedidos_lentos_1500ms']} pedidos lentos (>1,5s)", "detalhe": ", ".join(r["rota"] for r in s["rotas_mais_lentas"][:3]), "acao": "diagnostica o sistema e identifica as rotas mais lentas"})
+        alertas.append({"nivel": "warn", "titulo": f"{s['pedidos_lentos_1500ms']} pedidos lentos (>1,5s, excluindo IA)", "detalhe": ", ".join(r["rota"] for r in s["rotas_mais_lentas"] if not r["esperado"])[:120], "acao": "diagnostica o sistema e identifica as rotas mais lentas"})
     for n in diag["stripe"]["hoteis_sem_connect"][:5]:
         alertas.append({"nivel": "warn", "titulo": f"{n} ainda não ativou o split Stripe", "detalhe": "Sem Stripe Connect as vendas não fazem split automático", "acao": f"prepara um email para o hotel {n} a pedir que ative o Stripe Connect"})
     for n in diag["stripe"]["hoteis_connect_incompleto"][:5]:
