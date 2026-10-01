@@ -207,6 +207,8 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - 522: às 23:24 UTC rrclub.online respondia 200 e backend vivo (`/api/auth/me` 401) mas com **build antigo** (`/api/payments/config` 404). O 522 foi transitório (rollouts). Redeploy dispachado; RCA do deployer ainda sem resposta.
 - Passar a live e concluir KYC do hotel são ações do utilizador (Payments tab → reclamar sandbox; parceiro → "Continuar onboarding").
 
+- `GET /api/campaigns/list_ids` (admin) → `[{id, nome, cupom, status}]` — criado a pedido do utilizador (o endpoint não existia; 401 sem token, 403 parceiro). Deploy dispachado.
+
 ## Backlog priorizado
 - P1 (segurança, próxima ronda): rate limit em `/public/coupon/*` e `/public/pay`; `qr-downloaded` só com claim_id+coupon (já) → adicionar token de claim; paginação em listagens admin; verificação de email no registo; contagem atómica no `rate_limit` (`$inc` com upsert)
 - P1: reclamar Stripe + ativar Connect e MB WAY; colar chave Resend; Publish + domínio

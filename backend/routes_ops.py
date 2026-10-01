@@ -382,6 +382,11 @@ async def influencer_iban(body: InfIbanIn, user: dict = Depends(require_role("in
     return {"ok": True, "iban": iban}
 
 
+@router.get("/campaigns/list_ids")
+async def campaigns_list_ids(user: dict = Depends(require_role("admin"))):
+    return await db.campaigns.find({}, {"_id": 0, "id": 1, "nome": 1, "cupom": 1, "status": 1}).sort("created_at", -1).to_list(2000)
+
+
 @router.get("/campaigns/{campaign_id}/poster.pdf")
 async def campaign_poster(campaign_id: str, site: str = "", user: dict = Depends(get_current_user)):
     from poster import render_poster
