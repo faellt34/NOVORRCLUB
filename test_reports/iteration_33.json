@@ -1,0 +1,25 @@
+{
+  "summary": "Iter 33: Diretor proativo (briefing + logs + metricas granulares + chat tool-calling). Backend 10/10 pytest passed on preview URL: /diretor/briefing retorna {alertas,saude{pedidos_api,erros_500,pedidos_lentos_1500ms,rotas_mais_lentas},top_campanhas,funil_30d{cliques,qr_baixados,vendas,receita}}; /diretor/logs?nivel=warn&horas=24 depois de um GET 404 inclui a rota nos logs (rotas_mais_afetadas/logs populados, auditoria_recente OK); /diretor/metricas dimensao=campanha|influencer|hotel devolve itens com todos os campos (cliques,qr_baixados,vendas,receita,taxa_qr_pct,conversao_pct,ticket_medio,alerta); dimensao=qr devolve funil+por_origem+por_dia; dimensao inválida devolve {erro}; sem token→401, token influencer→403; POST /diretor/conversar com 'Há erros nos logs das últimas 24h?' retorna chamadas incluindo consultar_logs e diagnosticar_sistema (SYSTEM regra 8 cumprida). Frontend OK no /admin/diretor: data-testid=diretor-briefing com 4 briefing-kpi-* (Pedidos 24h=55, Erros 500=0, Lentos>1,5s=2, Cliques→QR→Vendas 30d=1→0→0), briefing-alert-count='1 alerta(s)', briefing-refresh clicável, 1 briefing-acao-0 ('Investigar' em alerta 'Parceiro Exemplo: verificação Stripe incompleta'); click no Investigar enviou 'analisa a situação Stripe do hotel Parceiro Exemplo' ao chat (novo diretor-msg-user visível). SUGGESTIONS constant inclui 'Como estamos? Diagnostica o sistema...' e 'Há erros nos logs das últimas 24h?' (só são renderizadas quando msgs.length===0 — nesta conta já há histórico, mas verificado em código Diretor.jsx:9).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter33_diretor_briefing.py",
+    "/app/test_reports/pytest/iter33.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "diretor_tools.consultar_logs: ao filtrar por nivel ignora 'info' no filtro válido mas aceita-o — alinhado com a doc; OK.",
+    "diretor_tools.briefing: nivel 'info' usado em alertas de parceiros pendentes mas o TONE/ICON map também inclui 'info' — coerente.",
+    "routes_diretor.py tem 636 linhas — próximo do limite 700 recomendado; considerar extrair _apply_patch/_verify/auditoria para módulo separado se continuar a crescer.",
+    "DiretorBriefing.jsx usa data-testid=briefing-kpi-<label> com labels PT contendo 'Cliques→QR→Vendas 30d' (acentos/símbolos). Funciona mas testids seriam mais robustos com slugs ascii; aceitável.",
+    "Diretor.jsx:12 useEffect(load, [refreshKey]) devia idealmente ter deps declaradas (eslint react-hooks/exhaustive-deps) — minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter33_diretor_briefing.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100%"},
+  "test_credentials": "admin faellt@gmail.com / Robson2026! ; influencer influencer.exemplo@club.pt / influencer123",
+  "seed_data_creation": "Nenhum. Gerou 1 pedido 404 para /api/rota-inexistente-xyz-33 (persistido no system_logs como warn) e 1 chamada LLM /diretor/conversar durante o teste backend + 1 Investigar no frontend (total ~2-3 créditos LLM consumidos).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Diretor usage hoje = 2/60 pós-teste. Backend tests ficheiro: pytest backend/tests/test_iter33_diretor_briefing.py -o asyncio_mode=auto -o addopts=''. Rota /diretor/briefing combina diagnosticar_sistema + metricas_granulares; qualquer alerta de parceiro sem connect Stripe gera botão Investigar com acao pré-populada. Para testar SUGGESTIONS inicias é preciso limpar db.conversas_diretor ou usar um admin sem histórico.",
+  "rca of the issue": "N/A — todos os cenários passaram."
+}

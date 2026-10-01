@@ -239,3 +239,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - QR tracking prod: claims=1 / downloads=1 separados no dashboard influencer (test-run test-85844abc6f, cupom TEST-6D14F1). Fix: test-run agora grava em `qr_downloads` e a limpeza apaga-os.
 - Workflow CI: artefacto `frontend-build-node-*` via upload-artifact@v4.
 - Contas de teste em prod a apagar: influencer if-a8504b1576 / usr-ce65e38fd6, hotel p-43abce62de / usr-c91d46af44, test-run test-85844abc6f.
+
+## 2026-10-01 — Diretor proativo (iteration_33: 10/10 backend + frontend OK)
+- `backend/observability.py`: middleware grava 4xx/5xx/lentos em `system_logs` (TTL 14d, traceback em 500) e todos os pedidos em `request_metrics` (TTL 7d).
+- `backend/diretor_tools.py`: ferramentas `consultar_logs`, `metricas_granulares` (campanha|influencer|hotel|qr), `diagnosticar_sistema`, `briefing` (alertas sem LLM).
+- Rotas: GET /api/diretor/briefing, /logs, /metricas. SYSTEM prompt regra 8 (proatividade: investiga antes de responder, termina com "Alertas:").
+- Frontend: `DiretorBriefing.jsx` em /admin/diretor com KPIs, alertas e botão Investigar → envia pergunta ao chat.
