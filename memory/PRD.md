@@ -282,3 +282,14 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - LIMITAÇÃO ESTRUTURAL: em produção o ficheiro alterado não recarrega (uvicorn sem reload) e perde-se no próximo deploy. Aplicação persistente de patches deve ser feita no ambiente de desenvolvimento (/app) e depois publicada.
 - 60+ ações propor_correcao aprovadas e nunca aplicadas (muitas da auditoria, provavelmente desatualizadas face ao código atual).
 - Pedido de reembolso: encaminhado via support_agent → support@emergent.sh.
+
+## 2026-10-15 — Patches aprovados + vídeo influencer
+- Reconciliação: 68 aprovadas/não aplicadas → 4 validam. Aplicada em dev: ac-bfa913b0f9 (routes_data partner_id guard). A rejeitar: ac-6b9ee7cf7b (WS origin fixo app.rrclub.pt — partiria rrclub.online). Superadas: ac-1ac6eb4e1c/ac-ba1676a1db (fontes) pela solução abaixo. Após deploy, chamar POST /api/diretor/acoes/reconciliar em prod com aplicadas_dev=[ac-bfa913b0f9, ac-1ac6eb4e1c, ac-ba1676a1db], rejeitar={ac-6b9ee7cf7b: motivo} → marca 64 como desatualizadas.
+- Vídeo story 500 em prod: OSError cannot open resource (sem fontes Liberation). Fix: backend/assets/fonts/*.ttf + fallback load_default; routes_ops devolve 503 legível. Testado: 200 video/mp4 1.4MB.
+- Testes pytest: falhas são 429 (rate limit login em paralelo), não regressões.
+- PENDENTE: seletor de modelo no Diretor (Gemini/GPT mais económico/Claude) via integration_expert.
+
+## 2026-10-15 — Seletor de modelo + parse
+- MODELOS em routes_diretor.py: gemini (gemini-2.5-flash, padrão), gpt (gpt-5-nano, mais económico), claude (claude-haiku-4-5). GET /api/diretor/modelos; MsgIn.modelo; conversa guarda "modelo". Frontend ModelSelector.jsx (localStorage diretor_modelo). Testado: GPT respondeu via conversar.
+- _parse endurecido: JSON malformado/truncado → extrai "resposta" sem mostrar chaves ao CEO.
+- Reconciliar em prod: endpoint ainda 404 (deploy pendente) — correr após deploy com aplicadas_dev=[ac-bfa913b0f9,ac-1ac6eb4e1c,ac-ba1676a1db], rejeitar ac-6b9ee7cf7b.

@@ -420,6 +420,11 @@ async def story_video(campaign_id: str, user: dict = Depends(require_role("influ
     key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v2".encode()).hexdigest()[:12]
     out = MEDIA_DIR / f"story-{c['cupom']}-{key}.mp4"
     if not out.exists():
-        await asyncio.to_thread(render_story, out, user["nome"], inf.get("handle", ""), c["cupom"], float(c["desconto"]), partner.get("nome", ""), site)
+        try:
+            await asyncio.to_thread(render_story, out, user["nome"], inf.get("handle", ""), c["cupom"], float(c["desconto"]), partner.get("nome", ""), site)
+        except FileNotFoundError:
+            raise HTTPException(status_code=503, detail="Gerador de vídeo indisponível neste servidor (ffmpeg em falta). Use o cartaz A5 ou contacte o suporte.")
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Não foi possível gerar o vídeo: {type(e).__name__}")
         await audit("VÍDEO", f"Story personalizado gerado · {c['cupom']}", user, campaign_id)
     return FileResponse(str(out), media_type="video/mp4", filename=f"story-{c['cupom']}.mp4")

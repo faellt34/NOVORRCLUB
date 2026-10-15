@@ -175,6 +175,8 @@ class RedeemIn(BaseModel):
 @router.post("/redemptions")
 async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
     code = body.code.strip().upper()
+    if not user.get("partner_id"):
+        raise HTTPException(status_code=400, detail="Conta de parceiro não configurada.")
     existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
     if existing:
         return {"record": existing, "duplicate": True}

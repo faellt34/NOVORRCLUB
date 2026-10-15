@@ -6,6 +6,7 @@ import { api, apiError } from "../lib/api";
 import { SecurityAudit } from "../components/SecurityAudit";
 import { CreditMeter } from "../components/CreditMeter";
 import { DiretorBriefing } from "../components/DiretorBriefing";
+import { ModelSelector, getModelo } from "../components/ModelSelector";
 
 const SUGGESTIONS = ["Como estamos? Diagnostica o sistema e diz-me o que preciso saber", "Mostra as métricas por campanha dos últimos 30 dias", "Há erros nos logs das últimas 24h?", "Analisa o funil QR: cliques, downloads e vendas por origem", "Pede ao subagente Marketing um plano para aumentar a conversão"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
@@ -15,6 +16,7 @@ export default function Diretor() {
   const [msgs, setMsgs] = useState([]);
   const [acoes, setAcoes] = useState([]);
   const [input, setInput] = useState("");
+  const [modelo, setModelo] = useState(getModelo());
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState("pendente");
   const box = useRef(null);
@@ -30,7 +32,7 @@ export default function Diretor() {
     if (!mensagem || busy) return;
     setInput(""); setBusy(true);
     try {
-      const { data } = await api.post("/diretor/conversar", { mensagem }, { timeout: 120000 });
+      const { data } = await api.post("/diretor/conversar", { mensagem, modelo }, { timeout: 120000 });
       setMsgs((m) => [...m, data]);
       if (data.acoes_pendentes?.length) { toast.info(`${data.acoes_pendentes.length} ação(ões) aguardam a sua aprovação`); setAcoes((a) => [...data.acoes_pendentes, ...a]); setTab("pendente"); }
     } catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }
@@ -60,9 +62,12 @@ export default function Diretor() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <h1 data-testid="diretor-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Diretor Geral · IA</h1>
-          <p className="text-sm text-slate-500 mt-1">Gemini 2.5 Flash com acesso a dados reais, logs detalhados e métricas por campanha/influencer/hotel. Vigia o sistema de forma proativa. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
+          <p className="text-sm text-slate-500 mt-1">Diretor IA com acesso a dados reais, logs detalhados e métricas por campanha/influencer/hotel. Vigia o sistema de forma proativa. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
         </div>
-        <CreditMeter refreshKey={msgs.length} />
+        <div className="flex flex-col items-end gap-2">
+          <CreditMeter refreshKey={msgs.length} />
+          <ModelSelector value={modelo} onChange={setModelo} />
+        </div>
       </div>
       <DiretorBriefing onAsk={send} refreshKey={msgs.length} />
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

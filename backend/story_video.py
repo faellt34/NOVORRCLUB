@@ -9,8 +9,20 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 MEDIA_DIR = Path(__file__).parent / "media"
 MEDIA_DIR.mkdir(exist_ok=True)
-FB = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-FR = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+_FONTS_DIR = Path(__file__).parent / "assets" / "fonts"
+_SYS = Path("/usr/share/fonts/truetype/liberation")
+FB = str(_FONTS_DIR / "LiberationSans-Bold.ttf") if (_FONTS_DIR / "LiberationSans-Bold.ttf").exists() else str(_SYS / "LiberationSans-Bold.ttf")
+FR = str(_FONTS_DIR / "LiberationSans-Regular.ttf") if (_FONTS_DIR / "LiberationSans-Regular.ttf").exists() else str(_SYS / "LiberationSans-Regular.ttf")
+
+
+def _font(path: str, size: int):
+    try:
+        return ImageFont.truetype(path, size)
+    except OSError:
+        try:
+            return ImageFont.load_default(size=size)
+        except TypeError:
+            return ImageFont.load_default()
 
 
 def _noise(x, y, z):
@@ -32,8 +44,8 @@ def render_story(out_path: Path, name: str, handle: str, coupon: str, discount: 
             pts.append(p)
     links = [(rnd.randrange(len(pts)), rnd.randrange(len(pts)), rnd.random() * 6) for _ in range(18)]
     stars = [(rnd.random() * W, rnd.random() * H, rnd.random()) for _ in range(200)]
-    fbig = ImageFont.truetype(FB, 80); flogo = ImageFont.truetype(FB, 72); fname = ImageFont.truetype(FB, 40)
-    fsm = ImageFont.truetype(FR, 30); fcoupon = ImageFont.truetype(FB, 46); ftag = ImageFont.truetype(FR, 24)
+    fbig = _font(FB, 80); flogo = _font(FB, 72); fname = _font(FB, 40)
+    fsm = _font(FR, 30); fcoupon = _font(FB, 46); ftag = _font(FR, 24)
     ov = Image.new("RGB", (W, H), (91, 33, 182))
     mask = Image.new("L", (W, H), 0)
     ImageDraw.Draw(mask).ellipse([-W * 0.9, -H * 0.15, W * 0.75, H * 1.15], fill=255)

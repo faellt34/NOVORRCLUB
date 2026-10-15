@@ -18,6 +18,11 @@ from diretor_tools import consultar_logs, metricas_granulares, diagnosticar_sist
 
 router = APIRouter(prefix="/diretor", dependencies=[Depends(require_role("admin"))])
 MODEL = ("gemini", "gemini-2.5-flash")
+MODELOS = {
+    "gemini": {"provider": "gemini", "model": "gemini-2.5-flash", "nome": "Gemini 2.5 Flash", "custo": "€", "nota": "rápido e económico (padrão)"},
+    "gpt": {"provider": "openai", "model": "gpt-5-nano", "nome": "ChatGPT · GPT-5 nano", "custo": "€", "nota": "o GPT mais económico"},
+    "claude": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001", "nome": "Claude Haiku 4.5", "custo": "€€", "nota": "equilíbrio qualidade/custo"},
+}
 WRITE_ACTIONS = {"criar_campanha", "gerar_contrato", "enviar_email", "gerar_qr_code", "propor_correcao"}
 
 SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens três subagentes: Marketing (analisa campanhas), Frontend (analisa código UI), Backend (analisa código servidor). "
@@ -68,6 +73,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
 
 class MsgIn(BaseModel):
     mensagem: str
+    modelo: str = "gemini"
 
 
 async def ler_dashboard(**_):
@@ -320,7 +326,16 @@ def _parse(txt: str) -> dict:
     try:
         return json.loads(t[t.index("{"): t.rindex("}") + 1])
     except Exception:
-        return {"resposta": txt.strip()}
+        pass
+    m = re.search(r'"resposta"\s*:\s*"', t)
+    if m:
+        body = t[m.end():].rstrip().rstrip("}").rstrip().rstrip('"')
+        try:
+            body = json.loads(f'"{body}"')
+        except Exception:
+            pass
+        return {"resposta": body.strip()}
+    return {"resposta": t.strip('{}" \n')}
 
 
 async def _queue(tipo: str, args: dict) -> dict:
@@ -342,7 +357,8 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     prior = "\n".join(f"CEO: {h['mensagem_user']}\nDiretor: {h['resposta_diretor']}" for h in reversed(hist))
     licoes = await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(8)
     lic_txt = "\n".join(f"- Proposto: {l['proposto'][:120]} | Rejeitado porque: {l['motivo'][:120]} | Fazer diferente: {l['fazer_diferente'][:120]}" for l in licoes)
-    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("dir"), system_message=SYSTEM + (f"\n\nLIÇÕES APRENDIDAS (rejeições do CEO):\n{lic_txt}" if lic_txt else "")).with_model(*MODEL)
+    m = MODELOS.get(body.modelo, MODELOS["gemini"])
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id("dir"), system_message=SYSTEM + (f"\n\nLIÇÕES APRENDIDAS (rejeições do CEO):\n{lic_txt}" if lic_txt else "")).with_model(m["provider"], m["model"])
     text = (f"Contexto recente:\n{prior}\n\n" if prior else "") + f"Hoje: {datetime.now(timezone.utc).date().isoformat()}\nCEO: {body.mensagem}"
     chamadas, pendentes, resposta = [], [], None
     try:
@@ -384,7 +400,7 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
       from observability import record
       await record("error", "diretor", f"conversar falhou: {type(e).__name__}: {str(e)[:300]}", caminho="/api/diretor/conversar", status=200)
     resposta = resposta or "Não consegui concluir a análise. Tente reformular."
-    conv = {"id": new_id("cv"), "mensagem_user": body.mensagem, "resposta_diretor": resposta, "chamadas": chamadas, "acoes_ids": [a["id"] for a in pendentes], "timestamp": now_iso(), "user_id": user["id"]}
+    conv = {"id": new_id("cv"), "mensagem_user": body.mensagem, "resposta_diretor": resposta, "chamadas": chamadas, "acoes_ids": [a["id"] for a in pendentes], "timestamp": now_iso(), "user_id": user["id"], "modelo": m["nome"]}
     await db.conversas_diretor.insert_one(dict(conv))
     conv.pop("user_id", None)
     return {**conv, "acoes_pendentes": pendentes}
@@ -399,6 +415,11 @@ async def conversas():
 @router.get("/briefing")
 async def briefing():
     return await _briefing()
+
+
+@router.get("/modelos")
+async def modelos():
+    return [{"id": k, **v} for k, v in MODELOS.items()]
 
 
 @router.get("/logs")
@@ -497,6 +518,37 @@ async def rejeitar(acao_id: str, body: RejeitarIn = RejeitarIn(), user: dict = D
     await db.licoes_aprendidas.insert_one(dict(licao))
     await audit("DIRETOR", f"Ação rejeitada pelo CEO: {body.motivo[:100]}", user, acao_id)
     return {"ok": True}
+
+
+class ReconciliarIn(BaseModel):
+    aplicadas_dev: list[str] = []
+    rejeitar: dict[str, str] = {}
+
+
+@router.post("/acoes/reconciliar")
+async def reconciliar(body: ReconciliarIn, user: dict = Depends(require_role("admin"))):
+    acs = await db.acoes_pendentes.find({"tipo_acao": "propor_correcao", "status": "aprovada", "aplicacao.status": {"$ne": "aplicada"}}, NO_ID).to_list(500)
+    out = {"desatualizadas": 0, "validas": 0, "aplicadas_dev": 0, "rejeitadas": 0}
+    for a in acs:
+        if a["id"] in body.aplicadas_dev:
+            await db.acoes_pendentes.update_one({"id": a["id"]}, {"$set": {"aplicacao": {"status": "aplicada", "onde": "desenvolvimento", "por": user["nome"], "timestamp": now_iso()}}})
+            out["aplicadas_dev"] += 1; continue
+        if a["id"] in body.rejeitar:
+            motivo = body.rejeitar[a["id"]]
+            await db.acoes_pendentes.update_one({"id": a["id"]}, {"$set": {"status": "rejeitada", "rejeitada_em": now_iso(), "rejeitada_por": user["nome"], "motivo": motivo}})
+            await db.licoes_aprendidas.insert_one({"id": new_id("lic"), "acao_id": a["id"], "tipo_acao": "propor_correcao", "proposto": a["descricao"], "motivo": motivo, "fazer_diferente": "nunca fixar domínios/URLs no código; usar variáveis de ambiente", "timestamp": now_iso()})
+            out["rejeitadas"] += 1; continue
+        d = a.get("dados_json") or {}
+        area = d.get("area") if d.get("area") in CODE_DIRS else "backend"
+        r = await asyncio.to_thread(_apply_patch, area, str(d.get("diff") or ""), True)
+        if r["ok"]:
+            out["validas"] += 1
+        else:
+            await db.acoes_pendentes.update_one({"id": a["id"]}, {"$set": {"status": "desatualizada", "aplicacao": {"status": "desatualizada", "erro": r.get("erro", "")[:200], "timestamp": now_iso()}}})
+            out["desatualizadas"] += 1
+    await audit("DIRETOR", f"Reconciliação de correções: {out}", user)
+    return out
+
 
 
 @router.get("/uso")
