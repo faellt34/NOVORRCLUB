@@ -73,6 +73,10 @@ class RegisterIn(BaseModel):
 
 @router.post("/register")
 async def register(body: RegisterIn, request: Request, response: Response):
+    return await register_account(body, request, response)
+
+
+async def register_account(body: RegisterIn, request: Request, response: Response, google_sub=None):
     await rate_limit(f"register:{client_ip(request)}", 5, 3600, "Demasiados registos a partir deste endereço. Tente novamente mais tarde.")
     email = body.email.strip().lower()
     if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
@@ -91,6 +95,8 @@ async def register(body: RegisterIn, request: Request, response: Response):
     avatar = f"https://i.pravatar.cc/80?u={email}"
     user = {"id": uid, "email": email, "password_hash": hash_password(body.password), "nome": body.nome.strip(), "role": body.role, "avatar": avatar,
             "telefone": body.telefone, "currency": body.currency, "created_at": now_iso(), "origem": "Registo no site"}
+    if google_sub:
+        user.update({"google_sub": google_sub, "auth_provider": "google"})
     if body.role == "influencer":
         handle = body.handle.strip() if body.handle else ""
         if handle and not handle.startswith("@"):
@@ -102,7 +108,15 @@ async def register(body: RegisterIn, request: Request, response: Response):
         ent = {"id": new_id("p"), "user_id": uid, "nome": user["nome"], "categoria": body.categoria, "cidade": body.cidade, "currency": body.currency, "status": "Pendente", "avatar": avatar, "origem": "Registo no site"}
         await db.partners.insert_one(dict(ent))
         user.update({"handle": f"{body.categoria} · {body.cidade}", "partner_id": ent["id"], "status": "Pendente"})
-    await db.users.insert_one(dict(user))
+    try:
+        await db.users.insert_one(dict(user))
+    except Exception as exc:
+        from pymongo.errors import DuplicateKeyError
+        if google_sub and isinstance(exc, DuplicateKeyError):
+            collection = db.influencers if body.role == "influencer" else db.partners
+            await collection.delete_one({"id": ent["id"], "user_id": uid})
+            raise HTTPException(409, "Esta conta Google já foi registada. Entre novamente.")
+        raise
     pub = public_user(user)
     await audit("REGISTO", f"{user['nome']} · {body.role} · {email}" + (" · aguarda aprovação" if body.role == "partner" else ""), pub, uid)
     await notify(await admin_ids(), "registo", "Novo registo" + (" de parceiro (aprovação necessária)" if body.role == "partner" else " de influencer"),
@@ -112,3 +126,82 @@ async def register(body: RegisterIn, request: Request, response: Response):
     token = create_access_token(uid, email, body.role)
     response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=COOKIE_MAX_AGE, path="/")
     return {"pending": False, "token": token, "user": pub}
+
+
+class GoogleIn(BaseModel):
+    credential: str
+    role: Optional[str] = None
+    aceita_termos: bool = False
+    cidade: str = "Lisboa"
+    nome: str = ""
+    handle: str = ""
+    categoria: str = "Restaurante"
+    currency: Literal["eur", "brl"] = "eur"
+
+
+@router.get("/google/config")
+async def google_config(request: Request, response: Response):
+    import os
+    import secrets
+    import hashlib
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    response.headers["Cache-Control"] = "no-store"
+    if not client_id:
+        return {"client_id": ""}
+    await rate_limit(f"google-challenge:{client_ip(request)}", 60, 900, "Tente novamente mais tarde.")
+    nonce = secrets.token_urlsafe(32)
+    await db.google_challenges.insert_one({"digest": hashlib.sha256(nonce.encode()).hexdigest(), "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)})
+    response.set_cookie("google_nonce", nonce, httponly=True, secure=True, samesite="none", max_age=600, path="/api/auth")
+    return {"client_id": client_id, "nonce": nonce}
+
+
+async def google_claims(body: GoogleIn, request: Request):
+    import hashlib
+    from google_identity import verify_google_credential
+    await rate_limit(f"google-login:{client_ip(request)}", 30, 900, "Demasiadas tentativas. Tente novamente mais tarde.")
+    nonce = request.cookies.get("google_nonce", "")
+    if not nonce:
+        raise HTTPException(401, "Atualize a página para iniciar sessão com Google.")
+    claims = await verify_google_credential(body.credential, nonce)
+    # Atomic consumption prevents replay, even across concurrent requests.
+    challenge = await db.google_challenges.find_one_and_delete({"digest": hashlib.sha256(nonce.encode()).hexdigest(), "expires_at": {"$gt": datetime.now(timezone.utc)}})
+    if not challenge:
+        raise HTTPException(401, "Pedido Google expirado. Atualize a página.")
+    return claims
+
+
+@router.post("/google")
+async def google_login(body: GoogleIn, request: Request, response: Response):
+    import secrets
+    claims = await google_claims(body, request)
+    user = await db.users.find_one({"google_sub": claims["sub"]})
+    if not user:
+        email = claims["email"].strip().lower()
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(409, "Já tem conta. Entre com a palavra-passe e associe o Google em Segurança da conta.")
+        if body.role not in ("influencer", "partner") or not body.aceita_termos:
+            raise HTTPException(400, "Crie a conta escolhendo o perfil e aceitando a Política de Privacidade.")
+        return await register_account(RegisterIn(nome=body.nome.strip() or claims.get("name") or email.split("@")[0], email=email, password=secrets.token_urlsafe(40) + "A1", role=body.role, handle=body.handle, cidade=body.cidade, categoria=body.categoria, currency=body.currency, aceita_termos=True), request, response, google_sub=claims["sub"])
+    if user.get("status") in ("Suspenso", "Pendente"):
+        raise HTTPException(403, "Conta suspensa ou a aguardar aprovação. Contacte a equipa.")
+    token = create_access_token(user["id"], user["email"], user["role"])
+    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="none", max_age=COOKIE_MAX_AGE, path="/")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"last_login": now_iso()}})
+    await audit("LOGIN_GOOGLE", f"{user['nome']} · {user['role']}", public_user(user))
+    return {"token": token, "user": public_user(user)}
+
+
+@router.post("/google/link")
+async def google_link(body: GoogleIn, request: Request, user: dict = Depends(get_current_user)):
+    from pymongo.errors import DuplicateKeyError
+    claims = await google_claims(body, request)
+    if claims["email"].strip().lower() != user["email"].strip().lower():
+        raise HTTPException(400, "Utilize a conta Google com o mesmo email desta conta.")
+    if await db.users.find_one({"google_sub": claims["sub"], "id": {"$ne": user["id"]}}):
+        raise HTTPException(409, "Esta conta Google já está associada.")
+    try:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"google_sub": claims["sub"]}})
+    except DuplicateKeyError:
+        raise HTTPException(409, "Esta conta Google já está associada.")
+    await audit("GOOGLE_LINK", "Conta Google associada", user)
+    return {"linked": True}

@@ -166,7 +166,7 @@ export default function PartnerDashboard() {
         </div>
         {ibanEdit ? (
           <form onSubmit={saveIban} className="flex gap-2">
-            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-full sm:w-[280px]" />
             <button type="submit" data-testid="partner-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
           </form>
         ) : (

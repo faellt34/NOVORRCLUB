@@ -1,28 +1,25 @@
 export const BrandMark = ({ className = "w-9 h-9", light = true }) => (
-  <svg viewBox="0 0 200 200" className={className} data-testid="brand-mark" aria-label="RRclub">
-    <defs>
-      <linearGradient id="rr-s2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#B47BFF" /><stop offset="100%" stopColor="#6E2BFF" /></linearGradient>
-      <linearGradient id="rr-bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#08040E" /><stop offset="100%" stopColor="#1A0F2E" /></linearGradient>
-    </defs>
-    <circle cx="100" cy="100" r="98" fill={light ? "url(#rr-bg)" : "#fff"} stroke={light ? "rgba(110,43,255,.35)" : "#E9D5FF"} strokeWidth="2" />
-    <g fill="none" stroke="url(#rr-s2)" strokeWidth="10">
-      <circle cx="75" cy="100" r="50" />
-      <circle cx="125" cy="100" r="50" />
+  <svg viewBox="0 0 80 80" className={className} role="img" aria-label="CONEKTA" data-testid="brand-mark">
+    <rect width="80" height="80" rx="23" fill={light ? "#7137D7" : "#F0E8FF"} />
+    <g fill="none" stroke={light ? "white" : "#7137D7"} strokeWidth="3.8">
+      <circle cx="31" cy="40" r="20" /><circle cx="49" cy="40" r="20" />
     </g>
-    <circle cx="100" cy="100" r="8" fill="#B47BFF" />
-    <circle cx="100" cy="57" r="4" fill="#B47BFF" />
-    <circle cx="100" cy="143" r="4" fill="#B47BFF" />
+    <circle cx="40" cy="40" r="3.5" fill={light ? "white" : "#7137D7"} />
   </svg>
 );
 
 export const BrandLogo = ({ size = "md", dark = false, tagline = false, className = "" }) => {
-  const s = size === "lg" ? { mark: "w-11 h-11", text: "text-xl" } : size === "sm" ? { mark: "w-7 h-7", text: "text-sm" } : { mark: "w-9 h-9", text: "text-lg" };
+  const width = size === "lg" ? 170 : size === "sm" ? 122 : 145;
   return (
-    <div className={`flex items-center gap-2.5 ${className}`} data-testid="brand-logo">
-      <BrandMark className={s.mark} />
-      <div className="leading-tight">
-        <p className={`font-display font-extrabold tracking-tight ${s.text} ${dark ? "text-slate-900" : "text-white"}`}><span className="text-[#B47BFF]">RR</span>club</p>
-        {tagline && <p className={`text-[10px] uppercase tracking-widest ${dark ? "text-slate-400" : "text-purple-200/80"}`}>Luxury Experiences</p>}
+    <div className={`flex items-center gap-3 ${className}`} data-testid="brand-logo">
+      <BrandMark className={size === "lg" ? "w-11 h-11 shrink-0" : "w-9 h-9 shrink-0"} />
+      <div className={dark ? "text-[#19132E]" : "text-white"}>
+        <svg viewBox="0 0 218 34" width={width} role="img" aria-label="CONEKTA" className="max-w-full">
+          <g fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M25 7C8-7 0 10 4 23C8 34 20 33 25 27M45 2C28 2 28 31 45 31C62 31 62 2 45 2ZM68 31V3L88 31V3M120 3H100V31H120M100 17H117M151 3V31M151 17L132 3M151 17L132 31M160 3H184M172 3V31M190 31L202 3L215 31M194 22H211" />
+          </g>
+        </svg>
+        {tagline && <p className="text-[9px] uppercase tracking-[.22em] mt-1 opacity-60">Influência que conecta</p>}
       </div>
     </div>
   );

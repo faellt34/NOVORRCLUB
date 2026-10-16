@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import GoogleSignIn from "../components/GoogleSignIn";
 import { BrandLogo } from "../components/BrandLogo";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -55,7 +56,7 @@ export default function Login() {
           <h1 className="font-display text-4xl xl:text-5xl font-extrabold leading-[1.1] mb-6">{t("heroTitle")}</h1>
           <p className="text-purple-100/90 leading-relaxed">{t("heroText")}</p>
         </div>
-        <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 RRclub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
+        <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 CONEKTA · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
       <div className="flex items-center justify-center p-6 sm:p-12 relative">
@@ -65,6 +66,8 @@ export default function Login() {
           <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("loginTitle")}</h2>
           <p className="text-sm text-slate-500 mt-1 mb-8">{t("loginSub")}</p>
 
+          <GoogleSignIn />
+          <p className="text-xs text-slate-400 text-center my-4">ou entre com email</p>
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("email")}</label>

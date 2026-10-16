@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { dashboardMoney as money } from "../lib/api";
 import { Activity } from "lucide-react";
 
 const fmtDay = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
@@ -25,16 +26,16 @@ export const RevenueClicksChart = ({ series = [] }) => {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
             <defs>
-              <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4F46E5" stopOpacity={0.35} /><stop offset="100%" stopColor="#4F46E5" stopOpacity={0} /></linearGradient>
-              <linearGradient id="gClk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#38BDF8" stopOpacity={0.3} /><stop offset="100%" stopColor="#38BDF8" stopOpacity={0} /></linearGradient>
+              <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2864F3" stopOpacity={0.35} /><stop offset="100%" stopColor="#2864F3" stopOpacity={0} /></linearGradient>
+              <linearGradient id="gClk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#67D2ED" stopOpacity={0.3} /><stop offset="100%" stopColor="#67D2ED" stopOpacity={0} /></linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#EEF0F6" vertical={false} />
             <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `€ ${v}`} />
+            <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => money(v)} />
             <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} formatter={(v, n) => [n === "receita" ? `€ ${Number(v).toFixed(2)}` : v, n === "receita" ? "Receita" : "Cliques"]} />
-            <Area yAxisId="l" type="monotone" dataKey="receita" stroke="#4F46E5" strokeWidth={2.5} fill="url(#gRec)" dot={false} activeDot={{ r: 4 }} />
-            <Area yAxisId="r" type="monotone" dataKey="cliques" stroke="#38BDF8" strokeWidth={2} fill="url(#gClk)" dot={false} activeDot={{ r: 4 }} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} formatter={(v, n) => [n === "receita" ? money(v) : v, n === "receita" ? "Receita" : "Cliques"]} />
+            <Area yAxisId="l" type="monotone" dataKey="receita" stroke="#2864F3" strokeWidth={2.5} fill="url(#gRec)" dot={false} activeDot={{ r: 4 }} />
+            <Area yAxisId="r" type="monotone" dataKey="cliques" stroke="#67D2ED" strokeWidth={2} fill="url(#gClk)" dot={false} activeDot={{ r: 4 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

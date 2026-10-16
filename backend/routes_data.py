@@ -145,16 +145,16 @@ async def admin_dashboard(user: dict = Depends(require_role("admin")), currency:
                    "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
-        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30),
+        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30, currency),
     }
 
 
-async def revenue_clicks_series(days: int):
+async def revenue_clicks_series(days: int, currency="eur"):
     s = since(days)
     rev, clk = defaultdict(float), defaultdict(int)
-    async for r in db.redemptions.find({"date": {"$gte": s}}, {"_id": 0, "date": 1, "amount": 1}):
+    async for r in db.redemptions.find(currency_query({"date": {"$gte": s}}, currency), {"_id": 0, "date": 1, "amount": 1}):
         rev[r["date"][:10]] += r.get("amount", 0)
-    async for c in db.coupon_claims.find({"date": {"$gte": s}}, {"_id": 0, "date": 1}):
+    async for c in db.coupon_claims.find(currency_query({"date": {"$gte": s}}, currency), {"_id": 0, "date": 1}):
         clk[c["date"][:10]] += 1
     today = datetime.now(timezone.utc).date()
     return [{"date": (d := (today - timedelta(days=i)).isoformat()), "receita": round(rev.get(d, 0), 2), "cliques": clk.get(d, 0)} for i in range(days - 1, -1, -1)]
@@ -410,3 +410,26 @@ async def public_cities():
     if not out:
         out = {"Lisboa": 0, "Porto": 0, "Algarve": 0}
     return [{"name": k, "lat": CITY_COORDS[k][0], "lon": CITY_COORDS[k][1], "partners": v} for k, v in out.items()]
+
+
+@router.get("/dashboard/admin/geography")
+async def admin_geography(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+    """Aggregate partner-city activity. Never infer individual customer locations."""
+    coordinates = {**CITY_COORDS, "João Pessoa": (-7.12, -34.86), "Brasília": (-15.79, -47.88)}
+    partners = await db.partners.find(currency_query({"status": "Ativo"}, currency), {"_id": 0, "id": 1, "cidade": 1}).to_list(None)
+    by_partner = {p["id"]: p.get("cidade") or "Cidade não indicada" for p in partners}
+    cities = {}
+    for city in by_partner.values():
+        coords = coordinates.get(city)
+        row = cities.setdefault(city, {"name": city, "lat": coords[0] if coords else None, "lon": coords[1] if coords else None, "partners": 0, "clicks": 0, "sales": 0, "revenue": 0})
+        row["partners"] += 1
+    match = currency_query({"partner_id": {"$in": list(by_partner)}}, currency)
+    async for row in db.coupon_claims.aggregate([{"$match": match}, {"$group": {"_id": "$partner_id", "clicks": {"$sum": 1}}}]):
+        cities[by_partner[row["_id"]]]["clicks"] += row["clicks"]
+    async for row in db.redemptions.aggregate([{"$match": match}, {"$group": {"_id": "$partner_id", "sales": {"$sum": {"$cond": ["$is_refund", 0, 1]}}, "revenue": {"$sum": "$amount"}}}]):
+        city = cities[by_partner[row["_id"]]]
+        city["sales"] += row["sales"]
+        city["revenue"] += row["revenue"]
+    for city in cities.values():
+        city["revenue"] = round(city["revenue"], 2)
+    return {"cities": sorted(cities.values(), key=lambda c: (-c["clicks"], -c["sales"], c["name"])), "currency": currency, "updated_at": now_iso()}

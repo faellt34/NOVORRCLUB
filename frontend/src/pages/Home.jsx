@@ -1,0 +1,26 @@
+import { Link } from "react-router-dom";
+import { ArrowUpRight, Check, QrCode, Smartphone, Sparkles, Store, Users, Wallet } from "lucide-react";
+import { BrandLogo, BrandMark } from "../components/BrandLogo";
+import "../home.css";
+
+const features = [
+  { icon: Users, title: "Uma rede, dois caminhos", text: "Influencers encontram campanhas. Parceiros aproximam o seu negócio de novos públicos." },
+  { icon: QrCode, title: "Do conteúdo à experiência", text: "Cupões e QR ligam a divulgação à utilização no espaço parceiro." },
+  { icon: Wallet, title: "Resultados à vista", text: "Consulte atividade, comissões e o estado dos seus movimentos no painel." },
+];
+export default function Home() {
+  return <div className="conekta-home">
+    <header className="ck-header"><Link to="/" aria-label="CONEKTA início"><BrandLogo dark /></Link><nav aria-label="Navegação principal"><a href="#como-funciona">Como funciona</a><a href="#para-si">Para si</a><Link className="ck-login" to="/login">Entrar <ArrowUpRight size={16}/></Link></nav></header>
+    <main>
+      <section className="ck-hero">
+        <div><p className="ck-eyebrow"><span/> CONEXÕES QUE CRIAM OPORTUNIDADES</p><h1>O próximo passo<br/>da sua influência<br/><em>começa aqui.</em></h1><p className="ck-lead">Pessoas, marcas e experiências no mesmo lugar. Uma forma simples de criar parcerias e acompanhar cada resultado.</p><div className="ck-actions"><Link className="ck-primary" to="/registar?perfil=influencer">Sou influencer <ArrowUpRight size={18}/></Link><Link className="ck-secondary" to="/registar?perfil=partner">Sou parceiro <Store size={18}/></Link></div><p className="ck-note"><Check size={14}/> Portugal · Experiências locais · Relações com valor</p></div>
+        <div className="ck-visual" aria-label="Ilustração do percurso de uma parceria"><div className="ck-orbit ck-orbit-one"/><div className="ck-orbit ck-orbit-two"/><div className="ck-core"><BrandMark className="w-24 h-24"/><span>CONEKTA</span><small>A sua rede. Mais perto.</small></div><div className="ck-float ck-float-top"><span className="ck-mini-icon"><Sparkles size={18}/></span><div><strong>Influência com propósito</strong><small>Conteúdos que criam ligações</small></div></div><div className="ck-float ck-float-bottom"><span className="ck-mini-icon"><QrCode size={20}/></span><div><strong>Uma experiência. Um QR.</strong><small>Da descoberta à visita</small></div><span className="ck-check"><Check size={16}/></span></div><span className="ck-caption">UMA REDE DE POSSIBILIDADES</span></div>
+      </section>
+      <section className="ck-features" aria-label="Vantagens">{features.map(({icon: Icon,title,text})=><article key={title}><Icon size={23}/><h2>{title}</h2><p>{text}</p></article>)}</section>
+      <section className="ck-section" id="para-si"><p className="ck-eyebrow">FEITO PARA A SUA PRÓXIMA CONEXÃO</p><h2>O seu talento.<br/>A parceria certa.</h2><div className="ck-audiences"><article><Users/><span>PARA INFLUENCERS</span><h3>Partilhe o que faz sentido para si.</h3><p>Explore campanhas, partilhe os seus cupões e acompanhe a atividade e as comissões num só lugar.</p><Link to="/registar?perfil=influencer">Criar conta de influencer <ArrowUpRight size={18}/></Link></article><article><Store/><span>PARA PARCEIROS</span><h3>Abra a porta a novas oportunidades.</h3><p>Apresente o seu espaço, valide cupões e acompanhe os resultados das parcerias. A ativação está sujeita a aprovação.</p><Link to="/registar?perfil=partner">Candidatar o meu negócio <ArrowUpRight size={18}/></Link></article></div></section>
+      <section className="ck-steps" id="como-funciona"><div><p className="ck-eyebrow">SIMPLES DESDE O PRIMEIRO DIA</p><h2>Menos passos.<br/>Mais conexões.</h2></div><ol>{[["Crie o seu perfil","Escolha influencer ou parceiro e apresente-se à rede."],["Encontre o seu caminho","Explore campanhas ou prepare o seu espaço para receber clientes."],["Acompanhe a atividade","Consulte os movimentos, as comissões e as mensagens no painel."]].map(([title,text],i)=><li key={title}><span>0{i+1}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol></section>
+      <section className="ck-mobile"><Smartphone size={36}/><div><h2>A sua rede vai consigo.</h2><p>Aceda pelo telemóvel e adicione a CONEKTA ao ecrã principal através do navegador. Campanhas, validação de QR e mensagens sempre à mão.</p></div><Link className="ck-primary" to="/login">Aceder à plataforma <ArrowUpRight size={18}/></Link></section>
+      <section className="ck-faq"><h2>Antes de começar</h2>{[["Como entro na plataforma?","Crie a sua conta ou entre com email e palavra-passe. O acesso Google fica disponível quando estiver configurado pela equipa."],["Sou parceiro. A conta fica ativa imediatamente?","Os pedidos de parceiros são analisados pela equipa antes da ativação. Os influencers podem começar após o registo."],["Preciso de instalar uma app?","Pode usar a plataforma no navegador do telemóvel. A opção Instalar aplicação está disponível no menu; no iPhone, use Partilhar e Adicionar ao ecrã principal."]].map(([q,a])=><details key={q}><summary>{q}</summary><p>{a}</p></details>)}</section>
+    </main><footer className="ck-footer"><BrandLogo dark size="sm"/><p>© {new Date().getFullYear()} CONEKTA · Influência que conecta</p><Link to="/privacidade">Privacidade</Link></footer>
+  </div>;
+}

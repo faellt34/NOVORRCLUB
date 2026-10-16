@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Crown, UserPlus, ArrowLeft, Store, CheckCircle2 } from "lucide-react";
+import GoogleSignIn from "../components/GoogleSignIn";
 import { BrandLogo } from "../components/BrandLogo";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -15,7 +16,8 @@ const INITIAL = { currency: "eur", role: "influencer", nome: "", email: "", pass
 export default function Register() {
   const { refreshUser } = useApp();
   const navigate = useNavigate();
-  const [f, setF] = useState(INITIAL);
+  const [params] = useSearchParams();
+  const [f, setF] = useState(() => ({ ...INITIAL, role: params.get("perfil") === "partner" ? "partner" : "influencer" }));
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(null);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e?.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e }));
@@ -99,6 +101,7 @@ export default function Register() {
               </label>
               <button type="submit" disabled={loading} data-testid="register-submit-button" className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press"><UserPlus className="w-4 h-4" /> {loading ? "A criar conta..." : "Criar conta"}</button>
             </form>
+            <GoogleSignIn registration={f} onPending={setPending} />
             <Link to="/login" data-testid="register-back-login" className="mt-6 inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 hover:underline"><ArrowLeft className="w-3.5 h-3.5" /> Já tenho conta</Link>
           </>
         )}

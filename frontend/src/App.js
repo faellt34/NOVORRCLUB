@@ -7,6 +7,7 @@ import Privacy from "@/pages/Privacy";
 import Register from "@/pages/Register";
 import PublicCoupon from "@/pages/PublicCoupon";
 import AppLayout from "@/components/layout/AppLayout";
+import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import InfluencerDashboard from "@/pages/InfluencerDashboard";
 import PartnerDashboard from "@/pages/PartnerDashboard";
@@ -29,6 +30,12 @@ const Splash = () => (
     <div className="w-10 h-10 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin" />
   </div>
 );
+
+const HomeEntry = () => {
+  const { user } = useApp();
+  if (user === undefined) return <Splash />;
+  return user ? <Navigate to={ROLE_HOME[user.role]} replace /> : <Home />;
+};
 
 const RoleRedirect = () => {
   const { user } = useApp();
@@ -56,6 +63,7 @@ function App() {
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<HomeEntry />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
@@ -66,7 +74,6 @@ function App() {
           </Route>
           <Route element={<Protected />}>
             <Route element={<AppLayout />}>
-              <Route path="/" element={<RoleRedirect />} />
               <Route path="/payment/success" element={<PaymentResult />} />
               <Route path="/payment/cancel" element={<PaymentResult cancelled />} />
               <Route path="/mensagens" element={<Messages />} />

@@ -11,6 +11,7 @@ import { useFlash } from "../services/live";
 import { AbandonAnalysis } from "../components/AbandonAnalysis";
 import { TestRunDialog } from "../components/TestRunDialog";
 import { AiAnalyst } from "../components/AiAnalyst";
+import DashboardOverview from "../components/DashboardOverview";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -64,14 +65,12 @@ export default function AdminDashboard() {
     setAudit((prev) => [{ id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, action, detail, amount, date: new Date().toISOString(), actor: "tempo real", enter: true, ...extra }, ...prev].slice(0, 50));
 
   const { status: wsStatus, eventos } = useRealtime((ev) => {
-    if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
+    if (ev.tipo === "ligado") { setWsState("ao vivo"); load(); setClicksKey(k => k + 1); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
-    if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
+    if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo" || ev.tipo === "ligado") { load(); setClicksKey(k => k + 1); return; }
     if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
-      const v = Number(ev.valor_plataforma || 0);
-      setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10, usos: s.usos + 1 }));
-      pushAudit("REDENÇÃO", `${ev.cupom} · ${ev.parceiro}${ev.origem === "qr" ? " · pago por QR" : ""} · ${ev.influencer || ""}`, v);
-      triggerFlash("receita"); triggerFlash("comissoes"); triggerFlash("usos"); triggerFlash("conv"); triggerFlash("ticket");
+      load();
+      triggerFlash("receita"); triggerFlash("comissoes");
       setClicksKey((k) => k + 1);
     } else if (ev.tipo === "clique_cupao") {
       setStats((s) => ({ ...s, cliques: s.cliques + 1 }));
@@ -110,40 +109,9 @@ export default function AdminDashboard() {
   const pending = leads.filter((l) => l.status === "Novo").length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600">Dashboard</p>
-          <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-          <p className="text-sm text-slate-500 mt-1">Performance operacional e financeira da RRClub</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <div data-testid="platform-status-pill" className="hidden sm:inline-flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-semibold text-slate-600">
-            <span className="inline-flex items-center gap-1.5 text-emerald-700"><span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center"><ShieldCheck className="w-3 h-3" /></span> Plataforma segura</span>
-            <span className="w-px h-4 bg-slate-200" />
-            <span className={`inline-flex items-center gap-1.5 ${wsStatus === "conectado" ? "text-emerald-700" : "text-amber-700"}`} data-testid="ws-indicator" data-status={wsStatus}><span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : "bg-amber-500"}`} /> {wsStatus === "conectado" ? "Sistema operacional" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}</span>
-          </div>
-          <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold btn-press">+ Novo teste</button>
-          <button data-testid="reset-all-button" onClick={() => setResetOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-600 text-xs font-semibold btn-press">Apagar TODOS os resultados</button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-sistema" icon={Euro} label="Receita do Sistema" live={stats.receita} format={(v) => eur(Math.round(v))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
-        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões Agregadas" live={stats.comissoes} format={(v) => eur(Math.round(v))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
-        <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" live={stats.influencers} />
-        <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
-        <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-usados" icon={Ticket} label="Pessoas que usaram cupom" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
-        <KpiCard id="cliques-total" icon={MousePointerClick} label="Cliques no cupom" live={stats.cliques} flash={flash.cliques} />
-        <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
-        <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
-        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
-      </div>
-
+    <div className="rr-admin space-y-6">
+      <DashboardOverview data={data} stats={stats} connected={wsStatus === "conectado"} refreshKey={clicksKey} onRefresh={load}/>
+      <div className="rr-dashboard-section-heading"><div><span className="rr-eyebrow">DESEMPENHO</span><h2>Do primeiro clique à próxima venda</h2></div><span>Últimos 30 dias</span></div>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2"><RevenueClicksChart series={data.chart_rc || []} /></div>
         <Recommendations refreshKey={stats.cliques} />
@@ -329,6 +297,7 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      <div className="rr-test-toolbar"><span>Ferramentas de teste</span><button onClick={() => setTestOpen(true)} data-testid="new-test-button">Novo teste</button><button onClick={() => setResetOpen(true)} data-testid="reset-all-button">Apagar resultados</button></div>
       <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />
 
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>

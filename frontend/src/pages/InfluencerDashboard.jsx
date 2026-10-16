@@ -147,8 +147,8 @@ export default function InfluencerDashboard() {
           </div>
         </div>
         {ibanEdit ? (
-          <form onSubmit={saveIban} className="flex gap-2">
-            <Input data-testid="influencer-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+          <form onSubmit={saveIban} className="flex flex-wrap sm:flex-nowrap gap-2">
+            <Input data-testid="influencer-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-full sm:w-[280px]" />
             <button type="submit" data-testid="influencer-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
           </form>
         ) : (
@@ -166,7 +166,7 @@ export default function InfluencerDashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div data-testid="usage-chart-card" className="card-soft p-5 xl:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Evolução de Utilizações</h3>
             <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">{period === "90" ? "3 em 3 dias" : "Diário"}</span>
           </div>
@@ -243,7 +243,7 @@ export default function InfluencerDashboard() {
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <Input data-testid="campaign-search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Procurar campanha..." className="pl-9 w-[190px] rounded-xl bg-slate-50" />
+                <Input data-testid="campaign-search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Procurar campanha..." className="pl-9 w-full sm:w-[190px] rounded-xl bg-slate-50" />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger data-testid="campaign-status-filter" className="w-[120px] rounded-xl bg-slate-50"><SelectValue /></SelectTrigger>
