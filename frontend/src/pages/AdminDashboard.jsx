@@ -5,7 +5,7 @@ import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { RevenueClicksChart } from "../components/RevenueClicksChart";
 import { Recommendations } from "../components/Recommendations";
 import { useApp } from "../context/AppContext";
-import { api, apiError, eur } from "../lib/api";
+import { api, apiError, dashboardMoney as eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { AbandonAnalysis } from "../components/AbandonAnalysis";
@@ -66,7 +66,7 @@ export default function AdminDashboard() {
   const { status: wsStatus, eventos } = useRealtime((ev) => {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
-    if (ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
+    if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
     if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
       const v = Number(ev.valor_plataforma || 0);
       setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10, usos: s.usos + 1 }));

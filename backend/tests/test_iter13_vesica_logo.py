@@ -70,8 +70,13 @@ def test_poster_pdf_valid_over_5kb():
 def test_story_video_mp4():
     token = _login(INFLU)
     cid = _pick_campaign(token)
-    r = requests.get(f"{BASE}/api/influencer/story-video/{cid}",
-                     headers={"Authorization": f"Bearer {token}"}, timeout=90)
+    import time
+    for _ in range(90):
+        r = requests.get(f"{BASE}/api/influencer/story-video/{cid}",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=90)
+        if r.status_code != 202:
+            break
+        time.sleep(2)
     assert r.status_code == 200, f"{r.status_code} {r.text[:300]}"
     ct = r.headers.get("content-type", "")
     assert "video/mp4" in ct or "mp4" in ct, ct

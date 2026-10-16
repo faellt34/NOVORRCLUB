@@ -26,7 +26,7 @@ def _visible(user: dict, ev: dict) -> bool:
 
 
 async def broadcast(tipo: str, **data):
-    ev = {"tipo": tipo, "ts": now_iso(), **data}
+    ev = {"tipo": tipo, "ts": now_iso(), "currency": (data.get("record") or {}).get("currency", "eur"), **data}
     msg = json.dumps(ev, ensure_ascii=False)
     async with _lock:
         targets = [ws for ws, user in _clients.items() if _visible(user, ev)]

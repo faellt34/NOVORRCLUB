@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark, QrCode, Sparkles, Image as ImageIcon } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -9,7 +9,7 @@ import { StoryImageDialog } from "../components/StoryImageDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
-import { api, apiError, eur, num, getSiteUrl, couponLink } from "../lib/api";
+import { api, apiError, dashboardMoney as eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -27,6 +27,7 @@ export default function InfluencerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.tipo === "pagamento_atualizado") { api.get(`/dashboard/influencer?period=${period}`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))); return; }
     if (ev.tipo === "split_executado") {
       setData((d) => d && { ...d, kpis: { ...d.kpis, uses: d.kpis.uses + 1, revenue: d.kpis.revenue + Number(ev.valor_total || 0), commission: d.kpis.commission + Number(ev.valor_plataforma || 0) },
         campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, uses: c.uses + 1 } : c) });
@@ -41,6 +42,8 @@ export default function InfluencerDashboard() {
     }
   });
   const [videoBusy, setVideoBusy] = useState(false);
+  const videoAbort = useRef(null);
+  useEffect(() => () => videoAbort.current?.abort(), []);
   const [profile, setProfile] = useState(null);
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
@@ -58,12 +61,21 @@ export default function InfluencerDashboard() {
 
   const downloadStory = async () => {
     setVideoBusy(true);
+    const controller = new AbortController();
+    videoAbort.current = controller;
     try {
-      const r = await api.get(`/influencer/story-video/${featured.id}`, { responseType: "blob", timeout: 120000 });
+      let r;
+      const deadline = Date.now() + 180000;
+      do {
+        r = await api.get('/influencer/story-video/' + featured.id, { responseType: "blob", timeout: 15000, signal: controller.signal });
+        if (r.status !== 202) break;
+        if (Date.now() >= deadline) throw new Error("O vídeo ainda está em preparação. Tente baixar novamente em instantes.");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } while (r.status === 202);
       const url = URL.createObjectURL(r.data);
       const a = document.createElement("a"); a.href = url; a.download = `story-${featured.cupom}.mp4`; a.click(); URL.revokeObjectURL(url);
       toast.success("Vídeo pronto! Partilhe nos seus stories.");
-    } catch (e) { toast.error(apiError(e)); } finally { setVideoBusy(false); }
+    } catch (e) { if (!controller.signal.aborted) toast.error(apiError(e)); } finally { if (!controller.signal.aborted) setVideoBusy(false); videoAbort.current = null; }
   };
 
   useEffect(() => {
@@ -190,7 +202,7 @@ export default function InfluencerDashboard() {
                 <button data-testid="coupon-share-whatsapp" onClick={() => share("whatsapp")} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Share2 className="w-4 h-4" /><span className="text-[10px] font-semibold">Partilhar</span></button>
               </div>
               <button data-testid="coupon-story-video" disabled={videoBusy} onClick={downloadStory} className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
-                <Clapperboard className="w-4 h-4" /> {videoBusy ? "A gerar o seu vídeo (≈20s)..." : "Vídeo Story personalizado (MP4)"}
+                <Clapperboard className="w-4 h-4" /> {videoBusy ? "A preparar o seu vídeo..." : "Vídeo Story personalizado (MP4)"}
               </button>
               <button data-testid="coupon-ai-captions" onClick={() => setCaptionCampaign(featured)} className="w-full mt-2 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
                 <Sparkles className="w-4 h-4" /> Legendas IA para o story (PT · EN · ES)

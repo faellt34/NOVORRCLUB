@@ -9,7 +9,8 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
 const CITIES = ["Lisboa", "Porto", "Algarve", "Douro", "Madrid", "Barcelona", "Paris", "Roma", "Dubai", "Outra"];
-const INITIAL = { role: "influencer", nome: "", email: "", password: "", handle: "", cidade: "Lisboa", categoria: "Restaurante", telefone: "", aceita_termos: false };
+const BR_CITIES = ["São Paulo", "Rio de Janeiro", "João Pessoa", "Brasília", "Outra"];
+const INITIAL = { currency: "eur", role: "influencer", nome: "", email: "", password: "", handle: "", cidade: "Lisboa", categoria: "Restaurante", telefone: "", aceita_termos: false };
 
 export default function Register() {
   const { refreshUser } = useApp();
@@ -27,6 +28,7 @@ export default function Register() {
       const { data } = await api.post("/auth/register", f);
       if (data.pending) { setPending(data.message); return; }
       setToken(data.token);
+      localStorage.setItem("rrclub_currency", data.user.currency || "eur");
       await refreshUser();
       toast.success(`Bem-vindo, ${data.user.nome.split(" ")[0]}! A sua conta está ativa.`);
       navigate("/influencer");
@@ -63,12 +65,20 @@ export default function Register() {
                 <RoleBtn value="partner" icon={Store} label="Sou Parceiro" desc="Tenho um espaço e quero receber clientes." />
               </div>
               <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">País de atuação</label>
+                <Select value={f.currency} onValueChange={(currency) => setF((p) => ({ ...p, currency, cidade: currency === "brl" ? "São Paulo" : "Lisboa" }))}>
+                  <SelectTrigger data-testid="register-country-select" className="h-11 rounded-xl bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="eur">Portugal · EUR</SelectItem><SelectItem value="brl">Brasil · BRL</SelectItem></SelectContent>
+                </Select>
+                {f.currency === "brl" && <p className="text-xs text-slate-500 mt-2">Pode criar a conta agora e configurar os recebimentos quando o Pix estiver disponível.</p>}
+              </div>
+              <div>
                 <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{f.role === "partner" ? "Nome do espaço" : "Nome completo"}</label>
                 <Input data-testid="register-nome-input" value={f.nome} onChange={set("nome")} className="h-11 rounded-xl bg-white" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="text-xs font-semibold text-slate-600 mb-1.5 block">Email</label><Input data-testid="register-email-input" type="email" value={f.email} onChange={set("email")} className="h-11 rounded-xl bg-white" /></div>
-                <div><label className="text-xs font-semibold text-slate-600 mb-1.5 block">Palavra-passe (mín. 6)</label><Input data-testid="register-password-input" type="password" value={f.password} onChange={set("password")} className="h-11 rounded-xl bg-white" /></div>
+                <div><label className="text-xs font-semibold text-slate-600 mb-1.5 block">Palavra-passe (mín. 8, com letras e números)</label><Input data-testid="register-password-input" type="password" value={f.password} onChange={set("password")} className="h-11 rounded-xl bg-white" /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {f.role === "influencer" ? (
@@ -80,7 +90,7 @@ export default function Register() {
                 )}
                 <div><label className="text-xs font-semibold text-slate-600 mb-1.5 block">Cidade</label>
                   <Select value={f.cidade} onValueChange={set("cidade")}><SelectTrigger data-testid="register-cidade-select" className="h-11 rounded-xl bg-white"><SelectValue /></SelectTrigger>
-                    <SelectContent>{CITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+                    <SelectContent>{(f.currency === "brl" ? BR_CITIES : CITIES).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
               </div>
               <div><label className="text-xs font-semibold text-slate-600 mb-1.5 block">Telefone / WhatsApp (opcional)</label><Input data-testid="register-telefone-input" value={f.telefone} onChange={set("telefone")} className="h-11 rounded-xl bg-white" /></div>
               <label className="flex items-start gap-2 text-xs text-slate-600">

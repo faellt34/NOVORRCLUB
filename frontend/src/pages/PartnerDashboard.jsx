@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
-import { api, apiError, eur, num, downloadCsv } from "../lib/api";
+import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { QrScannerDialog } from "../components/QrScannerDialog";
@@ -22,6 +23,7 @@ export default function PartnerDashboard() {
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [idemKey, setIdemKey] = useState(newKey);
   const [submitting, setSubmitting] = useState(false);
@@ -35,6 +37,7 @@ export default function PartnerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.tipo === "pagamento_atualizado") { load(); return; }
     if (ev.tipo === "split_executado" && ev.record) {
       const r = ev.record;
       setData((d) => {
@@ -54,12 +57,28 @@ export default function PartnerDashboard() {
     if (p === "refresh") toast.info("O link do Stripe expirou. Clique em 'Continuar onboarding' para retomar.");
   }, []);
 
-  useEffect(() => { api.get("/partner/connect/status").then((r) => setConnect(r.data)).catch(() => setConnect({ connected: false })); }, []);
+  useEffect(() => {
+    if (!data?.partner?.currency && !data?.partner?.id) return;
+    let cancelled = false;
+    const check = async () => {
+      if (data?.partner?.currency === "brl") {
+        const { data: availability } = await api.get("/public/pix/availability");
+        if (!availability.configured) {
+          if (!cancelled) setConnect({ connected: false, available: false });
+          return;
+        }
+      }
+      const response = await api.get(data?.partner?.currency === "brl" ? "/partner/pix/connect/status" : "/partner/connect/status");
+      if (!cancelled) setConnect(response.data);
+    };
+    check().catch(() => { if (!cancelled) setConnect({ connected: false, available: false }); });
+    return () => { cancelled = true; };
+  }, [data?.partner?.currency, data?.partner?.id]);
 
   const startConnect = async () => {
     setConnecting(true);
     try {
-      const { data: res } = await api.post("/partner/connect/onboard", { origin_url: window.location.origin });
+      const { data: res } = await api.post(data?.partner?.currency === "brl" ? "/partner/pix/connect/onboard" : "/partner/connect/onboard", { origin_url: window.location.origin });
       if (res.available === false) { toast.info(res.reason, { duration: 9000 }); setConnect((c) => ({ ...(c || {}), available: false })); setConnecting(false); return; }
       window.location.href = res.url;
     } catch (err) { toast.error(apiError(err)); setConnecting(false); }
@@ -90,9 +109,15 @@ export default function PartnerDashboard() {
     if (!parsedAmount || parsedAmount <= 0) { toast.error("Informe um valor de compra válido."); return; }
     setSubmitting(true);
     try {
+      if (preview?.currency === "brl") {
+        const { data: bill } = await api.post("/partner/pix/checkout", { code, amount: parsedAmount, origin_url: window.location.origin, request_id: idemKey });
+        setPixBill(bill);
+        toast.success("Cobrança Pix criada. Aguarde a confirmação do pagamento.");
+        return;
+      }
       const { data: res } = await api.post("/redemptions", { code, amount: parsedAmount, idempotency_key: idemKey });
       if (res.duplicate) toast.warning("Pedido repetido — redenção já registada (idempotência server-side).");
-      else toast.success(`Venda validada! Comissão de ${eur(res.record.commission)} registada (taxa travada ${(res.record.rate * 100).toFixed(0)}%).`);
+      else toast.success(`Venda validada! Comissão de ${moneyIn(res.record.commission, res.record.currency || "eur")} registada (taxa travada ${(res.record.rate * 100).toFixed(0)}%).`);
       setLastReceipt(res.record);
       setCode(""); setAmount(""); setPreview(null); setIdemKey(newKey());
       load(); refreshUnread();
@@ -106,8 +131,8 @@ export default function PartnerDashboard() {
   const onDetected = useCallback((c) => { setCode(c); toast.success(`QR detetado: ${c}`); }, []);
 
   const exportCsv = () => {
-    downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor_eur;desconto_eur;comissao_eur;taxa;data;staff",
-      data.redemptions.map((r) => [r.id, r.coupon, r.influencer, r.amount.toFixed(2), r.discount.toFixed(2), r.commission.toFixed(2), r.rate, r.date, r.staff].join(";")));
+    downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor;desconto;comissao;taxa;data;staff;moeda",
+      data.redemptions.map((r) => [r.id, r.coupon, r.influencer, r.amount.toFixed(2), r.discount.toFixed(2), r.commission.toFixed(2), r.rate, r.date, r.staff, r.currency || "eur"].join(";")));
     toast.success("CSV exportado com sucesso");
   };
 
@@ -121,7 +146,7 @@ export default function PartnerDashboard() {
         <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers {live && <span data-testid="partner-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
       </div>
 
-      <PartnerOnboarding hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
+      <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
@@ -131,7 +156,7 @@ export default function PartnerDashboard() {
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={totals.ticket} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
-      <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {data.partner?.currency !== "brl" && <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
           <div>
@@ -147,7 +172,7 @@ export default function PartnerDashboard() {
         ) : (
           <button data-testid="partner-iban-edit" onClick={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press">{data.partner?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
         )}
-      </div>
+      </div>}
 
       <div data-testid="partner-connect-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -155,11 +180,11 @@ export default function PartnerDashboard() {
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : connect.charges_enabled ? <>Ativo — cada pagamento é dividido automaticamente: a sua parte vai direta para a sua conta bancária{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (connect.charges_enabled && (data.partner?.currency !== "brl" || connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
-        {!connect?.charges_enabled && <button data-testid="partner-connect-button" disabled={connecting} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
+        {(!connect?.charges_enabled || (data.partner?.currency === "brl" && !connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || (data.partner?.currency === "brl" && (connect === null || connect.available === false))} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -176,33 +201,41 @@ export default function PartnerDashboard() {
             {code.trim().length >= 4 && (
               <div data-testid="coupon-preview" className={`text-xs px-3 py-2 rounded-lg ${preview?.status === "Ativa" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
                 {!preview ? "Cupom não encontrado para este parceiro"
-                  : preview.status === "Ativa" ? <>✓ {preview.nome} · {preview.influencer} · {preview.desconto}% desconto · comissão {preview.comissao}%</>
+                  : preview.status === "Ativa" ? <>✓ {preview.nome} · {preview.influencer} · {preview.desconto}% desconto · comissão {preview.comissao}% · {(preview.currency || "eur").toUpperCase()}</>
                   : <>Cupom {preview.status.toLowerCase()} — não redimível</>}
               </div>
             )}
-            <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta (€)" inputMode="decimal" className="rounded-xl bg-slate-50" />
+            <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta na moeda da campanha" inputMode="decimal" className="rounded-xl bg-slate-50" />
             {preview?.status === "Ativa" && parsedAmount > 0 && (
               <div data-testid="live-calculation" className="grid grid-cols-2 gap-2 text-xs">
                 <div className="bg-slate-50 rounded-lg px-3 py-2">
                   <p className="text-slate-500">Desconto ({preview.desconto}%)</p>
-                  <p className="font-bold text-slate-900" data-testid="live-discount-value">{eur(+(parsedAmount * preview.desconto / 100).toFixed(2))}</p>
+                  <p className="font-bold text-slate-900" data-testid="live-discount-value">{moneyIn(+(parsedAmount * preview.desconto / 100).toFixed(2), preview.currency || "eur")}</p>
                 </div>
                 <div className="bg-purple-50 rounded-lg px-3 py-2">
                   <p className="text-purple-500">Comissão ({preview.comissao}%)</p>
-                  <p className="font-bold text-purple-700" data-testid="live-commission-value">{eur(+(parsedAmount * preview.comissao / 100).toFixed(2))}</p>
+                  <p className="font-bold text-purple-700" data-testid="live-commission-value">{moneyIn(+(parsedAmount * preview.comissao / 100).toFixed(2), preview.currency || "eur")}</p>
                 </div>
               </div>
             )}
             <button type="submit" disabled={submitting} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A validar..." : "Validar Venda"}
+              {submitting ? "A processar..." : preview?.currency === "brl" ? "Gerar cobrança Pix" : "Validar Venda"}
             </button>
           </form>
+          {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
+            <p className="font-semibold text-purple-900">Cobrança Pix · {moneyIn(pixBill.amount, "brl")}</p>
+            <p className="text-xs text-slate-600 my-2">Peça ao cliente para abrir esta cobrança e pagar no checkout seguro.</p>
+            <div className="bg-white p-3 rounded-xl inline-block"><QRCodeSVG value={pixBill.customer_url || `${window.location.origin}/c/${encodeURIComponent(code.toUpperCase())}?pix_request_id=${pixBill.request_id}`} size={160} /></div>
+            <p className="text-xs text-purple-800 my-2">Aguardando pagamento. Gerar a cobrança não confirma a venda.</p>
+            <a className="text-sm underline text-purple-700 block" href={pixBill.customer_url || pixBill.checkout_url} target="_blank" rel="noreferrer">Abrir cobrança do cliente</a>
+            <button type="button" className="text-xs text-purple-700 underline mt-3" onClick={() => { setPixBill(null); setIdemKey(newKey()); }}>Preparar outra conta</button>
+          </div>}
           {lastReceipt && (
             <div data-testid="last-receipt" className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 flex items-start gap-2 fade-up">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
               <div className="text-xs text-emerald-800">
                 <p className="font-semibold">Redenção {lastReceipt.id} registada</p>
-                <p>{lastReceipt.coupon} · {eur(lastReceipt.amount)} · comissão {eur(lastReceipt.commission)} (taxa travada {(lastReceipt.rate * 100).toFixed(0)}%)</p>
+                <p>{lastReceipt.coupon} · {moneyIn(lastReceipt.amount, lastReceipt.currency || "eur")} · comissão {moneyIn(lastReceipt.commission, lastReceipt.currency || "eur")} (taxa travada {(lastReceipt.rate * 100).toFixed(0)}%)</p>
               </div>
             </div>
           )}

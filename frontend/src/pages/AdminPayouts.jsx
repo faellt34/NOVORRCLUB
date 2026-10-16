@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, CheckCircle2, Clock, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import { api, apiError, eur, num } from "../lib/api";
+import { api, apiError, dashboardMoney as eur, reportCurrency, num } from "../lib/api";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 
@@ -42,7 +42,7 @@ export default function AdminPayouts() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 data-testid="payouts-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Pagamentos de Comissões</h1>
-          <p className="text-sm text-slate-500 mt-1">Marque cada extrato mensal como pago após a transferência — o influencer é notificado e vê a data</p>
+          <p className="text-sm text-slate-500 mt-1">{reportCurrency() === "brl" ? "Comissões Pix com divisão automática: confira os repasses na Stripe antes de qualquer ação manual." : "Marque cada extrato mensal como pago após a transferência — o influencer é notificado e vê a data"}</p>
         </div>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger data-testid="payouts-filter" className="w-[160px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
@@ -93,7 +93,7 @@ export default function AdminPayouts() {
                         : <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full"><Clock className="w-3 h-3" /> Pendente</span>}
                     </td>
                     <td className="py-3 text-right">
-                      {r.status === "Pendente"
+                      {reportCurrency() === "brl" ? <span className="text-xs text-slate-500">Conciliação automática Stripe</span> : r.status === "Pendente"
                         ? <button data-testid={`mark-paid-${key}`} disabled={busy === key} onClick={() => markPaid(r)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold btn-press">Marcar como pago</button>
                         : <button data-testid={`revert-paid-${key}`} disabled={busy === key} onClick={() => revert(r)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold btn-press"><Undo2 className="w-3 h-3" /> Reverter</button>}
                     </td>

@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -68,6 +68,7 @@ class RegisterIn(BaseModel):
     categoria: Optional[str] = "Restaurante"
     telefone: Optional[str] = ""
     aceita_termos: bool = False
+    currency: Literal["eur", "brl"] = "eur"
 
 
 @router.post("/register")
@@ -89,16 +90,16 @@ async def register(body: RegisterIn, request: Request, response: Response):
     uid = new_id("usr")
     avatar = f"https://i.pravatar.cc/80?u={email}"
     user = {"id": uid, "email": email, "password_hash": hash_password(body.password), "nome": body.nome.strip(), "role": body.role, "avatar": avatar,
-            "telefone": body.telefone, "created_at": now_iso(), "origem": "Registo no site"}
+            "telefone": body.telefone, "currency": body.currency, "created_at": now_iso(), "origem": "Registo no site"}
     if body.role == "influencer":
         handle = body.handle.strip() if body.handle else ""
         if handle and not handle.startswith("@"):
             handle = "@" + handle
-        ent = {"id": new_id("if"), "user_id": uid, "nome": user["nome"], "handle": handle or email.split("@")[0], "cidade": body.cidade, "status": "Ativo", "avatar": avatar}
+        ent = {"id": new_id("if"), "user_id": uid, "nome": user["nome"], "handle": handle or email.split("@")[0], "cidade": body.cidade, "currency": body.currency, "status": "Ativo", "avatar": avatar}
         await db.influencers.insert_one(dict(ent))
         user.update({"handle": ent["handle"], "influencer_id": ent["id"], "status": "Ativo"})
     else:
-        ent = {"id": new_id("p"), "user_id": uid, "nome": user["nome"], "categoria": body.categoria, "cidade": body.cidade, "status": "Pendente", "avatar": avatar, "origem": "Registo no site"}
+        ent = {"id": new_id("p"), "user_id": uid, "nome": user["nome"], "categoria": body.categoria, "cidade": body.cidade, "currency": body.currency, "status": "Pendente", "avatar": avatar, "origem": "Registo no site"}
         await db.partners.insert_one(dict(ent))
         user.update({"handle": f"{body.categoria} · {body.cidade}", "partner_id": ent["id"], "status": "Pendente"})
     await db.users.insert_one(dict(user))

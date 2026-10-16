@@ -44,7 +44,7 @@ export const TestRunDialog = ({ open, onOpenChange, eventos, onDone }) => {
       <DialogContent data-testid="test-run-dialog" className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Clapperboard className="w-4 h-4 text-purple-600" /> Novo Teste — fluxo completo</DialogTitle>
-          <DialogDescription>Simula clique → QR → pagamento (Stripe modo teste) → split, sem dinheiro real. Os dashboards atualizam ao vivo.</DialogDescription>
+          <DialogDescription>Simula clique → QR → pagamento (Simulação local · não contacta a Stripe) → split, sem dinheiro real. Os dashboards atualizam ao vivo.</DialogDescription>
         </DialogHeader>
         {!running && !result && (
           <div className="space-y-3">

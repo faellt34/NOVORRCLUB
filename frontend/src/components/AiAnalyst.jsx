@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { getToken } from "../lib/api";
+import { getToken, reportCurrency } from "../lib/api";
 
 const API = process.env.REACT_APP_BACKEND_URL;
+const sessionKey = () => "rr_ai_session_" + reportCurrency();
 const SUGGESTIONS = ["Resumo da semana em 3 frases", "Porque é que a conversão está baixa?", "Qual o influencer com melhor retorno?", "Que origem traz mais clientes?"];
 
 export const AiAnalyst = ({ refreshKey }) => {
   const [msgs, setMsgs] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [session, setSession] = useState(() => sessionStorage.getItem("rr_ai_session") || null);
+  const [session, setSession] = useState(() => sessionStorage.getItem(sessionKey()) || null);
   const box = useRef(null);
   const abortRef = useRef(null);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }, [msgs]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const ask = async (q) => {
     const question = (q ?? input).trim();
@@ -22,7 +25,7 @@ export const AiAnalyst = ({ refreshKey }) => {
     setMsgs((m) => [...m, { role: "user", content: question }, { role: "assistant", content: "" }]);
     try {
       abortRef.current = new AbortController();
-      const res = await fetch(`${API}/api/admin/ai/ask`, { method: "POST", signal: abortRef.current.signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` }, body: JSON.stringify({ session_id: session, message: question }) });
+      const res = await fetch(`${API}/api/admin/ai/ask`, { method: "POST", signal: abortRef.current.signal, headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}`, "X-Currency": reportCurrency() }, body: JSON.stringify({ session_id: session, message: question }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.detail || `Erro ${res.status}`);
       const reader = res.body.getReader(), dec = new TextDecoder();
       let buf = "";
@@ -35,8 +38,12 @@ export const AiAnalyst = ({ refreshKey }) => {
           const ev = (p.match(/^event: (\w+)/m) || [])[1] || "message";
           const data = (p.match(/^data: (.*)$/m) || [])[1];
           if (data == null) continue;
-          if (ev === "meta") { const s = JSON.parse(data).session_id; setSession(s); sessionStorage.setItem("rr_ai_session", s); }
-          else if (ev === "error") toast.error(`IA: ${JSON.parse(data)}`);
+          if (ev === "meta") { const s = JSON.parse(data).session_id; setSession(s); sessionStorage.setItem(sessionKey(), s); }
+          else if (ev === "error") {
+            const message = JSON.parse(data);
+            toast.error(message);
+            setMsgs((items) => items.map((item, index) => index === items.length - 1 && item.role === "assistant" ? { ...item, content: item.content ? item.content + "\n\n" + message : message } : item));
+          }
           else if (ev === "message") { const tok = JSON.parse(data); setMsgs((m) => { if (!m.length || m[m.length - 1].role !== "assistant") return m; const c = [...m]; c[c.length - 1] = { ...c[c.length - 1], content: c[c.length - 1].content + tok }; return c; }); }
         }
       }
@@ -44,7 +51,7 @@ export const AiAnalyst = ({ refreshKey }) => {
     finally { setBusy(false); abortRef.current = null; }
   };
 
-  const reset = () => { abortRef.current?.abort(); setMsgs([]); setSession(null); sessionStorage.removeItem("rr_ai_session"); };
+  const reset = () => { abortRef.current?.abort(); setMsgs([]); setSession(null); sessionStorage.removeItem(sessionKey()); };
 
   return (
     <div data-testid="ai-analyst-card" className="card-soft p-5 flex flex-col">

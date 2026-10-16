@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getToken } from "../lib/api";
+import { getToken, reportCurrency } from "../lib/api";
 
 export const wsUrl = () => `${window.location.origin.replace(/^http/, "ws")}/api/ws/dashboard`;
 
@@ -21,6 +21,7 @@ export const useRealtime = (onEvent, { enabled = true } = {}) => {
           const ev = JSON.parse(e.data);
           if (ev.tipo === "ligado") { delay = 1000; setStatus("conectado"); ping = setInterval(() => ws.readyState === 1 && ws.send("ping"), 20000); cb.current?.({ tipo: "ligado" }); return; }
           if (ev.tipo === "pong") return;
+          if ((ev.currency || ev.record?.currency || "eur") !== reportCurrency()) return;
           setEventos((p) => [ev, ...p].slice(0, 200)); setUltimoEvento(ev); cb.current?.(ev);
         } catch {}
       };

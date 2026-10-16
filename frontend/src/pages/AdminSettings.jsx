@@ -3,6 +3,7 @@ import { Mail, Send, Trash2, ShieldAlert, CheckCircle2, Smartphone, Landmark, Ro
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { Input } from "../components/ui/input";
+import PixReadiness from "../components/PixReadiness";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { StripeStatusCard } from "../components/StripeStatusCard";
 
@@ -77,6 +78,7 @@ export default function AdminSettings() {
       </div>
 
       <StripeStatusCard />
+      <PixReadiness />
 
       <form onSubmit={saveIban} className="card-soft p-5 space-y-3" data-testid="settings-iban-card">
         <div className="flex items-center gap-2"><Landmark className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">IBAN da plataforma (conta para receber dinheiro)</h3></div>
