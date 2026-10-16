@@ -281,6 +281,18 @@ async def public_pay(body: PublicPayIn):
         fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
         base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
         split = True
+    # Opt-in: let Stripe localize Brazilian customers' currency to BRL and
+    # display eligible methods (including Pix, if enabled on the Stripe account).
+    # Keep the existing EUR/card/MB WAY checkout unchanged until tested.
+    if os.environ.get("PIX_CHECKOUT_ENABLED", "").lower() in ("1", "true", "yes"):
+        try:
+            session = stripe.checkout.Session.create(**base, adaptive_pricing={"enabled": True})
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Checkout internacional indisponível: {e.user_message or e}")
+        await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
+                                                  "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "dynamic", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+        return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
+
     session = None
     for pm in (["card", "mb_way"], ["card"]):
         try:
