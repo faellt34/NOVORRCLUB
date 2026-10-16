@@ -403,8 +403,9 @@ async def campaign_poster(campaign_id: str, site: str = "", user: dict = Depends
 
 @router.get("/influencer/story-video/{campaign_id}")
 async def story_video(campaign_id: str, user: dict = Depends(require_role("influencer"))):
-    import asyncio, hashlib, re as _re
-    from fastapi.responses import FileResponse
+    import hashlib, re as _re
+    from fastapi.responses import FileResponse, JSONResponse
+    from story_jobs import ensure_story
     from story_video import render_story, MEDIA_DIR
     c = await db.campaigns.find_one({"id": campaign_id, "influencer_id": user["influencer_id"]}, NO_ID)
     if not c:
@@ -412,9 +413,14 @@ async def story_video(campaign_id: str, user: dict = Depends(require_role("influ
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
     inf = await db.influencers.find_one({"id": user["influencer_id"]}, NO_ID) or {}
     site = _re.sub(r"^https?://", "", os.environ.get("FRONTEND_URL", "")).rstrip("/")
-    key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v2".encode()).hexdigest()[:12]
-    out = MEDIA_DIR / f"story-{c['cupom']}-{key}.mp4"
-    if not out.exists():
-        await asyncio.to_thread(render_story, out, user["nome"], inf.get("handle", ""), c["cupom"], float(c["desconto"]), partner.get("nome", ""), site)
-        await audit("VÍDEO", f"Story personalizado gerado · {c['cupom']}", user, campaign_id)
+    key = hashlib.md5(f"{c['cupom']}|{user['nome']}|{inf.get('handle','')}|{c['desconto']}|{partner.get('nome','')}|{site}|v3".encode()).hexdigest()[:12]
+    out = MEDIA_DIR / f"story-{key}.mp4"
+    try:
+        ready = await ensure_story(out, render_story, user["nome"], inf.get("handle", ""), c["cupom"], float(c["desconto"]), partner.get("nome", ""), site)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, "Não foi possível gerar o vídeo. Tente novamente.")
+    if not ready:
+        return JSONResponse({"status": "processing"}, status_code=202, headers={"Retry-After": "2", "Cache-Control": "no-store"})
     return FileResponse(str(out), media_type="video/mp4", filename=f"story-{c['cupom']}.mp4")

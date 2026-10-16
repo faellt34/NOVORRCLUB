@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageSquare, Plus, Send, ShieldCheck, Crown, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
-import { api, apiError } from "../lib/api";
+import { useSessionPolling } from "../hooks/useSessionPolling";
+import { api, apiError, getToken } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
 
@@ -35,11 +36,12 @@ export default function Messages() {
     } catch (e) { toast.error(apiError(e)); }
   }, [refreshUnread]);
 
-  useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() => api.get(`/messages/conversations/${active}`).then((r) => setMessages(r.data.messages)).catch(() => {}), 8000);
-    return () => clearInterval(t);
+  const pollConversation = useCallback(async (signal) => {
+    const token = getToken();
+    const { data } = await api.get('/messages/conversations/' + active, { signal });
+    if (!signal.aborted && getToken() === token) setMessages(data.messages);
   }, [active]);
+  useSessionPolling(pollConversation, 8000, Boolean(active && user));
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 

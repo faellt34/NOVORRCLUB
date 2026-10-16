@@ -82,11 +82,16 @@ def test_poster_pdf_ignores_site_query(influencer_token):
 # ---- Story video ----
 def test_story_video_returns_mp4(influencer_token):
     cid = _get_influencer_campaign_id(influencer_token)
-    r = requests.get(
-        f"{API}/influencer/story-video/{cid}",
-        headers={"Authorization": f"Bearer {influencer_token}"},
-        timeout=120,
-    )
+    import time
+    for _ in range(90):
+        r = requests.get(
+            f"{API}/influencer/story-video/{cid}",
+            headers={"Authorization": f"Bearer {influencer_token}"},
+            timeout=120,
+        )
+        if r.status_code != 202:
+            break
+        time.sleep(2)
     assert r.status_code == 200, r.text
     ct = r.headers.get("content-type", "")
     assert "mp4" in ct or "video" in ct, f"unexpected ct: {ct}"

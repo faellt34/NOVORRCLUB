@@ -18,6 +18,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use((response) => response, (error) => {
+  const sentToken = error.config?.headers?.Authorization;
+  if (error.response?.status === 401 && sentToken && sentToken === 'Bearer ' + getToken()) {
+    setToken(null);
+    window.dispatchEvent(new Event("rrclub:session-expired"));
+  }
+  return Promise.reject(error);
+});
+
 export const apiError = (e, fallback = "Ocorreu um erro. Tente novamente.") => {
   const d = e?.response?.data?.detail;
   if (!d) return e?.message || fallback;

@@ -4,8 +4,8 @@
 
 **Estado: preparado para homologação; não validado na Stripe real/sandbox da RR Club.**
 
-- 38 testes Python passaram (31 do Pix, 3 dos relatórios e 4 do cadastro).
-- 12 testes da tela de pagamento passaram.
+- 46 testes Python passaram (31 do Pix, 3 dos relatórios, 4 do cadastro, 5 do vídeo e 3 do tratamento da IA).
+- 18 testes frontend passaram (12 da tela Pix, 4 do polling e 2 do tratamento de 401).
 - Build de produção do frontend: compilado com sucesso.
 - Compilação Python e verificação de diff: sem erro.
 - Nenhum push, deploy ou movimento financeiro real.
@@ -33,3 +33,5 @@ Na tela, cobrem valor confirmado pelo parceiro sem edição pelo cliente, espera
 Não usar o antigo botão “Novo Teste” como comprovativo: ele não executa uma cobrança na Stripe.
 
 Configuração e roteiro detalhado: `docs/PIX_SETUP.md`.
+
+Revisão das falhas operacionais recebidas do site: `docs/OPERATIONAL_FIXES.md`.

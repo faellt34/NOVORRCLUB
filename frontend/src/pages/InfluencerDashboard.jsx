@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bell, Ticket, Users, Euro, Percent, Search, Copy, Download, Share2, Clapperboard, Landmark, QrCode } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -37,6 +37,8 @@ export default function InfluencerDashboard() {
     }
   });
   const [videoBusy, setVideoBusy] = useState(false);
+  const videoAbort = useRef(null);
+  useEffect(() => () => videoAbort.current?.abort(), []);
   const [profile, setProfile] = useState(null);
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
@@ -52,12 +54,21 @@ export default function InfluencerDashboard() {
 
   const downloadStory = async () => {
     setVideoBusy(true);
+    const controller = new AbortController();
+    videoAbort.current = controller;
     try {
-      const r = await api.get(`/influencer/story-video/${featured.id}`, { responseType: "blob", timeout: 120000 });
+      let r;
+      const deadline = Date.now() + 180000;
+      do {
+        r = await api.get('/influencer/story-video/' + featured.id, { responseType: "blob", timeout: 15000, signal: controller.signal });
+        if (r.status !== 202) break;
+        if (Date.now() >= deadline) throw new Error("O vídeo ainda está em preparação. Tente baixar novamente em instantes.");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } while (r.status === 202);
       const url = URL.createObjectURL(r.data);
       const a = document.createElement("a"); a.href = url; a.download = `story-${featured.cupom}.mp4`; a.click(); URL.revokeObjectURL(url);
       toast.success("Vídeo pronto! Partilhe nos seus stories.");
-    } catch (e) { toast.error(apiError(e)); } finally { setVideoBusy(false); }
+    } catch (e) { if (!controller.signal.aborted) toast.error(apiError(e)); } finally { if (!controller.signal.aborted) setVideoBusy(false); videoAbort.current = null; }
   };
 
   useEffect(() => {
@@ -183,7 +194,7 @@ export default function InfluencerDashboard() {
                 <button data-testid="coupon-share-whatsapp" onClick={() => share("whatsapp")} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Share2 className="w-4 h-4" /><span className="text-[10px] font-semibold">Partilhar</span></button>
               </div>
               <button data-testid="coupon-story-video" disabled={videoBusy} onClick={downloadStory} className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
-                <Clapperboard className="w-4 h-4" /> {videoBusy ? "A gerar o seu vídeo (≈20s)..." : "Vídeo Story personalizado (MP4)"}
+                <Clapperboard className="w-4 h-4" /> {videoBusy ? "A preparar o seu vídeo..." : "Vídeo Story personalizado (MP4)"}
               </button>
             </>
           ) : <p className="text-sm text-slate-400 py-10">Sem campanhas ativas.</p>}
