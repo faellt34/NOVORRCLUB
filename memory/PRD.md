@@ -293,3 +293,8 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - MODELOS em routes_diretor.py: gemini (gemini-2.5-flash, padrão), gpt (gpt-5-nano, mais económico), claude (claude-haiku-4-5). GET /api/diretor/modelos; MsgIn.modelo; conversa guarda "modelo". Frontend ModelSelector.jsx (localStorage diretor_modelo). Testado: GPT respondeu via conversar.
 - _parse endurecido: JSON malformado/truncado → extrai "resposta" sem mostrar chaves ao CEO.
 - Reconciliar em prod: endpoint ainda 404 (deploy pendente) — correr após deploy com aplicadas_dev=[ac-bfa913b0f9,ac-1ac6eb4e1c,ac-ba1676a1db], rejeitar ac-6b9ee7cf7b.
+
+## 2026-10-16 — Carregado GitHub codex/pix-current-integration @ 8e90ad3
+- Fast-forward limpo (HEAD local fb7ae71 era o pai; sem alterações locais por guardar). +routes_pix.py, payment_policy.py, story_jobs.py, docs/PIX_*.md, componentes Pix, testes.
+- PIX_ENABLED=false adicionado ao backend/.env; config PT intacta; /public/pix/availability → enabled=false.
+- IMPEDIMENTO resolvido: branch fixava stripe==15.6.0, incompatível com emergentintegrations (<15) → pip falharia em prod. Mantido stripe==14.4.1 (routes_pix usa StripeClient.v1, compatível). 49 testes Pix/policy/story passam. Deploy enviado.
