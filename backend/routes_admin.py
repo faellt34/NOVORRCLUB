@@ -30,6 +30,14 @@ async def resolve_campaign(data: dict) -> dict:
         if not p:
             raise HTTPException(status_code=400, detail=f"Parceiro '{data['parceiro']}' não existe. Crie-o primeiro em Parceiros.")
         data["parceiro_id"] = p["id"]
+    if data.get("parceiro_id"):
+        partner = await db.partners.find_one({"id": data["parceiro_id"]}, NO_ID)
+        if not partner:
+            raise HTTPException(400, "Parceiro não encontrado")
+        currency = partner.get("currency", "eur")
+        if data.get("currency") and data["currency"] != currency:
+            raise HTTPException(400, "A moeda da campanha deve corresponder à do parceiro")
+        data["currency"] = currency
     if data.get("influencer"):
         i = await db.influencers.find_one({"$or": [{"nome": {"$regex": f"^{data['influencer'].strip()}$", "$options": "i"}}, {"handle": data["influencer"].strip()}]}, NO_ID)
         if not i:
@@ -48,6 +56,10 @@ async def resolve_campaign(data: dict) -> dict:
 
 async def prepare(kind: str, data: dict, creating: bool) -> dict:
     data = {k: v for k, v in data.items() if k not in ("id", "_id", "password_hash")}
+    if kind in ("parceiros", "campanhas") and "currency" in data:
+        data["currency"] = str(data["currency"]).lower()
+        if data["currency"] not in ("eur", "brl"):
+            raise HTTPException(400, "Moeda inválida")
     if kind == "campanhas":
         data = await resolve_campaign(data)
     if kind == "ebooks":
@@ -112,6 +124,10 @@ async def update_item(kind: str, item_id: str, data: dict, user: dict = Depends(
     if not existing:
         raise HTTPException(status_code=404, detail="Registo não encontrado")
     data = await prepare(kind, data, False)
+    if kind in ("parceiros", "campanhas") and "currency" in data and data["currency"] != existing.get("currency", "eur"):
+        history_key = "partner_id" if kind == "parceiros" else "campaign_id"
+        if existing.get("stripe_account_id") or await db.redemptions.find_one({history_key: item_id}) or await db.payment_transactions.find_one({history_key: item_id}):
+            raise HTTPException(409, "Este registo já tem recebimentos configurados ou histórico financeiro. Crie um novo registo para mudar de moeda.")
     await c.update_one({"id": item_id}, {"$set": data})
     doc = await c.find_one({"id": item_id}, NO_ID)
     if kind in ("parceiros", "influencers") and "status" in data and doc.get("user_id"):

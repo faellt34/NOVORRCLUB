@@ -1,3 +1,4 @@
+import { reportCurrency } from "../../lib/api";
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -32,6 +33,13 @@ export default function AppLayout() {
 
       <main className="lg:pl-[268px]">
         <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+          <div className="flex justify-end mb-4">
+            <label className="text-xs text-slate-600">Moeda dos relatórios
+              <select aria-label="Moeda dos relatórios" className="ml-2 rounded-lg border p-2 bg-white" value={reportCurrency()} onChange={(e) => { localStorage.setItem("rrclub_currency", e.target.value); window.location.reload(); }}>
+                <option value="eur">EUR · Portugal</option><option value="brl">BRL · Brasil</option>
+              </select>
+            </label>
+          </div>
           <Outlet />
         </div>
       </main>

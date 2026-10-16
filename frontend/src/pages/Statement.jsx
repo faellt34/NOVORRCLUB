@@ -1,9 +1,10 @@
+import PixReceivingAccount from "../components/PixReceivingAccount";
 import { useEffect, useState } from "react";
 import { Download, Euro, Ticket, HandCoins, CheckCircle2, Clock, FileDown, Landmark } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
-import { api, apiError, eur, num, downloadCsv } from "../lib/api";
+import { api, apiError, dashboardMoney as eur, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { PageSkeleton } from "../components/PageSkeleton";
 
@@ -33,7 +34,7 @@ export default function Statement() {
 
   if (!months) return <PageSkeleton />;
   const month = months.find((m) => m.id === monthId);
-  if (!month) return <p className="text-slate-400 py-12 text-center" data-testid="statement-empty">Ainda não há redenções para gerar extratos.</p>;
+  if (!month) return <div>{reportCurrency() === "brl" && <PixReceivingAccount />}<p className="text-slate-400 py-12 text-center" data-testid="statement-empty">Ainda não há redenções para gerar extratos.</p></div>;
 
   const totals = month.lines.reduce((acc, l) => ({ uses: acc.uses + l.uses, revenue: acc.revenue + l.revenue, commission: acc.commission + l.commission }), { uses: 0, revenue: 0, commission: 0 });
   const label = monthLabel(month.id);
@@ -49,8 +50,8 @@ export default function Statement() {
   };
 
   const exportCsv = () => {
-    downloadCsv(`extrato-${month.id}.csv`, "campanha;parceiro;utilizacoes;receita_eur;taxa;comissao_eur",
-      [...month.lines.map((l) => [l.campaign, l.partner, l.uses, l.revenue.toFixed(2), l.rate, l.commission.toFixed(2)].join(";")), `TOTAL;;${totals.uses};${totals.revenue.toFixed(2)};;${totals.commission.toFixed(2)}`]);
+    downloadCsv(`extrato-${month.id}.csv`, "campanha;parceiro;utilizacoes;receita;taxa;comissao;moeda",
+      [...month.lines.map((l) => [l.campaign, l.partner, l.uses, l.revenue.toFixed(2), l.rate, l.commission.toFixed(2), reportCurrency()].join(";")), `TOTAL;;${totals.uses};${totals.revenue.toFixed(2)};;${totals.commission.toFixed(2)};${reportCurrency()}`]);
     toast.success(`Extrato de ${label} exportado`);
   };
 
@@ -71,7 +72,7 @@ export default function Statement() {
         </div>
       </div>
 
-      <div data-testid="influencer-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {reportCurrency() === "brl" ? <PixReceivingAccount /> : <div data-testid="influencer-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
           <div>
@@ -87,7 +88,7 @@ export default function Statement() {
         ) : (
           <button data-testid="influencer-iban-edit" onClick={() => { setIban(profile?.iban || ""); setIbanEdit(true); }} className="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press">{profile?.iban ? "Alterar IBAN" : "Adicionar IBAN"}</button>
         )}
-      </div>
+      </div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard id="extrato-comissao" icon={HandCoins} label={`Comissão · ${label}`} value={eur(+totals.commission.toFixed(2))} />

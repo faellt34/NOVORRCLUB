@@ -7,7 +7,7 @@ import { CouponQrDialog, renderCouponPng } from "../components/CouponQrDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
-import { api, apiError, eur, num, getSiteUrl, couponLink } from "../lib/api";
+import { api, apiError, dashboardMoney as eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -25,6 +25,7 @@ export default function InfluencerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
+    if (ev.tipo === "pagamento_atualizado") { api.get(`/dashboard/influencer?period=${period}`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))); return; }
     if (ev.tipo === "split_executado") {
       setData((d) => d && { ...d, kpis: { ...d.kpis, uses: d.kpis.uses + 1, revenue: d.kpis.revenue + Number(ev.valor_total || 0), commission: d.kpis.commission + Number(ev.valor_plataforma || 0) },
         campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, uses: c.uses + 1 } : c) });

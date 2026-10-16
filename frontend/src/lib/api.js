@@ -1,5 +1,9 @@
 import axios from "axios";
 
+export const reportCurrency = () => localStorage.getItem("rrclub_currency") === "brl" ? "brl" : "eur";
+export const moneyIn = (v, currency = "eur") => new Intl.NumberFormat(currency === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: currency.toUpperCase() }).format(Number(v) || 0);
+export const dashboardMoney = (v) => new Intl.NumberFormat(reportCurrency() === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: reportCurrency().toUpperCase() }).format(Number(v) || 0);
+
 const TOKEN_KEY = "robson_token";
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
@@ -8,6 +12,7 @@ export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localSt
 export const api = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
 
 api.interceptors.request.use((config) => {
+  config.headers["X-Currency"] = reportCurrency();
   const t = getToken();
   if (t) config.headers.Authorization = `Bearer ${t}`;
   return config;

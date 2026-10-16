@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MousePointerClick, Download, QrCode, CheckCircle2, Clock, X } from "lucide-react";
 import { toast } from "sonner";
-import { api, apiError, downloadCsv, eur } from "../lib/api";
+import { api, apiError, downloadCsv, dashboardMoney as eur } from "../lib/api";
 import { useCountUp, useFlash } from "../services/live";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 

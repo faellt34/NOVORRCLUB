@@ -1,23 +1,23 @@
 import { CheckCircle2, Circle, Landmark, CreditCard, Ticket, ArrowRight } from "lucide-react";
 
-export const PartnerOnboarding = ({ hasIban, connect, hasCampaign, onIban, onConnect }) => {
-  const connectDone = !!connect?.charges_enabled;
+export const PartnerOnboarding = ({ currency = "eur", hasIban, connect, hasCampaign, onIban, onConnect }) => {
+  const connectDone = !!connect?.charges_enabled && (currency !== "brl" || !!connect?.payouts_enabled);
   const connectUnavailable = connect?.available === false;
   const steps = [
     { id: "iban", icon: Landmark, done: hasIban, title: "1. IBAN de recebimento", desc: hasIban ? "Conta bancária definida" : "Indique a conta onde recebe os pagamentos por QR", cta: hasIban ? "Alterar" : "Adicionar IBAN", onClick: onIban },
-    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connectDone ? "Ativo — a sua parte cai direto na sua conta" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
+    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connectDone ? "Ativo — recebimentos encaminhados à sua conta Stripe" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
     { id: "campaign", icon: Ticket, done: hasCampaign, title: "3. Primeiro cupão QR", desc: hasCampaign ? "Cupão ativo — imprima o cartaz A5 e coloque na mesa/balcão" : "O admin cria a campanha com o seu influencer; peça em Mensagens", cta: null },
-  ];
+  ].filter((step) => currency !== "brl" || step.id !== "iban");
   const done = steps.filter((s) => s.done).length;
-  if (done === 3) return null;
+  if (done === steps.length) return null;
   return (
     <div data-testid="partner-onboarding" className="card-soft p-5 border-l-4 border-purple-500">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Comece a receber em 3 passos</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Comece a receber em {steps.length} passos</h3>
           <p className="text-xs text-slate-500">Configuração inicial do parceiro</p>
         </div>
-        <span data-testid="partner-onboarding-progress" className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">{done}/3</span>
+        <span data-testid="partner-onboarding-progress" className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full">{done}/{steps.length}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {steps.map((s) => (

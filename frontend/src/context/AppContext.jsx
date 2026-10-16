@@ -29,6 +29,7 @@ export const AppProvider = ({ children }) => {
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
     setToken(data.token);
+    localStorage.setItem("rrclub_currency", data.user.currency || "eur");
     setUser(data.user);
     return data.user;
   };
