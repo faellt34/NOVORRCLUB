@@ -36,25 +36,10 @@ def _stripe_probe() -> dict:
         info["connect_enabled"] = True
     except stripe.StripeError:
         info["connect_enabled"] = False
-    info["platform_profile_ok"] = True
-    if info["connect_enabled"]:
-        prof = await_profile_probe()
-        info["platform_profile_ok"] = prof
+    # Reading configuration must never create or close connected accounts.
+    # A successful list does not certify acceptance of platform responsibilities.
+    info["platform_profile_ok"] = None
     return info
-
-
-def await_profile_probe() -> bool:
-    try:
-        acct = _v2().v2.core.accounts.create({"display_name": "RRclub probe", "identity": {"country": "pt", "entity_type": "company"},
-                                              "defaults": {"responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
-                                              "configuration": {"recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}}}})
-        try:
-            _v2().v2.core.accounts.close(acct.id, {"applied_configurations": ["recipient"]})
-        except Exception:
-            pass
-        return True
-    except Exception as e:
-        return "liability" not in str(e).lower()
 
 
 async def stripe_config(force: bool = False) -> dict:
@@ -81,7 +66,7 @@ async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
         {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
         {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
         {"id": "connect", "label": "Stripe Connect ativo (split automático 80/5/10)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
-        {"id": "perfil", "label": "Perfil de plataforma Connect concluído (responsabilidade por perdas aceite)", "ok": c.get("platform_profile_ok", True), "action": None if c.get("platform_profile_ok", True) else "Em modo live o Stripe bloqueia a criação de contas de hotéis até aceitar as responsabilidades: dashboard.stripe.com → Settings → Connect → Platform profile → concluir. Depois o hotel volta a clicar 'Ativar split automático'."},
+        {"id": "perfil", "label": "Perfil de plataforma Connect (verificação manual necessária)", "ok": c.get("platform_profile_ok") is True, "action": "Confirme em dashboard.stripe.com → Settings → Connect → Platform profile se os requisitos e responsabilidades estão concluídos. Esta consulta não cria contas para testar a aprovação."},
         {"id": "parceiros", "label": f"Parceiros ligados ao Connect (hotéis, rooftops, restaurantes): {connected}/{partners}", "ok": partners > 0 and connected == partners,
          "action": None if partners > 0 and connected == partners else f"Falta ligar: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. Cada parceiro entra no seu Painel do Parceiro → secção Pagamentos → botão 'Ativar split automático' e conclui o onboarding Stripe (só funciona depois do Connect e do perfil de plataforma estarem ativos)." if missing else "Ainda não há parceiros ativos."},
     ]
@@ -167,7 +152,7 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
 
 async def fulfil(session_id: str, extra: dict):
     res = await db.payment_transactions.find_one_and_update(
-        {"session_id": session_id, "payment_status": {"$ne": "paid"}},
+        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
         return
@@ -220,6 +205,8 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
     rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
     if not rec:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    if rec.get("kind") == "pix_coupon":
+        raise HTTPException(status_code=409, detail="Consulte este pagamento na rota dedicada de estado Pix.")
     if rec.get("kind") != "coupon_pay":
         user = await user_from_query_or_header(authorization, None)
         if user["role"] != "admin" and rec.get("user_id") != user["id"]:
@@ -227,7 +214,7 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
     if rec["payment_status"] != "paid":
         try:
             s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
+            if s.payment_status == "paid":
                 await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
@@ -255,12 +242,15 @@ async def stripe_webhook(request: Request):
     except (stripe.error.SignatureVerificationError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid signature")
     obj, t = event["data"]["object"], event["type"]
+    if (obj.get("metadata") or {}).get("kind") == "pix_coupon":
+        # Pix has a separate signing secret, ledger and transfer workflow.
+        return {"status": "ignored", "reason": "dedicated_pix_webhook_required"}
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
-        if obj.get("payment_status", "paid") == "paid":
+        if obj.get("payment_status") == "paid":
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
-        await db.payment_transactions.update_one({"session_id": obj["id"]}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
