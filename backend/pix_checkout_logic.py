@@ -40,3 +40,13 @@ def belongs_to_br_test_session(session: dict, record: dict) -> bool:
         and record.get("kind") == "pix_br_test"
         and record.get("currency") == "brl"
     )
+
+
+def sandbox_payment_intent_data(transaction_id: str) -> dict:
+    """Trace charge to future reconciliation; never create a transfer in sandbox."""
+    if not isinstance(transaction_id, str) or not transaction_id.startswith("pixsandbox_") or len(transaction_id) > 120:
+        raise PaymentConfigurationError("Identificador de transação Pix inválido")
+    return {
+        "transfer_group": f"rrclub_br_test_{transaction_id}",
+        "metadata": {"kind": "pix_br_test", "country": "BR", "transaction_id": transaction_id},
+    }
