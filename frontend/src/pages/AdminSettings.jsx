@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Mail, Send, Trash2, ShieldAlert, CheckCircle2, Smartphone, Landmark, Rocket, XCircle, CircleDashed, RefreshCw } from "lucide-react";
+import { Mail, Send, CheckCircle2, Smartphone, Landmark, Rocket, XCircle, CircleDashed, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { Input } from "../components/ui/input";
@@ -9,7 +9,6 @@ export default function AdminSettings() {
   const [s, setS] = useState(null);
   const [key, setKey] = useState("");
   const [sender, setSender] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [iban, setIban] = useState("");
   const [titular, setTitular] = useState("");
   const saveIban = async (e) => {
@@ -35,12 +34,6 @@ export default function AdminSettings() {
     try { await api.post("/admin/settings/email/test"); toast.success("Email de teste enviado para o seu endereço"); }
     catch (err) { toast.error(apiError(err)); } finally { setBusy(""); }
   };
-  const reset = async () => {
-    setBusy("reset");
-    try { await api.post("/admin/reset-pilot", { confirm }); toast.success("Dados piloto zerados. A plataforma está limpa para produção."); setConfirm(""); load(); }
-    catch (err) { toast.error(apiError(err)); } finally { setBusy(""); }
-  };
-
   if (!s) return <PageSkeleton />;
 
   return (
@@ -112,18 +105,6 @@ export default function AdminSettings() {
         </div>
       </div>
 
-      {s.reset_allowed && (
-      <div className="card-soft p-5 border-l-4 border-red-400" data-testid="settings-reset-card">
-        <div className="flex items-center gap-2 mb-2"><ShieldAlert className="w-5 h-5 text-red-500" /><h3 className="text-lg font-semibold text-slate-900">Zerar teste piloto</h3>
-          {s.demo_disabled && <span data-testid="pilot-reset-done" className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Zerado em {new Date(s.pilot_reset_at).toLocaleString("pt-PT")}</span>}</div>
-        <p className="text-xs text-slate-500 mb-3">Apaga TODOS os dados de demonstração e de teste — redenções, campanhas, parceiros, influencers, utilizadores (exceto os admins), mensagens, indicações, pagamentos e audit log. Os e-books mantêm-se. Os dados de demonstração não voltam a ser criados. <b>Irreversível.</b></p>
-        <p className="text-xs text-slate-500 mb-3">Atualmente: {s.counts.users} utilizadores · {s.counts.influencers} influencers · {s.counts.partners} parceiros · {s.counts.campaigns} campanhas · {s.counts.redemptions} redenções</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input data-testid="reset-confirm-input" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder='Escreva ZERAR para confirmar' className="rounded-xl bg-slate-50 sm:max-w-xs" />
-          <button disabled={confirm !== "ZERAR" || busy === "reset"} onClick={reset} data-testid="reset-pilot-button" className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold inline-flex items-center justify-center gap-1.5 btn-press"><Trash2 className="w-4 h-4" /> {busy === "reset" ? "A zerar..." : "Zerar dados piloto"}</button>
-        </div>
-      </div>
-      )}
       {!s.reset_allowed && s.demo_disabled && (
         <p data-testid="pilot-reset-info" className="text-xs text-slate-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Teste piloto zerado em {new Date(s.pilot_reset_at).toLocaleString("pt-PT")} — a plataforma está em modo produção.</p>
       )}
