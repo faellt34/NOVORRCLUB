@@ -312,3 +312,4 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## 2026-10-17 — Carregado codex/pix-brasil-readiness @ 9c0137f (fast-forward, 0 alterações locais pendentes)
 - Inclui 417dc09 e 8d4275b. +PixBillStatus, PixReadiness, test_payment_confirmation, test_pix_readiness, docs PIX_BRASIL_*. stripe==14.4.1 e PIX_ENABLED=false mantidos; availability enabled=false. 73 testes offline passam; frontend compila. Republicar a pedido do CEO.
+- 2026-10-17 15:02 UTC PROD: Paulo (usr-3e1a1334e5) associado ao Maraca (p-91136424bc) via POST /admin/parceiros/{id}/conta → 200, reparacoes=[], audit a-cd66bbf942. IBAN e Stripe do Maraca intactos. Idempotente (2ª chamada 200).
