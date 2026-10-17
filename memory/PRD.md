@@ -309,3 +309,6 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Código routes_admin.associate_partner_account: partner_id/user_id pendurados (alvo inexistente) são reparáveis e auditados; associações válidas e moedas explícitas diferentes continuam a bloquear (409); moeda ausente herda a do estabelecimento (auditado); rollback do estabelecimento em falha. 69 testes offline passam (sem custos externos). PIX_ENABLED=false mantido.
 - Push para GitHub: via botão "Save to Github" (agente não faz push).
 - Lembrete CEO: operação no Brasil → Pix pagamentos/recebimentos será necessário (PIX_ENABLED=true + PIX_STRIPE_SECRET_KEY etc., ver docs/PIX_SETUP.md).
+
+## 2026-10-17 — Carregado codex/pix-brasil-readiness @ 9c0137f (fast-forward, 0 alterações locais pendentes)
+- Inclui 417dc09 e 8d4275b. +PixBillStatus, PixReadiness, test_payment_confirmation, test_pix_readiness, docs PIX_BRASIL_*. stripe==14.4.1 e PIX_ENABLED=false mantidos; availability enabled=false. 73 testes offline passam; frontend compila. Republicar a pedido do CEO.
