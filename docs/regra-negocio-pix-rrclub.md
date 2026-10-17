@@ -46,3 +46,13 @@
 - A divisão pode ser calculada como R$100 de compra, R$5 de desconto, R$95 pago, R$10 RRClub, R$5 influencer, R$80 parceiro; taxa Stripe suportada pela RRClub. Nenhuma remuneração é repassada antes de o pagamento estar definitivamente pago.
 - **Regra do deploy**: não ativar cobrança Pix nem repasses sem conta BR verificada, comissões persistidas, webhook BR autenticado, testes de ponta a ponta em modo de teste e capacidade Connect de ambos os destinatários. Portugal deve continuar com o checkout EUR atual.
 - **Estado técnico atual**: código e testes de guarda criados; nenhuma cobrança, convite, transferência ou deploy executados nesta tarefa. Não marcar feature como concluída.
+
+
+## Esclarecimento do proprietário — 17/10/2026
+- A operação RRClub Brasil **e** a operação RRClub Portugal pertencem à mesma pessoa; não tratar o mesmo e-mail administrativo como prova de cadastro duplicado ou fraude.
+- RRClub Brasil: operação em BRL, clientes pagam com Pix; conta bancária própria no PicPay brasileiro. RRCLUBRASIL é a conta Stripe brasileira atualmente autorizada para auditoria.
+- RRClub Portugal: operação em EUR, clientes podem usar MB WAY/cartão; banco português próprio com IBAN, diferente do banco brasileiro. A conta Stripe Portugal ainda não está disponível nesta sessão para verificar e não deve ser adivinhada.
+- MB WAY é modalidade de pagamento do cliente; repasses bancários usam conta externa/IBAN cadastrado na Stripe.
+- As contas da plataforma pertencentes ao proprietário são **distintas das contas Connect de parceiros e influenciadores**. Só estas últimas devem ser vinculadas individualmente aos participantes; um e-mail compartilhado pelo proprietário entre contas suas é válido.
+- Uma conta Connect brasileira ativa anteriormente encontrada sob RRCLUBRASIL não deve ser atribuída automaticamente a Chason, Josycleide ou Paulo. Titularidade e vínculo exigem verificação explícita e metadados.
+- Nunca copiar chave da Stripe PT para BR ou vice-versa; não alterar bancos nem cadastrar contas Connect novas sem verificar existentes.
