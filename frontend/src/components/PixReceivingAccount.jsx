@@ -27,7 +27,7 @@ export default function PixReceivingAccount() {
   };
   return <section className="card-soft p-4 mb-4" data-testid="pix-receiving-account">
     <h3 className="text-sm font-semibold text-slate-900">Conta de recebimento · Brasil</h3>
-    <p className="text-xs text-slate-500 mt-1">{available === false ? "A sua conta RR Club pode ser utilizada. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : status?.payouts_enabled ? "Recebimentos habilitados na Stripe. Os depósitos seguem os prazos da conta." : "Configure a sua conta brasileira para receber os 5% das vendas Pix. A RR Club assume as taxas de processamento."}</p>
-    {!status?.payouts_enabled && <button type="button" onClick={configure} disabled={busy || !available} className="mt-3 rounded-xl bg-purple-600 text-white text-xs px-4 py-3 disabled:opacity-50">{busy ? "A abrir..." : "Configurar recebimentos"}</button>}
+    <p className="text-xs text-slate-500 mt-1">{available === false ? "A sua conta RR Club pode ser utilizada. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : status?.receiving_ready ? "Recebimentos habilitados na Stripe. Os depósitos seguem os prazos da conta." : "Configure a sua conta brasileira para receber os 5% das vendas Pix. A RR Club assume as taxas de processamento."}</p>
+    {!status?.receiving_ready && <button type="button" onClick={configure} disabled={busy || !available} className="mt-3 rounded-xl bg-purple-600 text-white text-xs px-4 py-3 disabled:opacity-50">{busy ? "A abrir..." : "Configurar recebimentos"}</button>}
   </section>;
 }

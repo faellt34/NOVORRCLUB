@@ -46,7 +46,8 @@ def env(monkeypatch):
     monkeypatch.setenv('PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION','pmc_pix_only')
     client=MagicMock()
     monkeypatch.setattr(pix.stripe,'StripeClient',Mock(return_value=client))
-    client.v1.accounts.retrieve_current.return_value={'country':'BR'}
+    client.v1.accounts.retrieve_current.return_value={'country':'BR','default_currency':'brl','charges_enabled':True,'capabilities':{'pix_payments':'active'}}
+    client.v1.payment_method_configurations.retrieve.return_value={'active':True,'livemode':False,'pix':{'available':True,'display_preference':{'value':'on'}}}
     client.v1.accounts.retrieve.return_value={'country':'BR','payouts_enabled':True,'capabilities':{'transfers':'active'}}
     client.v1.payment_intents.retrieve.return_value={'latest_charge':'ch_pix','status':'succeeded','currency':'brl','amount_received':9500}
     client.v1.transfers.create.side_effect=lambda **kw:{'id':'tr_'+kw['params']['destination']}
@@ -75,7 +76,7 @@ def test_checkout_exact_and_retry(env):
     assert 'application_fee_amount' not in args['payment_intent_data']
     assert 'transfer_data' not in args['payment_intent_data']
     assert args['payment_intent_data']['transfer_group']=='pix-'+KEY
-    pix.stripe.StripeClient.assert_called_with('sk_test_pix_br')
+    assert pix.stripe.StripeClient.call_args.args == ('sk_test_pix_br',)
     assert args['payment_method_options']['pix']['amount_includes_iof']=='always'
 def test_timeout_reuses_preinserted_intent(env):
     db,create,_=env
@@ -164,6 +165,7 @@ def test_public_cannot_create_checkout(env):
     env[1].assert_not_called()
 
 def test_other_partner_cannot_generate_or_resume(env):
+    env[0].partners.items.append({'id':'other','currency':'brl','status':'Ativo'})
     with pytest.raises(HTTPException) as e:run(pix.partner_checkout(body(),{'partner_id':'other'}))
     assert e.value.status_code==403
     run(pix.partner_checkout(body(),{'partner_id':'p'}))
