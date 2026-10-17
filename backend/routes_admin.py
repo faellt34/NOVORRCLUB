@@ -75,6 +75,16 @@ async def prepare(kind: str, data: dict, creating: bool, existing=None) -> dict:
     return data
 
 
+@router.get("/pix-br-readiness")
+async def pix_br_readiness():
+    """Read-only Pix BR diagnostics: no credentials, charges, or transfers."""
+    from pix_readiness import build_pix_br_report
+    campaigns = await db.campaigns.find({}, NO_ID).to_list(2000)
+    partners = await db.partners.find({}, NO_ID).to_list(2000)
+    influencers = await db.influencers.find({}, NO_ID).to_list(2000)
+    return build_pix_br_report(campaigns=campaigns, partners=partners, influencers=influencers)
+
+
 @router.get("/connect-audit")
 async def connect_audit():
     """Auditoria somente leitura: identifica contas Connect associadas a mais de um participante."""
