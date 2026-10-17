@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
 from storage import put_object, get_object, APP_NAME
-from payment_safety import is_payment_confirmed
+from payment_safety import is_payment_confirmed, is_legacy_eur_payment, legacy_eur_fulfilment_filter
 from campaign_guardrails import legacy_eur_checkout_allowed
 import jwt
 
@@ -99,7 +99,7 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
 
 async def fulfil(session_id: str, extra: dict):
     res = await db.payment_transactions.find_one_and_update(
-        {"session_id": session_id, "payment_status": {"$ne": "paid"}},
+        legacy_eur_fulfilment_filter(session_id),
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
         return
@@ -152,7 +152,7 @@ async def payment_status(session_id: str):
     rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
     if not rec:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
-    if rec["payment_status"] != "paid":
+    if rec["payment_status"] != "paid" and is_legacy_eur_payment(rec):
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if is_payment_confirmed(s):
@@ -160,6 +160,8 @@ async def payment_status(session_id: str):
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
+    if rec.get("kind") == "pix_br_test":
+        raise HTTPException(status_code=404, detail="Use o endpoint de status Pix do Brasil")
     out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
     if rec.get("kind") == "coupon_pay":
         out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": rec.get("customer_email"), "paid_at": rec.get("updated_at")})
