@@ -32,3 +32,17 @@
 8. Preservar integralmente o checkout EUR existente e só ativar o novo fluxo Pix em produção após testes.
 
 **Estado**: documento de especificação; código financeiro, deploy, testes e transferências de dinheiro real ainda não executados nesta branch.
+
+
+## Auditoria de integração — 17 outubro 2026 (pré-deploy)
+- A conta atualmente autorizada via Stripe nesta sessão é **RRCLUBRASIL** (live); nenhuma alteração financeira foi executada.
+- `payment_region.py` identifica BR/BRL/Pix e PT/EUR/MB WAY, mas **não estava ligada ao checkout**.
+- `stripe_platform.py` isola a chave `STRIPE_SECRET_KEY_BR` da chave `STRIPE_SECRET_KEY_PT`; exige `PIX_ENABLED=true` somente após ativação autorizada e valida regras monetárias em centavos.
+- A UI existente `AdminManage.jsx` oferece `desconto` e `comissao`, **sem campo comprovado** para a comissão separada da RRClub. O novo cálculo requer `comissao_rrclub` explícito, sem assumir números ou reutilizar um percentual como dois.
+- A UI de cadastro de parceiros e campanhas atualmente não dispõe de campo país. Os dados legados precisam ser classificados e revistos **sem inferir país pela cidade**. Novas cobranças com país indefinido ou conflitante devem falhar.
+- O onboarding `/partner/connect/onboard` existente cria conta `country='PT'` fixa. Não o reutilizar para parceiros BR. Não criar contas duplicadas; primeiro identificar contas brasileiras já existentes.
+- A geração de pagamento `/public/pay` continua em EUR e usa uma chave global; **Pix BRL não está ativo no checkout**. O webhook `/stripe/webhook` também usa segredo global e precisa de roteamento autenticado e verificação independente por conta antes de o BR estar pronto.
+- O fluxo Connect existente `payment_intent_data.transfer_data` faz transferência destinada apenas ao parceiro; `emit('split_executado', ...)` é um evento no painel, **não comprova transferência real ao influencer**. Para duas contas destinatárias, validar arquitetura `separate charges and transfers`, país, taxa, charges/transferências, idempotência, estornos e saldos com a Stripe.
+- A divisão pode ser calculada como R$100 de compra, R$5 de desconto, R$95 pago, R$10 RRClub, R$5 influencer, R$80 parceiro; taxa Stripe suportada pela RRClub. Nenhuma remuneração é repassada antes de o pagamento estar definitivamente pago.
+- **Regra do deploy**: não ativar cobrança Pix nem repasses sem conta BR verificada, comissões persistidas, webhook BR autenticado, testes de ponta a ponta em modo de teste e capacidade Connect de ambos os destinatários. Portugal deve continuar com o checkout EUR atual.
+- **Estado técnico atual**: código e testes de guarda criados; nenhuma cobrança, convite, transferência ou deploy executados nesta tarefa. Não marcar feature como concluída.
