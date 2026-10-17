@@ -70,6 +70,13 @@ async def prepare(kind: str, data: dict, creating: bool) -> dict:
     return data
 
 
+@router.get("/connect-audit")
+async def connect_audit():
+    """Auditoria somente leitura: identifica contas Connect associadas a mais de um participante."""
+    from connect_identity import collision_audit
+    return await collision_audit(db)
+
+
 @router.get("/{kind}")
 async def list_items(kind: str):
     items = await coll(kind).find({}, NO_ID).to_list(2000)
@@ -133,10 +140,3 @@ async def delete_item(kind: str, item_id: str, user: dict = Depends(require_role
     await c.delete_one({"id": item_id})
     await audit("REMOÇÃO", f"{kind} · {existing.get('nome') or existing.get('titulo') or item_id}", user, item_id)
     return {"ok": True}
-
-
-@router.get("/connect-audit")
-async def connect_audit():
-    """Auditoria somente leitura: identifica contas Connect associadas a mais de um participante."""
-    from connect_identity import collision_audit
-    return await collision_audit(db)
