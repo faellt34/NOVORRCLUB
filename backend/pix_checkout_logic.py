@@ -44,7 +44,7 @@ def belongs_to_br_test_session(session: dict, record: dict) -> bool:
 
 def sandbox_payment_intent_data(transaction_id: str) -> dict:
     """Trace charge to future reconciliation; never create a transfer in sandbox."""
-    if not isinstance(transaction_id, str) or not transaction_id.startswith("pixsandbox_") or len(transaction_id) > 120:
+    if not isinstance(transaction_id, str) or not transaction_id.startswith("pixsandbox-") or len(transaction_id) > 120:
         raise PaymentConfigurationError("Identificador de transação Pix inválido")
     return {
         "transfer_group": f"rrclub_br_test_{transaction_id}",
