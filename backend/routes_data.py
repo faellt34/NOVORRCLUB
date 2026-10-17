@@ -314,7 +314,13 @@ async def public_coupon(code: str, request: Request):
         emit("clique_cupao", cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
         emit("novo_clique", dados=dados, influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"))
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
-    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
+    from payment_region import resolve_payment_region, PaymentRegionError
+    try:
+        payment_country = resolve_payment_region(c, partner)["country"]
+    except PaymentRegionError:
+        payment_country = None
+    pix_mode = ("sandbox" if payment_country == "BR" and os.environ.get("PIX_SANDBOX_ENABLED", "false").lower() == "true" else "disabled")
+    return {"pais": payment_country, "pix_mode": pix_mode, "cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id}
 
