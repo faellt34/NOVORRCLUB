@@ -13,11 +13,22 @@ WEBHOOK_EVENTS = frozenset({
 })
 
 
+def payout_schedule(account):
+    """Accounts v1 is deliberately retained for the existing Stripe SDK.
+
+    Brazil uses automatic daily payouts. Missing settings mean unverified,
+    never proof that money will automatically reach the bank.
+    """
+    return (((account.get('settings') or {}).get('payouts') or {}).get('schedule') or {}).get('interval')
+
+
 def platform_checks(account):
     return {
         'platform_country_br': account.get('country') == 'BR',
         'platform_currency_brl': account.get('default_currency') == 'brl',
         'platform_charges_enabled': account.get('charges_enabled') is True,
+        'platform_payouts_enabled': account.get('payouts_enabled') is True,
+        'platform_automatic_payouts': payout_schedule(account) == 'daily',
         'platform_pix_active': (account.get('capabilities') or {}).get('pix_payments') == 'active',
     }
 
@@ -39,12 +50,15 @@ def receiving_status(account, entity):
     if account.get('country') != 'BR':
         raise HTTPException(409, 'A conta de recebimento deste fluxo deve estar domiciliada no Brasil.')
     transfers = (account.get('capabilities') or {}).get('transfers') == 'active'
+    interval = payout_schedule(account)
     return {
         'connected': True, 'status_verified': True, 'country': 'BR',
         'charges_enabled': bool(account.get('charges_enabled')),
         'payouts_enabled': bool(account.get('payouts_enabled')),
         'transfers_enabled': transfers,
-        'receiving_ready': transfers and bool(account.get('payouts_enabled')),
+        'automatic_payouts': interval == 'daily',
+        'payout_interval': interval,
+        'receiving_ready': transfers and bool(account.get('payouts_enabled')) and interval == 'daily',
         'details_submitted': bool(account.get('details_submitted')),
     }
 

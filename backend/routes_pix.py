@@ -100,7 +100,7 @@ async def provider_readiness(user: dict = Depends(require_role('admin'))):
 async def verify_accounts(partner, influencer):
     platform=await provider('accounts.retrieve_current')
     if not all(platform_checks(platform).values()):
-        raise HTTPException(409,'Este fluxo de divisão Pix exige plataforma brasileira com BRL, cobranças e Pix habilitados')
+        raise HTTPException(409,'Configure a plataforma brasileira com BRL, Pix, cobranças e depósitos bancários automáticos habilitados')
     config=await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
     if not all(configuration_checks(config).values()):
         raise HTTPException(409,'Configure um checkout ativo exclusivamente para Pix antes de cobrar')
@@ -115,7 +115,7 @@ async def verify_accounts(partner, influencer):
             raise HTTPException(409,'Parceiro e influencer devem concluir recebimentos Stripe Connect Brasil')
         info=await provider('accounts.retrieve',account)
         if not receiving_status(info, entity)['receiving_ready']:
-            raise HTTPException(409,'Conta de destinatário brasileira ainda não habilitada para transferências')
+            raise HTTPException(409,'Destinatário brasileiro precisa de transferências e depósitos bancários automáticos habilitados')
 
 
 def totals(amount, discount, commission):
@@ -382,6 +382,13 @@ async def status(identifier: str):
             await settle(tx,obj)
         except stripe.error.StripeError:
             raise HTTPException(502,'Não foi possível confirmar o Pix; tente novamente')
+        except HTTPException as error:
+            # Settlement stores payment confirmation before attempting transfers.
+            # A temporary transfer outage must not tell a paid customer to pay again.
+            latest = await db.payment_transactions.find_one(query, NO_ID)
+            if error.status_code not in (502, 503) or not latest or latest.get('payment_status') != 'paid':
+                raise
+            return public(latest)
         tx=await db.payment_transactions.find_one(query,NO_ID)
     return public(tx)
 

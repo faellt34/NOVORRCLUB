@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
@@ -13,6 +12,7 @@ import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { StatusBadge } from "../components/KpiCard";
+import { PixBillStatus } from "../components/PixBillStatus";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -228,11 +228,7 @@ export default function PartnerDashboard() {
             </button>
           </form>
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
-            <p className="font-semibold text-purple-900">Cobrança Pix · {moneyIn(pixBill.amount, "brl")}</p>
-            <p className="text-xs text-slate-600 my-2">Peça ao cliente para abrir esta cobrança e pagar no checkout seguro.</p>
-            <div className="bg-white p-3 rounded-xl inline-block"><QRCodeSVG value={pixBill.customer_url || `${window.location.origin}/c/${encodeURIComponent(code.toUpperCase())}?pix_request_id=${pixBill.request_id}`} size={160} /></div>
-            <p className="text-xs text-purple-800 my-2">Aguardando pagamento. Gerar a cobrança não confirma a venda.</p>
-            <a className="text-sm underline text-purple-700 block" href={pixBill.customer_url || pixBill.checkout_url} target="_blank" rel="noreferrer">Abrir cobrança do cliente</a>
+            <PixBillStatus bill={pixBill} onPaid={() => { load(); refreshUnread(); }} />
             <button type="button" className="text-xs text-purple-700 underline mt-3" onClick={() => { setPixBill(null); setIdemKey(newKey()); }}>Preparar outra conta</button>
           </div>}
           {lastReceipt && (

@@ -46,9 +46,9 @@ def env(monkeypatch):
     monkeypatch.setenv('PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION','pmc_pix_only')
     client=MagicMock()
     monkeypatch.setattr(pix.stripe,'StripeClient',Mock(return_value=client))
-    client.v1.accounts.retrieve_current.return_value={'country':'BR','default_currency':'brl','charges_enabled':True,'capabilities':{'pix_payments':'active'}}
+    client.v1.accounts.retrieve_current.return_value={'country':'BR','default_currency':'brl','charges_enabled':True,'payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'pix_payments':'active'}}
     client.v1.payment_method_configurations.retrieve.return_value={'active':True,'livemode':False,'pix':{'available':True,'display_preference':{'value':'on'}}}
-    client.v1.accounts.retrieve.return_value={'country':'BR','payouts_enabled':True,'capabilities':{'transfers':'active'}}
+    client.v1.accounts.retrieve.return_value={'country':'BR','payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'transfers':'active'}}
     client.v1.payment_intents.retrieve.return_value={'latest_charge':'ch_pix','status':'succeeded','currency':'brl','amount_received':9500}
     client.v1.transfers.create.side_effect=lambda **kw:{'id':'tr_'+kw['params']['destination']}
     client.v1.transfers.retrieve.return_value={'amount_reversed':0}

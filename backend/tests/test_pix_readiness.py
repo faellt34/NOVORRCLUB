@@ -44,7 +44,7 @@ def test_diagnostic_explains_actual_blockers(env, change):
 
 def test_transfer_readiness_does_not_require_merchant_card_capability():
     status = receiving_status({'country':'BR','charges_enabled':False,'payouts_enabled':True,
-        'capabilities':{'transfers':'active'},'metadata':{'partner_id':'p'}}, {'id':'p'})
+        'capabilities':{'transfers':'active'},'settings':{'payouts':{'schedule':{'interval':'daily'}}},'metadata':{'partner_id':'p'}}, {'id':'p'})
     assert status['receiving_ready'] and not status['charges_enabled']
 
 
@@ -81,3 +81,56 @@ def test_provider_timeout_keeps_stored_recipient_state(env, monkeypatch):
     env[0].partners.items[0]['pix_stripe_payouts_enabled'] = True
     with pytest.raises(HTTPException): run(pix.connect_status({'partner_id':'p'}))
     assert env[0].partners.items[0]['pix_stripe_payouts_enabled'] is True
+
+
+@pytest.mark.parametrize('recipient', ['platform', 'partner', 'influencer'])
+@pytest.mark.parametrize('interval', ['manual', None])
+def test_bank_automation_required_before_charging(env, recipient, interval):
+    client = pix.stripe_client().v1
+    if recipient == 'platform':
+        account = client.accounts.retrieve_current.return_value
+    else:
+        from copy import deepcopy
+        accounts = {'acct': deepcopy(client.accounts.retrieve.return_value),
+                    'acct_inf': deepcopy(client.accounts.retrieve.return_value)}
+        account = accounts['acct' if recipient == 'partner' else 'acct_inf']
+        client.accounts.retrieve.side_effect = lambda identifier, **kw: accounts[identifier]
+    account['settings']['payouts']['schedule']['interval'] = interval
+    with pytest.raises(HTTPException):
+        run(pix.partner_checkout(body(), {'partner_id': 'p'}))
+    env[1].assert_not_called()
+    assert not env[0].payment_transactions.items
+
+
+def test_platform_bank_payouts_disabled_blocks_new_charges(env):
+    pix.stripe_client().v1.accounts.retrieve_current.return_value['payouts_enabled'] = False
+    with pytest.raises(HTTPException):
+        run(pix.partner_checkout(body(), {'partner_id': 'p'}))
+    env[1].assert_not_called()
+
+
+def test_paid_customer_stays_confirmed_when_second_transfer_times_out(env):
+    db, _, _ = env
+    run(pix.partner_checkout(body(), {'partner_id': 'p'}))
+    client = pix.stripe_client().v1
+    client.checkout.sessions.retrieve.return_value = paid()
+    client.transfers.create.side_effect = [{'id': 'tr_partner'}, pix.stripe.error.APIConnectionError('timeout')]
+    first = run(pix.status(db.payment_transactions.items[0]['request_id']))
+    assert first['payment_status'] == 'paid' and first['split_status'] == 'pending'
+    assert first['partner_transfer_id'] == 'tr_partner'
+    client.transfers.create.side_effect = None
+    client.transfers.create.return_value = {'id': 'tr_influencer'}
+    second = run(pix.status(first['request_id']))
+    assert second['payment_status'] == 'paid' and second['split_status'] == 'completed'
+    assert client.transfers.create.call_count == 3
+    assert len(db.redemptions.items) == 1
+    assert env[1].call_count == 1
+
+
+def test_unconfirmed_customer_is_not_marked_paid_on_provider_outage(env):
+    run(pix.partner_checkout(body(), {'partner_id': 'p'}))
+    pix.stripe_client().v1.checkout.sessions.retrieve.side_effect = pix.stripe.error.APIConnectionError('timeout')
+    with pytest.raises(HTTPException) as error:
+        run(pix.status(env[0].payment_transactions.items[0]['request_id']))
+    assert error.value.status_code == 502
+    assert env[0].payment_transactions.items[0]['payment_status'] == 'pending'
