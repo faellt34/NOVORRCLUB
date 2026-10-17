@@ -22,14 +22,14 @@ export default function PublicCoupon() {
   const pixTest = br && c?.pix_mode === "sandbox";
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !c) return;
     let n = 0;
     const tick = async () => {
-      try { const { data } = await api.get(`/payments/status/${sessionId}`); if (data.payment_status === "paid") { setPaid(data); return; } if (["failed", "expired"].includes(data.payment_status)) { setPaid({ failed: true }); return; } } catch {}
+      try { const { data } = await api.get(c.pais === "BR" ? `/pix/br/test/status/${sessionId}` : `/payments/status/${sessionId}`); if (data.payment_status === "paid") { setPaid(data); return; } if (["failed", "expired"].includes(data.payment_status)) { setPaid({ failed: true }); return; } } catch {}
       if (++n < 10) setTimeout(tick, 2000); else setPaid({ pending: true });
     };
     tick();
-  }, [sessionId]);
+  }, [sessionId, c]);
 
   const pay = async () => {
     const v = parseFloat(String(amount).replace(",", "."));
@@ -112,7 +112,7 @@ export default function PublicCoupon() {
                 {active && paid?.payment_status === "paid" && (
                   <div data-testid="public-pay-success" className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-center">
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1" />
-                    <p className="text-sm font-bold text-emerald-800">Pagamento confirmado · {money(paid.amount)}</p>
+                    <p className="text-sm font-bold text-emerald-800">{br ? "Pix de teste confirmado · sem repasses" : `Pagamento confirmado · ${money(paid.amount)}`}</p>
                     <div data-testid="public-receipt" className="mt-2 text-left text-xs text-emerald-900 bg-white/70 rounded-xl p-3 space-y-0.5">
                       <p className="font-semibold uppercase tracking-wider text-[10px] text-emerald-700">Recibo</p>
                       <p>Conta: <b>{money(paid.gross_amount)}</b></p>
@@ -121,7 +121,7 @@ export default function PublicCoupon() {
                       {paid.customer_email && <p className="text-emerald-700">{paid.receipt_emailed ? `Recibo enviado para ${paid.customer_email}` : `Recibo disponível neste ecrã (${paid.customer_email})`}</p>}
                     </div>
                     <button data-testid="public-receipt-print" onClick={() => window.print()} className="mt-2 text-xs font-semibold text-emerald-700 underline">Guardar / imprimir recibo</button>
-                    <p className="text-xs text-emerald-700 mt-1">Mostre este ecrã ao staff de {c.parceiro}. A redenção já ficou registada.</p>
+                    <p className="text-xs text-emerald-700 mt-1">{br ? "Ambiente de teste: não é comprovativo de pagamento ou desconto real." : `Mostre este ecrã ao staff de ${c.parceiro}. A redenção já ficou registada.`}</p>
                   </div>
                 )}
                 {active && paid?.failed && <p data-testid="public-pay-failed" className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">O pagamento não foi concluído. Pode tentar novamente.</p>}
