@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from core import db, NO_ID, require_role, audit, notify, admin_ids, new_id, now_iso, hash_password, public_user
+from campaign_guardrails import validate_admin_payment_fields
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_role("admin"))])
 
@@ -46,8 +47,12 @@ async def resolve_campaign(data: dict) -> dict:
     return data
 
 
-async def prepare(kind: str, data: dict, creating: bool) -> dict:
+async def prepare(kind: str, data: dict, creating: bool, existing=None) -> dict:
     data = {k: v for k, v in data.items() if k not in ("id", "_id", "password_hash")}
+    try:
+        data = validate_admin_payment_fields(kind, data, creating, existing)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if kind == "campanhas":
         data = await resolve_campaign(data)
     if kind == "ebooks":
@@ -118,7 +123,7 @@ async def update_item(kind: str, item_id: str, data: dict, user: dict = Depends(
     existing = await c.find_one({"id": item_id}, NO_ID)
     if not existing:
         raise HTTPException(status_code=404, detail="Registo não encontrado")
-    data = await prepare(kind, data, False)
+    data = await prepare(kind, data, False, existing)
     await c.update_one({"id": item_id}, {"$set": data})
     doc = await c.find_one({"id": item_id}, NO_ID)
     if kind in ("parceiros", "influencers") and "status" in data and doc.get("user_id"):
