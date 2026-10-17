@@ -32,3 +32,29 @@ Preservar original R$100 → cobrança R$95 → parceiro R$80, influenciador R$5
 Não fazer transferências manuais sobre vendas já divididas automaticamente.
 Entregar conciliação privada, revisão carregada no servidor, diagnósticos, homologação e pendências.
 Este documento não configura o servidor nem comprova funcionamento ponta a ponta. Nenhum código foi alterado por este registro.
+
+## Atualização autorizada — produção brasileira, 17/10/2026, 20:26 Lisboa
+
+O proprietário autorizou explicitamente a publicação destes novos resultados
+na conversa, após ser informado de que o repositório é público.
+Esta seção substitui a limitação de acesso anterior. RRCLUBRASIL de produção
+agora está acessível em leitura; as observações anteriores sobre teste são históricas.
+
+Consultas GET completas (has_more=false):
+- Pix disponível e ligado nas duas configurações da produção brasileira.
+- Ambas também oferecem outros meios; nenhuma satisfaz Pix exclusivo exigido pelo código.
+- Nenhum webhook cadastrado nesta conta de produção.
+- Duas contas conectadas: uma com transferências ativas e depósitos habilitados;
+  outra com transferências inativas, depósitos desabilitados e cadastro pendente.
+- Ambas sem metadata.partner_id. A associação aos parceiros e influenciadores
+  do site precisa ser comprovada no painel administrativo/banco publicado.
+- Um cadastro na lista Customers; cadastro de cliente não comprova habilitação
+  como destinatário de repasses.
+
+Falta preparar configuração exclusiva de Pix e webhook dedicado
+/api/stripe/pix/webhook, gravar os segredos diretamente no servidor, conciliar
+destinatários e executar os diagnósticos administrativos e homologação.
+A conexão atual é de leitura; mudanças exigem permissões específicas de escrita.
+Não criar destinatários nem associar contas por suposição.
+Não habilitar cobranças antes da conclusão dos requisitos.
+Nenhuma configuração Stripe foi alterada e nenhuma transferência foi executada.
