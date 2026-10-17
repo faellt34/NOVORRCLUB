@@ -303,3 +303,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Novo: partner_access.py, POST /api/admin/parceiros/{id}/conta (associação explícita), AdminManage "Associar conta", guardas IBAN/Connect status, isolamento de cupões. stripe==14.4.1 e PIX_ENABLED=false preservados. 35 testes passam (mongomock-motor instalado só localmente, dev-only).
 - Validado: dialog renderiza; 200 associação válida; 409 conta já ligada; 404 ids inexistentes.
 - ATENÇÃO caso Paulo→Maraca: o registo de parceiro cria automaticamente um estabelecimento próprio, logo a conta do Paulo já terá partner_id → 409. Mesmo apagando esse estabelecimento, o partner_id pendurado continua a bloquear (código verifica account.partner_id != partner_id). Resolver na branch (permitir reparar quando o partner_id apontar a estabelecimento inexistente) ou limpar partner_id do utilizador antes. NÃO publicado — o CEO republica.
+
+## 2026-10-17 — Reparação de associações (commit local 417dc09)
+- Dados prod: Paulo (usr-3e1a1334e5) currency ausente → brl. Maraca (p-91136424bc) intacto (brl, IBAN BR…, sem user_id). Associação Paulo→Maraca fica desbloqueada; CEO faz após republicar.
+- Código routes_admin.associate_partner_account: partner_id/user_id pendurados (alvo inexistente) são reparáveis e auditados; associações válidas e moedas explícitas diferentes continuam a bloquear (409); moeda ausente herda a do estabelecimento (auditado); rollback do estabelecimento em falha. 69 testes offline passam (sem custos externos). PIX_ENABLED=false mantido.
+- Push para GitHub: via botão "Save to Github" (agente não faz push).
+- Lembrete CEO: operação no Brasil → Pix pagamentos/recebimentos será necessário (PIX_ENABLED=true + PIX_STRIPE_SECRET_KEY etc., ver docs/PIX_SETUP.md).
