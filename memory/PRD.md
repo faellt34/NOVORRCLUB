@@ -313,3 +313,7 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## 2026-10-17 — Carregado codex/pix-brasil-readiness @ 9c0137f (fast-forward, 0 alterações locais pendentes)
 - Inclui 417dc09 e 8d4275b. +PixBillStatus, PixReadiness, test_payment_confirmation, test_pix_readiness, docs PIX_BRASIL_*. stripe==14.4.1 e PIX_ENABLED=false mantidos; availability enabled=false. 73 testes offline passam; frontend compila. Republicar a pedido do CEO.
 - 2026-10-17 15:02 UTC PROD: Paulo (usr-3e1a1334e5) associado ao Maraca (p-91136424bc) via POST /admin/parceiros/{id}/conta → 200, reparacoes=[], audit a-cd66bbf942. IBAN e Stripe do Maraca intactos. Idempotente (2ª chamada 200).
+
+## 2026-10-17 — Guia PIX_BRASIL_CONFIGURACAO_EMERGENT executado (merge 50028e8 inclui 31d713e; 0 alterações locais perdidas)
+- readiness prod: configured=false; faltam api_key, platform_country_br, webhook, payment_method_configuration; allowed_origins ok. provider-readiness: provider_verified=false, checks vazios (sem chave BR). Secrets presentes: PIX_ENABLED, FRONTEND_URL, CORS_ORIGINS, STRIPE_*; ausentes: PIX_STRIPE_SECRET_KEY, PIX_STRIPE_PLATFORM_COUNTRY, PIX_STRIPE_WEBHOOK_SECRET, PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION, PAYMENT_ALLOWED_ORIGINS.
+- Paulo→Maraca: associado, brl ambos, pix_stripe_account_id=None (onboarding BR pendente, exige chave BR). 78 testes offline passam. Sem deploy, sem cobranças, sem IA paga.
