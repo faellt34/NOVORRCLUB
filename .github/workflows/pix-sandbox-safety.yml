@@ -36,4 +36,4 @@ jobs:
           node -e "const fs=require('fs'); const p=require('/tmp/rrclub-jsparse/node_modules/@babel/parser'); p.parse(fs.readFileSync('frontend/src/pages/AdminManage.jsx','utf8'),{sourceType:'module',plugins:['jsx']}); console.log('Admin JSX syntax OK')"
       - name: Test payment safety without money movement
         run: |
-          python -m pytest -q             backend/tests/test_payment_regions.py             backend/tests/test_stripe_platform.py             backend/tests/test_connect_identity.py             backend/tests/test_pix_split.py             backend/tests/test_pix_checkout_logic.py backend/tests/test_campaign_guardrails.py
+          python -m pytest -q             backend/tests/test_payment_regions.py             backend/tests/test_stripe_platform.py             backend/tests/test_connect_identity.py             backend/tests/test_pix_split.py             backend/tests/test_pix_checkout_logic.py backend/tests/test_campaign_guardrails.py backend/tests/test_legacy_payment_isolation.py
