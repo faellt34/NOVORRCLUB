@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
 from storage import put_object, get_object, APP_NAME
 from payment_safety import is_payment_confirmed
+from campaign_guardrails import legacy_eur_checkout_allowed
 import jwt
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY") or "sk_test_emergent"
@@ -267,6 +268,8 @@ async def public_pay(body: PublicPayIn):
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    if not legacy_eur_checkout_allowed(c, partner):
+        raise HTTPException(status_code=409, detail="Campanha brasileira ou de país divergente: não pode utilizar o checkout em euros")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
     base = dict(
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
