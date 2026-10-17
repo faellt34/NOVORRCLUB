@@ -11,7 +11,7 @@ from typing import Optional
 
 from core import db, NO_ID, new_id, now_iso
 from stripe_platform import stripe_config, amount_cents, split_snapshot, PaymentConfigurationError
-from pix_checkout_logic import require_sandbox_pix, frontend_return_urls, belongs_to_br_test_session
+from pix_checkout_logic import require_sandbox_pix, frontend_return_urls, belongs_to_br_test_session, sandbox_payment_intent_data
 from payment_safety import is_payment_confirmed
 
 router = APIRouter(prefix="/pix/br/test", tags=["Pix Brasil sandbox"])
@@ -71,8 +71,7 @@ async def create_sandbox_checkout(body: SandboxPixIn):
         "success_url": success_url, "cancel_url": cancel_url,
         "metadata": {"kind": "pix_br_test", "country": "BR",
                      "transaction_id": transaction_id, "campaign_id": campaign["id"]},
-        "payment_intent_data": {"metadata": {"kind": "pix_br_test", "country": "BR",
-                                             "transaction_id": transaction_id}},
+        "payment_intent_data": sandbox_payment_intent_data(transaction_id),
     }
     if body.email:
         session_args["customer_email"] = body.email.strip().lower()
