@@ -298,3 +298,8 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Fast-forward limpo (HEAD local fb7ae71 era o pai; sem alterações locais por guardar). +routes_pix.py, payment_policy.py, story_jobs.py, docs/PIX_*.md, componentes Pix, testes.
 - PIX_ENABLED=false adicionado ao backend/.env; config PT intacta; /public/pix/availability → enabled=false.
 - IMPEDIMENTO resolvido: branch fixava stripe==15.6.0, incompatível com emergentintegrations (<15) → pip falharia em prod. Mantido stripe==14.4.1 (routes_pix usa StripeClient.v1, compatível). 49 testes Pix/policy/story passam. Deploy enviado.
+
+## 2026-10-17 — Integrado codex/partner-flow-repairs @ 8d4275b (merge d5368e4, 0 conflitos)
+- Novo: partner_access.py, POST /api/admin/parceiros/{id}/conta (associação explícita), AdminManage "Associar conta", guardas IBAN/Connect status, isolamento de cupões. stripe==14.4.1 e PIX_ENABLED=false preservados. 35 testes passam (mongomock-motor instalado só localmente, dev-only).
+- Validado: dialog renderiza; 200 associação válida; 409 conta já ligada; 404 ids inexistentes.
+- ATENÇÃO caso Paulo→Maraca: o registo de parceiro cria automaticamente um estabelecimento próprio, logo a conta do Paulo já terá partner_id → 409. Mesmo apagando esse estabelecimento, o partner_id pendurado continua a bloquear (código verifica account.partner_id != partner_id). Resolver na branch (permitir reparar quando o partner_id apontar a estabelecimento inexistente) ou limpar partner_id do utilizador antes. NÃO publicado — o CEO republica.
