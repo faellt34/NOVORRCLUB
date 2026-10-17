@@ -46,8 +46,12 @@ def test_explicit_association_preserves_financial_settings_and_is_idempotent(db)
 def test_association_rejects_ambiguous_or_owned_records(db, conflict):
     async def scenario():
         await records(db)
-        if conflict == 'owner': await db.partners.update_one({'id': 'p'}, {'$set': {'user_id': 'other'}})
-        if conflict == 'account': await db.users.update_one({'id': 'u'}, {'$set': {'partner_id': 'other'}})
+        if conflict == 'owner':
+            await db.users.insert_one({'id': 'other', 'role': 'partner'})
+            await db.partners.update_one({'id': 'p'}, {'$set': {'user_id': 'other'}})
+        if conflict == 'account':
+            await db.partners.insert_one({'id': 'other', 'nome': 'Outro', 'status': 'Ativo'})
+            await db.users.update_one({'id': 'u'}, {'$set': {'partner_id': 'other'}})
         if conflict == 'role': await db.users.update_one({'id': 'u'}, {'$set': {'role': 'admin'}})
         if conflict == 'currency': await db.users.update_one({'id': 'u'}, {'$set': {'currency': 'brl'}})
         if conflict == 'other_user': await db.users.insert_one({'id': 'other', 'partner_id': 'p'})
