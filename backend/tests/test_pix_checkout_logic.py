@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pix_checkout_logic import require_sandbox_pix, frontend_return_urls, belongs_to_br_test_session
+from pix_checkout_logic import require_sandbox_pix, frontend_return_urls, belongs_to_br_test_session, sandbox_payment_intent_data
 from stripe_platform import PaymentConfigurationError
 
 
@@ -44,3 +44,17 @@ def test_webhook_rejects_wrong_amount_account_or_transaction():
     assert not belongs_to_br_test_session({**session, "livemode": True}, record)
     assert not belongs_to_br_test_session({**session, "amount_total": 9600}, record)
     assert not belongs_to_br_test_session({**session, "metadata": {**session["metadata"], "transaction_id": "tx_other"}}, record)
+
+
+def test_transfer_group_from_transaction():
+    data = sandbox_payment_intent_data("pixsandbox-abc123")
+    assert data["transfer_group"] == "rrclub_br_test_pixsandbox-abc123"
+    assert data["metadata"]["transaction_id"] == "pixsandbox-abc123"
+    assert "transfer_data" not in data
+    assert "application_fee_amount" not in data
+
+
+@pytest.mark.parametrize("bad_id", ["pixsandbox_abc123", "tx_abc123", "", None])
+def test_bad_transfer_group_id_rejected(bad_id):
+    with pytest.raises(PaymentConfigurationError):
+        sandbox_payment_intent_data(bad_id)
