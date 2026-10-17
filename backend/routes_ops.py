@@ -322,21 +322,7 @@ class ResetIn2(BaseModel):
 
 @router.post("/admin/reset-pilot")
 async def reset_pilot(body: ResetIn2, user: dict = Depends(require_role("admin"))):
-    if os.environ.get("ALLOW_PILOT_RESET", "false").lower() != "true":
-        raise HTTPException(status_code=403, detail="Reset desativado em produção. O piloto já foi zerado.")
-    if body.confirm != "ZERAR":
-        raise HTTPException(status_code=400, detail="Escreva ZERAR para confirmar")
-    keep_ids = [user["id"]]
-    owner = await db.users.find_one({"email": os.environ["ADMIN_EMAIL"].lower()}, NO_ID)
-    if owner:
-        keep_ids.append(owner["id"])
-    for c in ("redemptions", "coupon_claims", "leads", "messages", "conversations", "notifications", "feedback", "payouts", "payment_transactions", "entitlements", "subscriptions", "password_reset_tokens", "login_attempts", "campaigns", "partners", "influencers"):
-        await db[c].delete_many({})
-    await db.users.delete_many({"id": {"$nin": keep_ids}})
-    await db.audit_log.delete_many({})
-    await db.settings.update_one({"id": "pilot"}, {"$set": {"id": "pilot", "demo_disabled": True, "reset_at": now_iso(), "by": user["nome"]}}, upsert=True)
-    await audit("SISTEMA", f"Dados piloto zerados por {user['nome']} — plataforma pronta para produção", user, "pilot")
-    return {"ok": True, "kept_admins": len(keep_ids)}
+    raise HTTPException(status_code=403, detail="Reset piloto desativado para preservar parceiros e dados.")
 
 
 class PlatformIbanIn(BaseModel):
