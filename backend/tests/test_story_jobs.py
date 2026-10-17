@@ -86,3 +86,20 @@ def test_story_route_does_not_render_another_influencers_campaign(monkeypatch):
     else:
         raise AssertionError('foreign campaign should not render')
     assert lookup.call_args.args[0]['influencer_id'] == 'i'
+
+
+def test_missing_optional_font_still_draws_portuguese_text():
+    import story_video
+    from PIL import Image, ImageDraw
+    font = story_video._font('/definitely-missing/font.ttf', 30)
+    image = Image.new('RGB', (300, 80))
+    ImageDraw.Draw(image).text((5, 5), 'João · experiência', font=font, fill='white')
+    assert image.getbbox() is not None
+
+
+def test_bundled_fonts_are_readable():
+    import story_video
+    from PIL import ImageFont
+    for name in ('LiberationSans-Bold.ttf', 'LiberationSans-Regular.ttf'):
+        font = ImageFont.truetype(str(story_video._FONTS_DIR / name), 24)
+        assert font.getbbox('Experiência')[2] > 0

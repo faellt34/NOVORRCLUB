@@ -110,7 +110,7 @@ async def diagnosticar_sistema(**_):
     pipeline = [{"$match": {"timestamp": {"$gte": h24}}}, {"$group": {"_id": "$caminho", "n": {"$sum": 1}, "p_ms": {"$avg": "$duracao_ms"}, "max_ms": {"$max": "$duracao_ms"}}}, {"$sort": {"p_ms": -1}}, {"$limit": 8}]
     rotas_lentas = [{"rota": r["_id"], "pedidos": r["n"], "media_ms": round(r["p_ms"]), "max_ms": r["max_ms"], "esperado": r["_id"].startswith(ROTAS_IA)} async for r in db.request_metrics.aggregate(pipeline)]
     aviso_por_status = {str(a["_id"]): a["n"] async for a in db.system_logs.aggregate([{"$match": {"nivel": "warn", "timestamp": {"$gte": h24}}}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}])}
-    parts = await db.partners.find({}, {"_id": 0, "id": 1, "nome": 1, "status": 1, "stripe_account_id": 1, "stripe_charges_enabled": 1}).to_list(500)
+    parts = await db.partners.find({}, {"_id": 0, "id": 1, "nome": 1, "status": 1, "stripe_account_id": 1, "stripe_charges_enabled": 1, "stripe_payouts_enabled": 1, "stripe_status_synced_at": 1, "currency": 1, "pix_stripe_account_id": 1, "pix_stripe_charges_enabled": 1, "pix_stripe_payouts_enabled": 1}).to_list(500)
     hoje = datetime.now(timezone.utc).date().isoformat()
     em7 = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
     camps = await db.campaigns.find({"status": "Ativa"}, {"_id": 0, "id": 1, "nome": 1, "validade": 1}).to_list(1000)
@@ -119,13 +119,16 @@ async def diagnosticar_sistema(**_):
     git_ok = shutil.which("git") is not None
     return {"janela": "24h", "arranque_do_servidor": ARRANQUE,
             "saude": {"pedidos_api": reqs, "erros_500_24h": erros, "erros_500_desde_deploy_atual": erros_atuais, "erros_500": erros_atuais,
-                      "nota_erros": "erros anteriores ao arranque do servidor atual pertencem à versão antiga e já foram corrigidos no deploy; só 'erros_500_desde_deploy_atual' são problemas reais em aberto" if erros and not erros_atuais else None,
+                      "nota_erros": "Existem erros anteriores ao arranque atual. A ausência de novos erros não comprova a correção; compare versões e execute testes de regressão." if erros and not erros_atuais else None,
                       "avisos_4xx": avisos, "avisos_4xx_por_status": aviso_por_status, "pedidos_lentos_1500ms": lentos, "rotas_mais_lentas": rotas_lentas,
                       "nota_lentidao": "rotas marcadas esperado=true são chamadas a modelos de IA (3-15s é normal); não são problemas de performance",
                       "ultimo_erro_500": ultimo_erro, "motor_patches": "git" if git_ok else "interno (Python, sem dependência de git — funcional)"},
             "stripe": {"modo": os.environ.get("STRIPE_MODE", "?"), "hoteis_ativos": sum(1 for p in parts if p.get("status") == "Ativo"),
-                       "hoteis_sem_connect": [p["nome"] for p in parts if p.get("status") == "Ativo" and not p.get("stripe_account_id")],
-                       "hoteis_connect_incompleto": [p["nome"] for p in parts if p.get("stripe_account_id") and not p.get("stripe_charges_enabled")], "ultimo_pagamento": (ultimo_webhook or {}).get("created_at")},
+                       "fonte_estado": "Base local; estes indicadores não substituem uma consulta atual ao Stripe.",
+                       "hoteis_sem_connect": [p["nome"] for p in parts if p.get("status") == "Ativo" and not p.get("pix_stripe_account_id" if p.get("currency") == "brl" else "stripe_account_id")],
+                       "connect_por_estabelecimento": [{"id": p["id"], "nome": p["nome"], "currency": p.get("currency", "eur"), "account_id": p.get("pix_stripe_account_id" if p.get("currency") == "brl" else "stripe_account_id"), "charges_enabled_cached": p.get("pix_stripe_charges_enabled" if p.get("currency") == "brl" else "stripe_charges_enabled"), "ultima_consulta_confirmada": p.get("stripe_status_synced_at") if p.get("currency", "eur") == "eur" else None, "fonte": "cache_local"} for p in parts],
+                       "hoteis_connect_incompleto": [p["nome"] for p in parts if p.get("stripe_account_id") and p.get("stripe_charges_enabled") is False],
+                       "hoteis_connect_por_verificar": [p["nome"] for p in parts if p.get("stripe_account_id") and not p.get("stripe_status_synced_at")], "ultimo_pagamento": (ultimo_webhook or {}).get("created_at")},
             "operacao": {"parceiros_pendentes": [p["nome"] for p in parts if p.get("status") == "Pendente"], "campanhas_expiradas_ainda_ativas": [c["nome"] for c in camps if (c.get("validade") or "9999") < hoje],
                          "campanhas_a_expirar_7d": [c["nome"] for c in camps if hoje <= (c.get("validade") or "9999") <= em7], "acoes_pendentes_ceo": await db.acoes_pendentes.count_documents({"status": "pendente"})}}
 

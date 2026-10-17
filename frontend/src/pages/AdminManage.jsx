@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, FileUp, FileCheck2, QrCode } from "lucide-react";
+import { Plus, Pencil, Trash2, Link2, FileUp, FileCheck2, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { StatusBadge } from "../components/KpiCard";
@@ -83,6 +83,9 @@ export default function AdminManage() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(null);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [linkTarget, setLinkTarget] = useState(null);
+  const [linkUser, setLinkUser] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
 
   const uploadPdf = async (item, file) => {
     if (!file) return;
@@ -125,6 +128,21 @@ export default function AdminManage() {
     if (!window.confirm(`Remover "${item.nome || item.titulo}"? Esta ação fica no audit log.`)) return;
     try { await api.delete(`/admin/${tab}/${item.id}`); toast.success(`${item.nome || item.titulo} removido`); load(tab); }
     catch (err) { toast.error(apiError(err)); }
+  };
+
+  const openAssociation = (partner) => {
+    setLinkTarget(partner); setLinkUser(partner.user_id || ""); load("usuarios");
+  };
+  const associateAccount = async (event) => {
+    event.preventDefault();
+    if (!linkUser) return;
+    setLinkBusy(true);
+    try {
+      await api.post(`/admin/parceiros/${linkTarget.id}/conta`, { user_id: linkUser });
+      toast.success("Conta associada ao estabelecimento. O parceiro pode atualizar a página.");
+      setLinkTarget(null); load("parceiros"); load("usuarios");
+    } catch (error) { toast.error(apiError(error)); }
+    finally { setLinkBusy(false); }
   };
 
   const cell = (f, item) => {
@@ -175,6 +193,7 @@ export default function AdminManage() {
                         <tr key={item.id} data-testid={`row-${item.id}`} className="border-b border-slate-50 last:border-0 hover:bg-purple-50/40 transition-colors">
                           {cols.map((f) => <td key={f.key} className="py-3 pr-4">{cell(f, item)}</td>)}
                           <td className="py-3 text-right whitespace-nowrap">
+                            {key === "parceiros" && <button data-testid={`associate-${item.id}`} onClick={() => openAssociation(item)} className="inline-flex items-center gap-1 px-2 py-2 rounded-lg text-purple-700 hover:bg-purple-50 text-xs"><Link2 className="w-4 h-4" />{item.user_id ? "Ver associação" : "Associar conta"}</button>}
                             {key === "ebooks" && (
                               <label data-testid={`upload-pdf-${item.id}`} title={item.pdf_name ? `PDF: ${item.pdf_name}` : "Carregar PDF"} className={`inline-flex p-2 rounded-lg cursor-pointer btn-press ${item.pdf_path || item.pdf_name ? "text-emerald-600 hover:bg-emerald-50" : "text-slate-500 hover:bg-purple-50 hover:text-purple-600"} ${uploading === item.id ? "opacity-50 pointer-events-none" : ""}`}>
                                 {item.pdf_name ? <FileCheck2 className="w-4 h-4" /> : <FileUp className="w-4 h-4" />}
@@ -198,6 +217,23 @@ export default function AdminManage() {
           );
         })}
       </Tabs>
+
+      <Dialog open={!!linkTarget} onOpenChange={(open) => { if (!open && !linkBusy) setLinkTarget(null); }}>
+        <DialogContent data-testid="partner-association-dialog" className="max-w-md">
+          <DialogHeader><DialogTitle>Associar conta ao estabelecimento</DialogTitle><DialogDescription>Selecione a conta de parceiro que terá acesso a este estabelecimento. Contas já ligadas a outro negócio não podem ser transferidas por esta ação.</DialogDescription></DialogHeader>
+          <p className="text-sm font-semibold">{linkTarget?.nome}</p>
+          <form onSubmit={associateAccount} className="space-y-4">
+            <label className="block text-sm">Conta de parceiro
+              <select data-testid="partner-account-select" value={linkUser} onChange={(e) => setLinkUser(e.target.value)} className="mt-2 w-full rounded-xl border p-3 bg-white" required>
+                <option value="">Selecione a conta</option>
+                {(db.usuarios || []).filter((u) => u.role === "partner" && (!u.partner_id || u.partner_id === linkTarget?.id)).map((u) => <option key={u.id} value={u.id}>{u.nome} · {u.email}</option>)}
+              </select>
+            </label>
+            <p className="text-xs text-slate-500">A ligação não altera IBAN, contas Stripe, moeda, estado de aprovação nem pagamentos. Confirme o nome e email com o responsável pelo negócio.</p>
+            <button type="submit" data-testid="confirm-partner-association" disabled={!linkUser || linkBusy} className="w-full rounded-xl bg-purple-600 text-white p-3 disabled:opacity-50">{linkBusy ? "A associar..." : "Confirmar associação"}</button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
 

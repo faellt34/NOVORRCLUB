@@ -1,5 +1,6 @@
 from payment_policy import reporting_currency, currency_query
 import os
+from partner_access import partner_record
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -107,7 +108,8 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
 
 @router.get("/dashboard/partner")
 async def partner_dashboard(user: dict = Depends(require_role("partner")), currency: str = Depends(reporting_currency)):
-    pid = user.get("partner_id")
+    partner = await partner_record(user, db)
+    pid = partner["id"]
     reds = await db.redemptions.find(currency_query({"partner_id": pid}, currency), NO_ID).sort("date", -1).to_list(20000)
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
@@ -167,7 +169,8 @@ async def audit_list(limit: int = 100, user: dict = Depends(require_role("admin"
 
 @router.get("/coupons/preview/{code}")
 async def preview_coupon(code: str, user: dict = Depends(require_role("partner"))):
-    c = await db.campaigns.find_one({"cupom": code.strip().upper(), "parceiro_id": user.get("partner_id")}, NO_ID)
+    linked = await partner_record(user, db)
+    c = await db.campaigns.find_one({"cupom": code.strip().upper(), "parceiro_id": linked["id"]}, NO_ID)
     if not c:
         return None
     inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID)
@@ -184,12 +187,14 @@ class RedeemIn(BaseModel):
 @router.post("/redemptions")
 async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
     code = body.code.strip().upper()
-    if not user.get("partner_id"):
-        raise HTTPException(status_code=400, detail="Conta de parceiro não configurada.")
+    linked = await partner_record(user, db)
     existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
     if existing:
+        if existing.get("partner_id") != linked["id"] or existing.get("coupon") != code or existing.get("amount") != round(body.amount, 2):
+            raise HTTPException(409, "Identificador de venda já utilizado noutro pedido.")
         return {"record": existing, "duplicate": True}
-    if body.amount <= 0:
+    import math
+    if not math.isfinite(body.amount) or body.amount <= 0:
         raise HTTPException(status_code=400, detail="Informe um valor de compra válido.")
     c = await db.campaigns.find_one({"cupom": code, "parceiro_id": user.get("partner_id")}, NO_ID)
     if not c:
@@ -212,6 +217,8 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         await db.redemptions.insert_one(dict(rec))
     except DuplicateKeyError:
         existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
+        if not existing or existing.get("partner_id") != linked["id"] or existing.get("coupon") != code or existing.get("amount") != round(body.amount, 2):
+            raise HTTPException(409, "Identificador de venda já utilizado noutro pedido.")
         return {"record": existing, "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
     from realtime import emit
