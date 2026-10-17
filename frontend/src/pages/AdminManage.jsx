@@ -27,6 +27,7 @@ const CONFIG = {
     fields: [
       { key: "nome", label: "Nome" },
       { key: "handle", label: "Handle" },
+      { key: "pais", label: "País da operação", type: "select", options: ["BR", "PT"], optional: true, explicitChoice: true },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
       { key: "iban", label: "IBAN (receber comissões)", optional: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Suspenso"] },
@@ -37,6 +38,7 @@ const CONFIG = {
     fields: [
       { key: "nome", label: "Nome" },
       { key: "categoria", label: "Categoria", type: "select", options: ["Restaurante", "Hotel", "Rooftop", "Passeio"] },
+      { key: "pais", label: "País da operação", type: "select", options: ["BR", "PT"], optional: true, explicitChoice: true },
       { key: "cidade", label: "Cidade", type: "select", options: CITIES },
       { key: "iban", label: "IBAN (recebimentos)", optional: true },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
@@ -49,8 +51,10 @@ const CONFIG = {
       { key: "parceiro", label: "Parceiro (nome exato)" },
       { key: "influencer", label: "Influencer (nome ou @handle)" },
       { key: "cupom", label: "Código do Cupom" },
+      { key: "pais", label: "País da operação", type: "select", options: ["BR", "PT"], optional: true, explicitChoice: true },
       { key: "desconto", label: "Desconto (%)" },
-      { key: "comissao", label: "Taxa de Comissão (%)" },
+      { key: "comissao", label: "Comissão do influenciador (%)" },
+      { key: "comissao_rrclub", label: "Comissão RRClub (%) — obrigatória no Pix BR", optional: true },
       { key: "validade", label: "Validade (AAAA-MM-DD)" },
       { key: "status", label: "Status", type: "select", options: ["Ativa", "Pausada", "Expirada"] },
     ],
@@ -72,7 +76,7 @@ const CONFIG = {
   },
 };
 
-const emptyForm = (type) => Object.fromEntries(CONFIG[type].fields.map((f) => [f.key, f.type === "select" ? f.options[0] : ""]));
+const emptyForm = (type) => Object.fromEntries(CONFIG[type].fields.map((f) => [f.key, f.type === "select" && !f.explicitChoice ? f.options[0] : ""]));
 
 export default function AdminManage() {
   const [tab, setTab] = useState("usuarios");
@@ -104,11 +108,11 @@ export default function AdminManage() {
 
   const save = async (e) => {
     e.preventDefault();
-    const missing = cfg.fields.filter((f) => !f.optional && !String(form[f.key] ?? "").trim());
+    const missing = cfg.fields.filter((f) => (!f.optional || (f.key === "pais" && dialog.mode === "create" && ["parceiros", "influencers", "campanhas"].includes(tab)) || (f.key === "comissao_rrclub" && tab === "campanhas" && form.pais === "BR")) && !String(form[f.key] ?? "").trim());
     if (missing.length) { toast.error(`Preencha: ${missing.map((f) => f.label).join(", ")}`); return; }
     setBusy(true);
     try {
-      const payload = Object.fromEntries(cfg.fields.map((f) => [f.key, form[f.key]]).filter(([k, v]) => !(k === "password" && !v)));
+      const payload = Object.fromEntries(cfg.fields.map((f) => [f.key, form[f.key]]).filter(([k, v]) => !((k === "password" || k === "pais" || k === "comissao_rrclub") && !v)));
       if (dialog.mode === "create") {
         await api.post(`/admin/${tab}`, payload);
         toast.success(`${cfg.singular} criado com sucesso${tab === "campanhas" ? ` · comissão ${form.comissao}%` : ""}`);
@@ -130,7 +134,7 @@ export default function AdminManage() {
     const v = item[f.key];
     if (f.key === "status") return ["Ativa", "Pausada", "Expirada"].includes(v) ? <StatusBadge status={v} /> : <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v === "Ativo" ? "bg-emerald-50 text-emerald-600" : v === "Pendente" ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-500"}`}>{v}</span>;
     if (f.key === "cupom") return <span className="font-coupon text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md">{v}</span>;
-    if (f.key === "comissao") return <span className="font-semibold text-purple-700">{v}%</span>;
+    if (["comissao", "comissao_rrclub"].includes(f.key)) return <span className="font-semibold text-purple-700">{v == null || v === "" ? "—" : `${v}%`}</span>;
     if (f.key === "premium") return <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${v ? "bg-purple-50 text-purple-700" : "bg-slate-100 text-slate-500"}`}>{v ? "Premium" : "Gratuito"}</span>;
     if (f.key === "iban") return v ? <span className="font-mono text-xs text-slate-700">{String(v).replace(/(.{4})/g, "$1 ").trim()}</span> : <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Sem IBAN</span>;
     if (f.key === "preco") return <span className="text-slate-600">{v ? `${v}€` : "—"}</span>;
@@ -212,7 +216,7 @@ export default function AdminManage() {
                 <label className="text-xs font-semibold text-slate-600 mb-1 block">{f.label}</label>
                 {f.type === "select" ? (
                   <Select value={form[f.key] || ""} onValueChange={(v) => setForm((p) => ({ ...p, [f.key]: v }))}>
-                    <SelectTrigger data-testid={`field-${f.key}`} className="rounded-xl bg-slate-50"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid={`field-${f.key}`} className="rounded-xl bg-slate-50"><SelectValue placeholder={f.explicitChoice ? "Selecione BR ou PT" : "Selecionar"} /></SelectTrigger>
                     <SelectContent>{f.options.map((o) => <SelectItem key={o} value={o}>{f.key === "premium" ? (o === "true" ? "Premium (bloqueado)" : "Gratuito (preview)") : o}</SelectItem>)}</SelectContent>
                   </Select>
                 ) : (
