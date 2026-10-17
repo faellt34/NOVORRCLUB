@@ -13,16 +13,7 @@ TEST_COLLECTIONS = ("redemptions", "coupon_claims", "audit_log", "notifications"
 
 @router.post("/admin/reset-all")
 async def reset_all(body: dict, user: dict = Depends(require_role("admin"))):
-    if body.get("confirm") != "RESET-ALL":
-        raise HTTPException(status_code=400, detail='Escreva "RESET-ALL" para confirmar')
-    out = {c: (await db[c].delete_many({})).deleted_count for c in TEST_COLLECTIONS}
-    out["payment_transactions"] = (await db.payment_transactions.delete_many({"kind": {"$ne": "ebook"}})).deleted_count
-    out["leads"] = (await db.leads.delete_many({})).deleted_count
-    out["feedback"] = (await db.feedback.delete_many({})).deleted_count
-    out["campanhas_teste"] = (await db.campaigns.delete_many({"is_test": True})).deleted_count
-    await audit("RESET", "Reset total de dados operacionais (RESET-ALL)", user)
-    emit("reset_all")
-    return {"ok": True, "removed": out}
+    raise HTTPException(status_code=403, detail="Limpeza de dados desativada para preservar registos.")
 
 
 async def _step(run_id: str, passo: int, titulo: str, estado: str, **extra):
@@ -85,29 +76,11 @@ async def test_run(body: dict, user: dict = Depends(require_role("admin"))):
     return {"run_id": run_id, "campaign_id": camp["id"], "cupom": cupom, "claim_id": cl["id"], "redemption_id": rec["id"], "valor": valor, "split": split}
 
 
-async def _delete_test(q: dict):
-    out = {}
-    for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions", "audit_log"):
-        out[c] = (await db[c].delete_many(q if c != "audit_log" else {"detail": {"$regex": "TESTE"}} if not q.get("test_run_id") else {"ref": {"$in": await db.redemptions.distinct("id", q)}})).deleted_count
-    return out
-
-
 @router.delete("/admin/test-run/{run_id}")
 async def delete_test_run(run_id: str, user: dict = Depends(require_role("admin"))):
-    reds = await db.redemptions.distinct("id", {"test_run_id": run_id})
-    out = {c: (await db[c].delete_many({"test_run_id": run_id})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions")}
-    out["audit_log"] = (await db.audit_log.delete_many({"ref": {"$in": reds}})).deleted_count
-    emit("teste_limpo", run_id=run_id)
-    return {"ok": True, "removed": out}
+    raise HTTPException(status_code=403, detail="Exclusão de testes desativada para preservar registos.")
 
 
 @router.post("/admin/test-run/clear-all")
 async def clear_all_tests(body: dict, user: dict = Depends(require_role("admin"))):
-    if body.get("confirm") != "LIMPAR":
-        raise HTTPException(status_code=400, detail='Escreva "LIMPAR" para confirmar')
-    reds = await db.redemptions.distinct("id", {"is_test": True})
-    out = {c: (await db[c].delete_many({"is_test": True})).deleted_count for c in ("campaigns", "coupon_claims", "redemptions", "payment_transactions")}
-    out["audit_log"] = (await db.audit_log.delete_many({"$or": [{"ref": {"$in": reds}}, {"detail": {"$regex": "· TESTE ·"}}]})).deleted_count
-    out["notifications"] = (await db.notifications.delete_many({"texto": {"$regex": "TEST-"}})).deleted_count
-    emit("teste_limpo", run_id="all")
-    return {"ok": True, "removed": out}
+    raise HTTPException(status_code=403, detail="Limpeza de testes desativada para preservar registos.")
