@@ -388,11 +388,21 @@ class IbanIn(BaseModel):
 
 @router.post("/partner/iban")
 async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
+    partner_id = user.get("partner_id")
+    if not isinstance(partner_id, str) or not partner_id.strip():
+        raise HTTPException(400, "A sua conta não está ligada a um estabelecimento. Contacte o administrador.")
+    partner = await db.partners.find_one({"id": partner_id}, NO_ID)
+    if not partner:
+        raise HTTPException(409, "O estabelecimento associado à sua conta não foi encontrado. Contacte o administrador.")
+    if partner.get("user_id") and partner["user_id"] != user.get("id"):
+        raise HTTPException(403, "A associação da sua conta ao estabelecimento precisa de verificação pelo administrador.")
     iban = body.iban.replace(" ", "").upper()
     if not (15 <= len(iban) <= 34 and iban[:2].isalpha() and iban[2:4].isdigit()):
         raise HTTPException(status_code=400, detail="IBAN inválido")
-    await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"iban": iban, "iban_titular": body.titular.strip()}})
-    await audit("CONFIGURAÇÃO", f"IBAN de recebimento atualizado · {user['nome']} · ••••{iban[-4:]}", user, user["partner_id"])
+    result = await db.partners.update_one({"id": partner_id, "user_id": partner.get("user_id")}, {"$set": {"iban": iban, "iban_titular": (body.titular or "").strip()}})
+    if not result.matched_count:
+        raise HTTPException(409, "A associação ao estabelecimento mudou. Atualize a página e contacte o administrador.")
+    await audit("CONFIGURAÇÃO", f"IBAN de recebimento atualizado · {user['nome']} · ••••{iban[-4:]}", user, partner_id)
     return {"ok": True, "iban": iban}
 
 
