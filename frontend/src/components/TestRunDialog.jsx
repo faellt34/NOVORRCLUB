@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Clapperboard, Play, Trash2, RefreshCw, CheckCircle2, Loader2, Circle } from "lucide-react";
+import { Clapperboard, Play, RefreshCw, CheckCircle2, Loader2, Circle } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError, eur } from "../lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
@@ -34,11 +34,6 @@ export const TestRunDialog = ({ open, onOpenChange, eventos, onDone }) => {
     catch (e) { toast.error(apiError(e)); }
     finally { setRunning(false); }
   };
-  const clear = async () => {
-    try { await api.delete(`/admin/test-run/${result.run_id}`); toast.success("Dados deste teste apagados"); setResult(null); setSteps({}); onDone?.(); onOpenChange(false); }
-    catch (e) { toast.error(apiError(e)); }
-  };
-
   return (
     <Dialog open={open} onOpenChange={(o) => !running && onOpenChange(o)}>
       <DialogContent data-testid="test-run-dialog" className="max-w-md">
@@ -75,9 +70,8 @@ export const TestRunDialog = ({ open, onOpenChange, eventos, onDone }) => {
               </div>
             )}
             {result && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <button data-testid="test-view-dashboard" onClick={() => onOpenChange(false)} className="py-2.5 rounded-xl bg-white border border-slate-200 hover:bg-purple-50 text-slate-700 text-xs font-semibold btn-press inline-flex items-center justify-center gap-1.5"><RefreshCw className="w-3.5 h-3.5" /> Ver dashboard</button>
-                <button data-testid="test-clear-run" onClick={clear} className="py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold btn-press inline-flex items-center justify-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> Limpar este teste</button>
               </div>
             )}
           </div>
