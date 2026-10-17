@@ -1,4 +1,5 @@
 import os
+from partner_access import partner_record, normalized_iban
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -388,17 +389,9 @@ class IbanIn(BaseModel):
 
 @router.post("/partner/iban")
 async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
-    partner_id = user.get("partner_id")
-    if not isinstance(partner_id, str) or not partner_id.strip():
-        raise HTTPException(400, "A sua conta não está ligada a um estabelecimento. Contacte o administrador.")
-    partner = await db.partners.find_one({"id": partner_id}, NO_ID)
-    if not partner:
-        raise HTTPException(409, "O estabelecimento associado à sua conta não foi encontrado. Contacte o administrador.")
-    if partner.get("user_id") and partner["user_id"] != user.get("id"):
-        raise HTTPException(403, "A associação da sua conta ao estabelecimento precisa de verificação pelo administrador.")
-    iban = body.iban.replace(" ", "").upper()
-    if not (15 <= len(iban) <= 34 and iban[:2].isalpha() and iban[2:4].isdigit()):
-        raise HTTPException(status_code=400, detail="IBAN inválido")
+    partner = await partner_record(user, db)
+    partner_id = partner["id"]
+    iban = normalized_iban(body.iban)
     result = await db.partners.update_one({"id": partner_id, "user_id": partner.get("user_id")}, {"$set": {"iban": iban, "iban_titular": (body.titular or "").strip()}})
     if not result.matched_count:
         raise HTTPException(409, "A associação ao estabelecimento mudou. Atualize a página e contacte o administrador.")
@@ -410,7 +403,7 @@ CONNECT_INCLUDE = ["configuration.merchant", "configuration.recipient", "require
 
 
 def _v2():
-    return stripe.StripeClient(os.environ["STRIPE_SECRET_KEY"])
+    return stripe.StripeClient(os.environ["STRIPE_SECRET_KEY"], http_client=stripe.RequestsClient(timeout=15), max_network_retries=0)
 
 
 def _connect_create(email: str, nome: str, partner_id: str):
@@ -419,7 +412,7 @@ def _connect_create(email: str, nome: str, partner_id: str):
         "identity": {"country": "pt", "entity_type": "company", "business_details": {"registered_name": nome}},
         "defaults": {"responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
         "configuration": {"merchant": {"capabilities": {"card_payments": {"requested": True}}}, "recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}}},
-        "metadata": {"partner_id": partner_id}, "include": CONNECT_INCLUDE})
+        "metadata": {"partner_id": partner_id}, "include": CONNECT_INCLUDE}, options={"idempotency_key": "rrclub-connect-" + partner_id})
 
 
 def _connect_link(acct_id: str, origin: str):
@@ -434,34 +427,44 @@ def _connect_status(acct_id: str) -> dict:
     tr = getattr(getattr(getattr(getattr(cfg, "recipient", None), "capabilities", None), "stripe_balance", None), "stripe_transfers", None)
     summary = getattr(getattr(a, "requirements", None), "summary", None)
     pending = bool(summary and getattr(summary, "minimum_deadline", None) and summary.minimum_deadline.status in ("past_due", "currently_due", "eventually_due"))
-    return {"connected": True, "charges_enabled": bool(card and card.status == "active"), "payouts_enabled": bool(tr and tr.status == "active"), "details_submitted": not pending}
+    return {"connected": True, "charges_enabled": bool(card and card.status == "active"), "payouts_enabled": bool(tr and tr.status == "active"), "details_submitted": not pending,
+            "partner_id": (getattr(a, "metadata", None) or {}).get("partner_id")}
 
 
 @router.post("/partner/connect/onboard")
 async def connect_onboard(body: dict, user: dict = Depends(require_role("partner"))):
     import asyncio
     import logging
-    if not user.get("partner_id"):
-        raise HTTPException(status_code=400, detail="A sua conta não está ligada a um estabelecimento. Contacte o administrador.")
-    partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
+    partner = await partner_record(user, db)
+    if partner.get("currency", "eur") != "eur":
+        raise HTTPException(409, "Utilize o fluxo de recebimentos do Brasil para este estabelecimento.")
+    from urllib.parse import urlsplit
     origin = (body.get("origin_url") or os.environ.get("FRONTEND_URL", "")).rstrip("/")
+    allowed = {url.rstrip("/").strip() for url in os.environ.get("PAYMENT_ALLOWED_ORIGINS", "").split(",") if url.strip()}
+    allowed.add(os.environ.get("FRONTEND_URL", "").rstrip("/"))
+    parsed = urlsplit(origin)
+    local = parsed.hostname in ("localhost", "127.0.0.1")
+    if not origin or origin not in allowed or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment or (parsed.scheme != "https" and not (local and parsed.scheme == "http")):
+        raise HTTPException(400, "Origem de retorno não autorizada.")
     try:
         acct_id = partner.get("stripe_account_id")
         if not acct_id:
             acct = await asyncio.to_thread(_connect_create, user["email"], partner.get("nome", user["nome"]), user["partner_id"])
             acct_id = acct.id
-            await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
+            saved = await db.partners.update_one({"id": partner["id"], "stripe_account_id": partner.get("stripe_account_id"), "user_id": partner.get("user_id")}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
+            if not saved.matched_count:
+                raise HTTPException(409, "A associação do estabelecimento mudou. Contacte o administrador antes de continuar.")
         link = await asyncio.to_thread(_connect_link, acct_id, origin)
     except HTTPException:
         raise
     except Exception as e:
         msg = (getattr(e, "user_message", None) or str(e) or type(e).__name__)[:300]
-        logging.getLogger(__name__).error(f"connect_onboard falhou ({type(e).__name__}): {msg}")
+        logging.getLogger(__name__).error("connect_onboard_failed type=%s request_id=%s", type(e).__name__, getattr(e, "request_id", None))
         if "liability" in msg.lower() or "platform-profile" in msg:
             return {"available": False, "reason": "O Stripe exige que o administrador da RRclub aceite as responsabilidades da plataforma (perdas de contas ligadas) antes de ligar hotéis. Admin: entrar em dashboard.stripe.com → Settings → Connect → Platform profile e concluir o perfil. Até lá, recebe por transferência para o seu IBAN.", "codigo": "liability_unacknowledged"}
         if "Connect" in msg and ("signed up" in msg or "not enabled" in msg.lower() or "platform" in msg.lower()):
             return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
-        raise HTTPException(status_code=409, detail=f"Stripe Connect indisponível ({type(e).__name__}): {msg}")
+        raise HTTPException(status_code=503, detail="Não foi possível iniciar os recebimentos no Stripe. Tente novamente mais tarde ou contacte o administrador.")
     await audit("CONFIGURAÇÃO", f"Onboarding Stripe Connect iniciado · {partner.get('nome')}", user, acct_id)
     return {"available": True, "url": link.url, "account_id": acct_id}
 
@@ -469,15 +472,22 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role("partner
 @router.get("/partner/connect/status")
 async def connect_status(user: dict = Depends(require_role("partner"))):
     import asyncio
-    if not user.get("partner_id"):
-        return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
-    partner = await db.partners.find_one({"id": user["partner_id"]}, NO_ID) or {}
+    partner = await partner_record(user, db)
     acct_id = partner.get("stripe_account_id")
     if not acct_id:
-        return {"connected": False, "charges_enabled": False, "payouts_enabled": False}
+        return {"connected": False, "charges_enabled": False, "payouts_enabled": False, "status_verified": True}
     try:
         info = await asyncio.to_thread(_connect_status, acct_id)
     except Exception:
-        info = {"connected": True, "charges_enabled": bool(partner.get("stripe_charges_enabled")), "payouts_enabled": False}
-    await db.partners.update_one({"id": user["partner_id"]}, {"$set": {"stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"]}})
-    return info
+        # Unknown is not a negative confirmation: preserve previously verified flags.
+        return {"connected": True, "charges_enabled": None, "payouts_enabled": None, "status_verified": False,
+                "last_synced_at": partner.get("stripe_status_synced_at"),
+                "reason": "Não foi possível consultar o Stripe. O estado guardado não foi alterado."}
+    if info.get("partner_id") not in (None, "", partner["id"]):
+        raise HTTPException(409, "A conta Stripe pertence a outro estabelecimento. O administrador deve verificar a associação.")
+    updated_at = now_iso()
+    result = await db.partners.update_one({"id": partner["id"], "stripe_account_id": acct_id}, {"$set": {
+        "stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"], "stripe_status_synced_at": updated_at}})
+    if not result.matched_count:
+        raise HTTPException(409, "A ligação Stripe mudou durante a consulta. Atualize a página.")
+    return {**info, "status_verified": True, "last_synced_at": updated_at}

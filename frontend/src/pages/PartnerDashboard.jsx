@@ -19,6 +19,7 @@ const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-$
 export default function PartnerDashboard() {
   const { user, refreshUnread } = useApp();
   const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [code, setCode] = useState("");
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
@@ -71,7 +72,7 @@ export default function PartnerDashboard() {
       const response = await api.get(data?.partner?.currency === "brl" ? "/partner/pix/connect/status" : "/partner/connect/status");
       if (!cancelled) setConnect(response.data);
     };
-    check().catch(() => { if (!cancelled) setConnect({ connected: false, available: false }); });
+    check().catch(() => { if (!cancelled) setConnect({ connected: false, available: false, status_verified: false, reason: "Não foi possível verificar os recebimentos. Tente novamente mais tarde." }); });
     return () => { cancelled = true; };
   }, [data?.partner?.currency, data?.partner?.id]);
 
@@ -90,7 +91,7 @@ export default function PartnerDashboard() {
     catch (err) { toast.error(apiError(err)); }
   };
 
-  const load = useCallback(() => api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))), []);
+  const load = useCallback(() => { setLoadError(""); return api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => { setLoadError(apiError(e)); }); }, []);
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export default function PartnerDashboard() {
     toast.success("CSV exportado com sucesso");
   };
 
+  if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
   if (!data) return <PageSkeleton />;
   const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
@@ -180,11 +182,11 @@ export default function PartnerDashboard() {
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (connect.charges_enabled && (data.partner?.currency !== "brl" || connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (connect.charges_enabled && (data.partner?.currency !== "brl" || connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
-        {(!connect?.charges_enabled || (data.partner?.currency === "brl" && !connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || (data.partner?.currency === "brl" && (connect === null || connect.available === false))} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
+        {(!connect?.charges_enabled || (data.partner?.currency === "brl" && !connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

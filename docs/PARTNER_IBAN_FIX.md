@@ -19,3 +19,5 @@ Dependências de teste: pytest, pytest-xdist, mongomock-motor, além das depend�
 Este patch evita o erro 500. Não repara automaticamente as contas órfãs, não ativa recebimentos Stripe e não resolve vídeos ou outros problemas da auditoria.
 
 Antes de publicar, comparar a versão efetivamente carregada no Emergent com a base deste patch e integrar os ficheiros sem sobrescrever alterações mais recentes. Carregar do GitHub não significa que o ambiente Emergent já sincronizou. Re-publish atualiza código, mas não faz a associação utilizador-estabelecimento na base de produção; essa reparação exige identificar os registos corretos. Não foi feito deploy nesta entrega.
+
+O pacote completo de preparação está documentado em `docs/PARTNER_FLOW_REVIEW.md`, na branch `codex/partner-flow-repairs`. A proteção de IBAN foi centralizada nesse pacote e inclui checksum.

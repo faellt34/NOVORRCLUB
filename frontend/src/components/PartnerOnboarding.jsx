@@ -2,10 +2,10 @@ import { CheckCircle2, Circle, Landmark, CreditCard, Ticket, ArrowRight } from "
 
 export const PartnerOnboarding = ({ currency = "eur", hasIban, connect, hasCampaign, onIban, onConnect }) => {
   const connectDone = !!connect?.charges_enabled && (currency !== "brl" || !!connect?.payouts_enabled);
-  const connectUnavailable = connect?.available === false;
+  const connectUnavailable = connect?.available === false || connect?.status_verified === false;
   const steps = [
     { id: "iban", icon: Landmark, done: hasIban, title: "1. IBAN de recebimento", desc: hasIban ? "Conta bancária definida" : "Indique a conta onde recebe os pagamentos por QR", cta: hasIban ? "Alterar" : "Adicionar IBAN", onClick: onIban },
-    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connectDone ? "Ativo — recebimentos encaminhados à sua conta Stripe" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
+    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connect?.status_verified === false ? "Não foi possível verificar o Stripe. Tente novamente mais tarde." : connectDone ? "Ativo — recebimentos encaminhados à sua conta Stripe" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
     { id: "campaign", icon: Ticket, done: hasCampaign, title: "3. Primeiro cupão QR", desc: hasCampaign ? "Cupão ativo — imprima o cartaz A5 e coloque na mesa/balcão" : "O admin cria a campanha com o seu influencer; peça em Mensagens", cta: null },
   ].filter((step) => currency !== "brl" || step.id !== "iban");
   const done = steps.filter((s) => s.done).length;

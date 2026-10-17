@@ -68,6 +68,8 @@ async def prepare(kind: str, data: dict, creating: bool) -> dict:
         for k in ("paginas",):
             data[k] = int(float(data.get(k) or 0))
         data["preco"] = float(str(data.get("preco") or 0).replace(",", "."))
+    if (kind == "usuarios" and "partner_id" in data) or (kind == "parceiros" and "user_id" in data):
+        raise HTTPException(400, "Use a ação Associar conta para alterar a ligação ao estabelecimento.")
     if kind == "usuarios":
         if "papel" in data:
             data["role"] = ROLE_MAP.get(data.pop("papel"), "influencer")
@@ -150,3 +152,38 @@ async def delete_item(kind: str, item_id: str, user: dict = Depends(require_role
     await c.delete_one({"id": item_id})
     await audit("REMOÇÃO", f"{kind} · {existing.get('nome') or existing.get('titulo') or item_id}", user, item_id)
     return {"ok": True}
+
+
+class PartnerAccountIn(BaseModel):
+    user_id: str
+
+
+@router.post('/parceiros/{partner_id}/conta')
+async def associate_partner_account(partner_id: str, body: PartnerAccountIn, admin: dict = Depends(require_role('admin'))):
+    """Explicit repair only. Never reassign an already-owned user or business."""
+    partner = await db.partners.find_one({'id': partner_id}, NO_ID)
+    account = await db.users.find_one({'id': body.user_id}, NO_ID)
+    if not partner or not account:
+        raise HTTPException(404, 'Conta ou estabelecimento não encontrado.')
+    if account.get('role') != 'partner':
+        raise HTTPException(400, 'Selecione uma conta com papel Parceiro.')
+    if partner.get('user_id') and partner['user_id'] != account['id']:
+        raise HTTPException(409, 'Este estabelecimento já pertence a outra conta. A reassociação exige revisão manual.')
+    if account.get('partner_id') and account['partner_id'] != partner_id:
+        raise HTTPException(409, 'Esta conta já está ligada a outro estabelecimento.')
+    if account.get('currency', 'eur') != partner.get('currency', 'eur'):
+        raise HTTPException(409, 'A moeda da conta e do estabelecimento deve coincidir. Nenhuma moeda foi alterada.')
+    if await db.users.find_one({'partner_id': partner_id, 'id': {'$ne': account['id']}}) or await db.partners.find_one({'user_id': account['id'], 'id': {'$ne': partner_id}}):
+        raise HTTPException(409, 'Foram encontradas associações em conflito. Contacte o administrador.')
+    old_owner = partner.get('user_id')
+    reserved = await db.partners.update_one({'id': partner_id, 'user_id': old_owner}, {'$set': {'user_id': account['id']}})
+    if not reserved.matched_count:
+        raise HTTPException(409, 'O estabelecimento foi alterado durante o pedido. Atualize a página.')
+    linked = await db.users.update_one({'id': account['id'], 'role': 'partner', 'partner_id': account.get('partner_id'),
+                                      'currency': account.get('currency')}, {'$set': {'partner_id': partner_id}})
+    if not linked.matched_count:
+        if not old_owner:
+            await db.partners.update_one({'id': partner_id, 'user_id': account['id']}, {'$set': {'user_id': old_owner}})
+        raise HTTPException(409, 'A conta mudou durante o pedido. Atualize a página e verifique as associações.')
+    await audit('ASSOCIAÇÃO', f"Conta {account['id']} ligada ao estabelecimento {partner_id}; sem alterações financeiras", admin, partner_id)
+    return {'ok': True, 'partner_id': partner_id, 'user_id': account['id']}
