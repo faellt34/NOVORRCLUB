@@ -58,7 +58,7 @@ async def create_sandbox_checkout(body: SandboxPixIn):
         "campaign_id": campaign["id"], "partner_id": partner["id"],
         "coupon": code, "currency": "brl", "gross_cents": gross_cents,
         "amount_cents": split["paid_cents"], "split_preview": split,
-        "session_id": None, "payment_status": "pending", "status": "creating",
+        "session_id": f"creating_{transaction_id}", "payment_status": "pending", "status": "creating",
         "created_at": now_iso(), "updated_at": now_iso(), "transfers_enabled": False,
     }
     await db.payment_transactions.insert_one(dict(record))
@@ -82,7 +82,7 @@ async def create_sandbox_checkout(body: SandboxPixIn):
         )
     except stripe.error.StripeError as exc:
         await db.payment_transactions.update_one(
-            {"id": transaction_id, "session_id": None},
+            {"id": transaction_id, "status": "creating"},
             {"$set": {"status": "checkout_failed", "updated_at": now_iso()}})
         raise HTTPException(status_code=502, detail="Nao foi possivel iniciar o Pix de teste na Stripe") from exc
 
@@ -123,7 +123,7 @@ async def sandbox_webhook(request: Request):
 
     txid = metadata.get("transaction_id")
     record = await db.payment_transactions.find_one({"id": txid}, NO_ID)
-    if not record or record.get("session_id") is None:
+    if not record or str(record.get("session_id", "")).startswith("creating_"):
         # Retry after checkout session ID is persisted.
         raise HTTPException(status_code=503, detail="Pagamento ainda sem registro completo")
     if not belongs_to_br_test_session(session, record):
