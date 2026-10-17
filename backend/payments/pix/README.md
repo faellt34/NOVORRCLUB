@@ -9,3 +9,6 @@ Provider checks: `GET /api/admin/pix/provider-readiness` (administrator only, St
 Receipts/webhook: `POST /api/stripe/pix/webhook` (signature verification required).
 
 See `docs/PIX_BRASIL_ENTREGA.md` for the account findings, rollout and limits.
+
+Emergent configuration handoff (no secrets):
+`docs/PIX_BRASIL_CONFIGURACAO_EMERGENT.md`.
