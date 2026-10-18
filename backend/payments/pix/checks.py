@@ -45,8 +45,10 @@ def configuration_checks(configuration):
 
 def receiving_status(account, entity):
     metadata = account.get('metadata') or {}
-    if metadata.get('partner_id') and metadata['partner_id'] != entity['id']:
-        raise HTTPException(409, 'A conta Stripe Brasil está associada a outro cadastro; revisão necessária.')
+    # A blank metadata dict is NOT proof of ownership. Never route funds to an
+    # unverified account, even if the bank/email seems to belong to the owner.
+    if not metadata.get('partner_id') or metadata['partner_id'] != entity['id']:
+        raise HTTPException(409, 'Titularidade Connect não comprovada para este cadastro; conclua ou reconcilie o onboarding.')
     if account.get('country') != 'BR':
         raise HTTPException(409, 'A conta de recebimento deste fluxo deve estar domiciliada no Brasil.')
     transfers = (account.get('capabilities') or {}).get('transfers') == 'active'
