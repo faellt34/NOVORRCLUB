@@ -49,7 +49,15 @@ def test_transfer_readiness_does_not_require_merchant_card_capability():
 
 
 def test_wrong_recipient_metadata_is_rejected(env):
-    pix.stripe_client().v1.accounts.retrieve.return_value['metadata'] = {'partner_id':'someone_else'}
+    original = pix.stripe_client().v1.accounts.retrieve.side_effect
+    pix.stripe_client().v1.accounts.retrieve.side_effect = lambda account_id, **kw: {**original(account_id), 'metadata': {'partner_id':'someone_else'}}
+    with pytest.raises(HTTPException): run(pix.partner_checkout(body(), {'partner_id':'p'}))
+    env[1].assert_not_called()
+
+
+def test_missing_stripe_owner_metadata_is_rejected(env):
+    original = pix.stripe_client().v1.accounts.retrieve.side_effect
+    pix.stripe_client().v1.accounts.retrieve.side_effect = lambda account_id, **kw: {**original(account_id), 'metadata': {}}
     with pytest.raises(HTTPException): run(pix.partner_checkout(body(), {'partner_id':'p'}))
     env[1].assert_not_called()
 
@@ -93,6 +101,8 @@ def test_bank_automation_required_before_charging(env, recipient, interval):
         from copy import deepcopy
         accounts = {'acct': deepcopy(client.accounts.retrieve.return_value),
                     'acct_inf': deepcopy(client.accounts.retrieve.return_value)}
+        accounts['acct']['metadata'] = {'partner_id':'p'}
+        accounts['acct_inf']['metadata'] = {'partner_id':'i'}
         account = accounts['acct' if recipient == 'partner' else 'acct_inf']
         client.accounts.retrieve.side_effect = lambda identifier, **kw: accounts[identifier]
     account['settings']['payouts']['schedule']['interval'] = interval
