@@ -141,10 +141,10 @@ class GoogleIn(BaseModel):
 
 @router.get("/google/config")
 async def google_config(request: Request, response: Response):
-    import os
     import secrets
     import hashlib
-    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    from google_identity import google_client_id
+    client_id = google_client_id()
     response.headers["Cache-Control"] = "no-store"
     if not client_id:
         return {"client_id": ""}
