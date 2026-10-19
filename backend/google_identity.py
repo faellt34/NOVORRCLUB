@@ -1,11 +1,20 @@
 """Google ID token validation. No provider calls are made at import time."""
 import asyncio
 import os
+
+# Public OAuth client identifier; no Google client secret is stored here.
+DEFAULT_GOOGLE_CLIENT_ID = "744818550735-onakdnlg5340lnsc6pfg6cesjksksec4.apps.googleusercontent.com"
+
+
+def google_client_id():
+    return os.getenv("GOOGLE_CLIENT_ID", "").strip() or DEFAULT_GOOGLE_CLIENT_ID
+
+
 from fastapi import HTTPException
 
 
 async def verify_google_credential(credential: str, nonce: str) -> dict:
-    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    client_id = google_client_id()
     if not client_id:
         raise HTTPException(503, "O acesso Google ainda não está configurado.")
     try:
