@@ -178,9 +178,12 @@ def test_google_account_cannot_be_linked_to_two_existing_users(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_missing_google_client_id_fails_closed(monkeypatch):
+def test_public_client_id_fallback_when_emergent_secret_is_missing(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(google_identity.verify_google_credential("fake", "challenge"))
-    assert error.value.status_code == 503
+    assert google_identity.google_client_id() == "744818550735-onakdnlg5340lnsc6pfg6cesjksksec4.apps.googleusercontent.com"
+
+
+def test_emergent_override_is_preferred(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "configured-client")
+    assert google_identity.google_client_id() == "configured-client"
 
