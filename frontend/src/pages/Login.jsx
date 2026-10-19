@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import GoogleSignIn from "../components/GoogleSignIn";
 import { BrandLogo } from "../components/BrandLogo";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
@@ -65,6 +66,8 @@ export default function Login() {
           <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("loginTitle")}</h2>
           <p className="text-sm text-slate-500 mt-1 mb-8">{t("loginSub")}</p>
 
+          <GoogleSignIn />
+          <p className="text-xs text-slate-400 text-center my-4">ou entre com email</p>
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("email")}</label>
@@ -97,3 +100,4 @@ export default function Login() {
     </div>
   );
 }
+
