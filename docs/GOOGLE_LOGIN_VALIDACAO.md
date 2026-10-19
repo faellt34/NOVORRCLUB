@@ -70,3 +70,9 @@ de índice precisam ser resolvidos antes de aprovar a implantação.
 Referências oficiais:
 - https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid
 - https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
+
+## Configuração do Client ID público (19/10/2026)
+
+O identificador público OAuth Web da RRClub está definido como fallback em `backend/google_identity.py`, permitindo que o backend disponibilize `/api/auth/google/config` mesmo antes da criação da variável no painel Emergent. `GOOGLE_CLIENT_ID` continua a ter prioridade quando definida. A mesma origem é usada na verificação do ID token, não apenas na interface.
+
+Este fallback **não é um Client Secret** e não substitui os requisitos: publicar primeiro a branch integrada correta, confirmar que a Emergent está a construir essa versão, instalar dependências, testar o OAuth real, verificar os utilizadores de teste da tela de consentimento e obter autorização antes de republicar. O botão não pode aparecer no site já publicado apenas por um commit GitHub. Não copiar nem publicar a chave secreta OAuth.
