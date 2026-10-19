@@ -47,6 +47,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 @app.on_event("startup")
 async def on_startup():
+    await db.users.create_index("google_sub", unique=True, partialFilterExpression={"google_sub": {"$type": "string"}})
+    await db.google_challenges.create_index("expires_at", expireAfterSeconds=0)
     await seed()
     await db.entitlements.create_index([("user_id", 1), ("ebook_id", 1)], unique=True)
     await db.payment_transactions.create_index("session_id", unique=True)
@@ -73,3 +75,4 @@ async def on_startup():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+

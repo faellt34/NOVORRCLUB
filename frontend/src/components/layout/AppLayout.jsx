@@ -1,3 +1,4 @@
+import GoogleSignIn from "../GoogleSignIn";
 import { reportCurrency } from "../../lib/api";
 import { useState } from "react";
 import { Outlet } from "react-router-dom";
@@ -41,8 +42,10 @@ export default function AppLayout() {
             </label>
           </div>
           <Outlet />
+          <details className="mt-8 rounded-xl border bg-white p-4 text-sm text-slate-600"><summary className="cursor-pointer">Segurança da conta · Associar Google</summary><p className="mt-3 text-xs">Associe uma conta Google com o mesmo email para a usar nos próximos acessos.</p><GoogleSignIn linkAccount /></details>
         </div>
       </main>
     </div>
   );
 }
+
