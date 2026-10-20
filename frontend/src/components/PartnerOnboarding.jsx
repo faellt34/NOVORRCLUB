@@ -1,11 +1,11 @@
 import { CheckCircle2, Circle, Landmark, CreditCard, Ticket, ArrowRight } from "lucide-react";
 
 export const PartnerOnboarding = ({ hasIban, connect, hasCampaign, onIban, onConnect }) => {
-  const connectDone = !!connect?.charges_enabled;
+  const connectDone = !!(connect?.charges_enabled && connect?.payouts_enabled);
   const connectUnavailable = connect?.available === false;
   const steps = [
     { id: "iban", icon: Landmark, done: hasIban, title: "1. IBAN de recebimento", desc: hasIban ? "Conta bancária definida" : "Indique a conta onde recebe os pagamentos por QR", cta: hasIban ? "Alterar" : "Adicionar IBAN", onClick: onIban },
-    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connectDone ? "Ativo — a sua parte cai direto na sua conta" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
+    { id: "connect", icon: CreditCard, done: connectDone, optional: connectUnavailable, title: "2. Ligar Stripe (split automático)", desc: connectDone ? "Stripe Connect ativo — confirme cada transferência e payout na Stripe" : connectUnavailable ? "Indisponível por agora — a plataforma transfere para o seu IBAN manualmente" : connect?.connected ? "Onboarding iniciado — conclua os dados no Stripe" : "Receba automaticamente a sua parte de cada pagamento", cta: connectDone ? null : connect?.connected ? "Continuar" : "Ativar", onClick: onConnect, disabled: connectUnavailable },
     { id: "campaign", icon: Ticket, done: hasCampaign, title: "3. Primeiro cupão QR", desc: hasCampaign ? "Cupão ativo — imprima o cartaz A5 e coloque na mesa/balcão" : "O admin cria a campanha com o seu influencer; peça em Mensagens", cta: null },
   ];
   const done = steps.filter((s) => s.done).length;
