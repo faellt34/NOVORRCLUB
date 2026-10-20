@@ -1,0 +1,51 @@
+name: RRClub Clone - Free Visual Preview
+
+on:
+  push:
+    branches:
+      - BRANCH-copia-editar-a-vontade
+    paths:
+      - 'docs/preview-pagamentos/**'
+      - '.github/workflows/rrclub-clone-preview-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: rrclub-clone-preview-pages
+  cancel-in-progress: true
+
+jobs:
+  pages-preview:
+    name: Publish network-free visual demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout clone
+        uses: actions/checkout@v4
+
+      - name: Prepare isolated static preview
+        run: |
+          mkdir -p site
+          cp docs/preview-pagamentos/index.html site/index.html
+          touch site/.nojekyll
+          test -s site/index.html
+          ! grep -E 'REACT_APP_BACKEND_URL|STRIPE_SECRET_KEY|PIX_STRIPE_SECRET_KEY' site/index.html
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload isolated static artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publish demo (never the RRClub app or backend)
+        id: deployment
+        uses: actions/deploy-pages@v4
