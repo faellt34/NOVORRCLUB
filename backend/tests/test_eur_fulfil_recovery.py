@@ -65,14 +65,15 @@ def test_legacy_paid_without_redemption_can_recover_using_paid_status(pt):
         {"$set": {"payment_status": "paid", "status": "completed"},
          "$unset": {"redemption_id": ""}}
     ))
-    pt.retrieve.return_value = type("Session", (), {
+    from payments.stripe_normalize import StripeRecord
+    pt.retrieve.return_value = StripeRecord({
         "id": "cs_test_pt_http", "payment_status": "paid", "amount_total": 9500,
         "currency": "eur", "livemode": False, "payment_intent": "pi_test_restore",
         "metadata": {
             "kind": "coupon_pay", "coupon": "EURP5",
             "campaign_id": "cpt", "partner_id": "ppt"
         }
-    })()
+    })
     response = request(pt.app, "GET", "/api/payments/status/cs_test_pt_http")
     assert response.status_code == 200, response.text
     assert response.json()["payment_status"] == "paid"
