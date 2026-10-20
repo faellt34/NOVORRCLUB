@@ -60,7 +60,9 @@ jobs:
             backend/routes_pix.py \
             backend/routes_mbway_sandbox.py \
             backend/partner_access.py \
-            backend/payments/pix/checks.py
+            backend/payments/pix/checks.py \
+            backend/payments/stripe_normalize.py \
+            backend/scripts/stripe_sandbox_probe.py
 
       - name: Run mocked payment regressions (no network payments)
         working-directory: backend
@@ -71,4 +73,5 @@ jobs:
             tests/test_payment_confirmation.py \
             tests/test_mbway_sandbox.py \
             tests/test_payment_http_integration.py \
-            tests/test_stripe_sdk_compatibility.py
+            tests/test_stripe_sdk_compatibility.py \
+            tests/test_stripe_sandbox_probe_guard.py
