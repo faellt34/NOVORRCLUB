@@ -1,6 +1,7 @@
 import os
 import secrets
 import io
+import re
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -22,7 +23,7 @@ async def payouts_overview(user: dict = Depends(require_role("admin"))):
     # resultam apenas de uma marcação manual do administrador.
     reds = await db.redemptions.find({}, {
         "_id": 0, "influencer_id": 1, "influencer": 1, "campaign_id": 1,
-        "coupon": 1, "date": 1, "commission": 1, "paid_online": 1,
+        "coupon": 1, "partner_id": 1, "date": 1, "commission": 1, "paid_online": 1,
         "idempotency_key": 1
     }).to_list(100000)
     inf_ids = {r.get("influencer_id") for r in reds if r.get("influencer_id")}
@@ -36,9 +37,10 @@ async def payouts_overview(user: dict = Depends(require_role("admin"))):
         {"id": {"$in": list(inf_ids)}},
         {"_id": 0, "id": 1, "nome": 1, "iban": 1}
     )}
-    verified_sessions = {tx["session_id"] async for tx in db.payment_transactions.find(
+    verified_payments = {tx["session_id"]: tx async for tx in db.payment_transactions.find(
         {"session_id": {"$in": list(sessions)}, "kind": "coupon_pay", "payment_status": "paid"},
-        {"_id": 0, "session_id": 1}
+        {"_id": 0, "session_id": 1, "campaign_id": 1, "partner_id": 1,
+         "coupon": 1, "payment_status": 1}
     )}
     agg = defaultdict(lambda: {"commission": 0.0, "count": 0, "reasons": set(), "coupons": set()})
     for rec in reds:
@@ -50,7 +52,7 @@ async def payouts_overview(user: dict = Depends(require_role("admin"))):
         row["count"] += 1
         if rec.get("coupon"):
             row["coupons"].add(rec["coupon"])
-        reason = payout_evidence(rec, campaigns, influencers, verified_sessions)
+        reason = payout_evidence(rec, campaigns, influencers, verified_payments)
         if reason:
             row["reasons"].add(reason)
     paid = {(p["influencer_id"], p["month"]): p async for p in db.payouts.find({}, NO_ID)}
@@ -88,7 +90,7 @@ class PayoutIn(BaseModel):
 async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin"))):
     # Nem sequer a marcação manual de "Pago" é permitida sem beneficiário
     # e venda confirmados. Não inicia qualquer transferência.
-    if not body.influencer_id or not body.month or len(body.month) != 7:
+    if not body.influencer_id or not re.fullmatch(r"20\\d\\d-(0[1-9]|1[0-2])", body.month):
         raise HTTPException(400, "Beneficiário ou mês inválido")
     if await db.payouts.find_one({"influencer_id": body.influencer_id, "month": body.month}):
         raise HTTPException(409, "Este mês já está marcado como pago")
@@ -106,12 +108,13 @@ async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin")))
     campaigns = {c["id"]: c async for c in db.campaigns.find(
         {"id": {"$in": list(campaign_ids)}}, {"_id": 0, "id": 1, "influencer_id": 1}
     )}
-    verified_sessions = {tx["session_id"] async for tx in db.payment_transactions.find(
+    verified_payments = {tx["session_id"]: tx async for tx in db.payment_transactions.find(
         {"session_id": {"$in": list(sessions)}, "kind": "coupon_pay", "payment_status": "paid"},
-        {"_id": 0, "session_id": 1}
+        {"_id": 0, "session_id": 1, "campaign_id": 1, "partner_id": 1,
+         "coupon": 1, "payment_status": 1}
     )}
     beneficiary = {body.influencer_id: inf}
-    reasons = {payout_evidence(r, campaigns, beneficiary, verified_sessions) for r in redemptions}
+    reasons = {payout_evidence(r, campaigns, beneficiary, verified_payments) for r in redemptions}
     reasons.discard(None)
     if reasons:
         raise HTTPException(
