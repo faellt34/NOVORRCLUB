@@ -18,6 +18,60 @@ export default function PublicCoupon() {
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(null);
   const [email, setEmail] = useState("");
+  const [p5Enabled, setP5Enabled] = useState(false);
+  const [p5Session, setP5Session] = useState(null);
+  const [p5Charge, setP5Charge] = useState(null);
+  const p5StorageKey = `rrclub_p5_${code.toUpperCase()}`;
+  useEffect(() => {
+    let stopped = false;
+    setP5Enabled(false); setP5Session(null); setP5Charge(null);
+    const boot = async () => {
+      const cfg = await api.get("/public/p5/config");
+      if (!cfg.data.enabled || stopped) return;
+      let session;
+      try { session = JSON.parse(sessionStorage.getItem(p5StorageKey) || "null"); } catch {}
+      if (!session?.session_token || !session?.scan_ref) {
+        const { data } = await api.post("/public/p5/sessions", { code });
+        session = data;
+        sessionStorage.setItem(p5StorageKey, JSON.stringify(session));
+      }
+      if (!stopped) { setP5Session(session); setP5Enabled(true); }
+    };
+    boot().catch((e) => { if (!stopped) toast.error(apiError(e)); });
+    return () => { stopped = true; };
+  }, [code, p5StorageKey]);
+  useEffect(() => {
+    if (!p5Enabled || !p5Session?.session_token) return;
+    let stopped = false;
+    const readCharge = async () => {
+      try {
+        const { data } = await api.get("/public/p5/charges/current", {
+          params: { code }, headers: { "X-P5-Session": p5Session.session_token }
+        });
+        if (stopped) return;
+        setP5Charge(data.status === "none" ? null : data);
+        if (data.status === "paid") setPaid({
+          payment_status: "paid", currency: data.currency,
+          amount: data.net_minor / 100, gross_amount: data.gross_minor / 100,
+          discount: data.discount_minor / 100, redemption_id: data.charge_id
+        });
+      } catch (e) { if (!stopped && e.response?.status === 403) setP5Session(null); }
+    };
+    readCharge();
+    const timer = setInterval(readCharge, 3000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [code, p5Enabled, p5Session?.session_token]);
+  const payP5 = async () => {
+    if (paying || !p5Charge?.charge_id || !p5Session?.session_token) return;
+    setPaying(true);
+    try {
+      const { data } = await api.post("/public/p5/charges/checkout",
+        { charge_id: p5Charge.charge_id, email: email || null },
+        { headers: { "X-P5-Session": p5Session.session_token } });
+      window.location.assign(data.checkout_url);
+    } catch (e) { toast.error(apiError(e)); setPaying(false); }
+  };
+
   const [checkVersion, setCheckVersion] = useState(0);
   const payingRef = useRef(false);
   const storageKey = `rrclub_pix_${code.toUpperCase()}`;
@@ -149,7 +203,7 @@ export default function PublicCoupon() {
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
                   <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
-                    <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" />
+                    <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}${p5Enabled && p5Session?.scan_ref ? `?p5_ref=${encodeURIComponent(p5Session.scan_ref)}` : ""}`} size={92} fgColor="#3B0764" />
                     <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -187,8 +241,25 @@ export default function PublicCoupon() {
                   {!paid?.blocked && !paid?.checkout_url && !attempt?.checkout_url && pixRequestId && <button disabled={paying} onClick={retryPixCheckout} className="block underline font-semibold">Retomar pedido de pagamento</button>}
                   {!paid?.blocked && (paid?.checkout_url || attempt?.checkout_url) && <a href={paid?.checkout_url || attempt.checkout_url} className="block underline font-semibold">Retomar a mesma cobrança</a>}
                 </div>}
-                {active && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
-                {active && currency !== "brl" && !awaiting && !terminal && !completed && (
+                {active && p5Enabled && !completed && !awaiting && (
+                  <div data-testid="public-p5-payment" className="rounded-2xl border border-purple-200 bg-purple-50 p-4 space-y-3">
+                    <p className="text-sm font-semibold text-purple-900">Pagamento P5 validado pelo parceiro</p>
+                    {!p5Charge || p5Charge.status === "none"
+                      ? <p className="text-xs text-purple-700">Mostre o QR ao funcionário. O valor confirmado aparece aqui automaticamente.</p>
+                      : ["pending", "checkout"].includes(p5Charge.status)
+                      ? <>
+                          <p className="text-sm text-slate-700">Conta: <b>{new Intl.NumberFormat(currency === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: p5Charge.currency?.toUpperCase() || currency.toUpperCase() }).format(p5Charge.gross_minor / 100)}</b></p>
+                          <p className="text-xs text-slate-600">Desconto: {p5Charge.discount_minor / 100}</p>
+                          <p className="text-lg font-bold text-purple-800">Total a pagar: {new Intl.NumberFormat(currency === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: p5Charge.currency?.toUpperCase() || currency.toUpperCase() }).format(p5Charge.net_minor / 100)}</p>
+                          <p className="text-xs text-slate-500">O valor foi validado pelo parceiro e não pode ser editado.</p>
+                          <input value={email} type="email" onChange={(e) => setEmail(e.target.value)} placeholder="Email para recibo (opcional)" className="w-full h-10 px-3 rounded-xl border text-sm bg-white" />
+                          <button data-testid="public-p5-pay" disabled={paying} onClick={payP5} className="w-full py-2.5 rounded-xl bg-purple-700 disabled:opacity-50 text-white font-semibold text-sm">{paying ? "A abrir pagamento..." : "Pagar o valor confirmado"}</button>
+                        </>
+                      : <p className="text-xs text-amber-800">Esta cobrança já não está disponível. Peça ao parceiro para confirmar uma nova conta.</p>}
+                  </div>
+                )}
+                {active && !p5Enabled && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
+                {active && !p5Enabled && currency !== "brl" && !awaiting && !terminal && !completed && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
                     <StripeModeBanner compact />
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
