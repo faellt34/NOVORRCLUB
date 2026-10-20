@@ -1,6 +1,7 @@
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Optional
 from urllib.parse import urlsplit
 
@@ -121,14 +122,15 @@ class CheckoutIn(BaseModel):
 
 @router.post("/payments/checkout")
 async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
+    origin = _validated_checkout_origin(body.origin_url)
     price, eb = await price_for_lookup(body.lookup_key)
     if eb and await db.entitlements.find_one({"user_id": user["id"], "ebook_id": eb["id"]}):
         raise HTTPException(status_code=409, detail="Já adquiriu este e-book")
     kwargs = dict(
         line_items=[{"price": price.id, "quantity": 1}],
         mode="subscription" if price.recurring else "payment",
-        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/payment/cancel",
+        success_url=f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/payment/cancel",
         customer_email=user["email"],
         metadata={"user_id": user["id"], "lookup_key": body.lookup_key},
     )
@@ -150,7 +152,39 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
     return {"checkout_url": session.url, "session_id": session.id}
 
 
-async def fulfil(session_id: str, extra: dict):
+def _verified_coupon_session(session, transaction):
+    """Do not recognize a sale using mismatched Stripe session data."""
+    if session is None:
+        raise HTTPException(409, "Falta confirmação verificável da sessão Stripe.")
+    from payments.stripe_normalize import stripe_payload
+    obj = stripe_payload(session)
+    metadata = obj.get("metadata") or {}
+    try:
+        expected_cents = int((Decimal(str(transaction["amount"])) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, ValueError, KeyError):
+        raise HTTPException(409, "Valor da transação não conciliável.")
+    if not (
+        obj.get("id") == transaction.get("session_id")
+        and obj.get("payment_status") == "paid"
+        and obj.get("amount_total") == expected_cents
+        and str(obj.get("currency", "")).lower() == str(transaction.get("currency", "")).lower() == "eur"
+        and obj.get("livemode") is os.getenv("STRIPE_SECRET_KEY", "").startswith("sk_live_")
+        and metadata.get("kind") == "coupon_pay"
+        and metadata.get("coupon") == transaction.get("coupon")
+        and metadata.get("campaign_id") == transaction.get("campaign_id")
+        and metadata.get("partner_id", "") == (transaction.get("partner_id") or "")
+    ):
+        raise HTTPException(409, "Pagamento não corresponde à transação, valor, moeda ou ambiente Stripe.")
+    return obj
+
+
+async def fulfil(session_id: str, extra: dict, session_snapshot=None):
+    pending = await db.payment_transactions.find_one(
+        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, NO_ID)
+    if not pending:
+        return
+    if pending.get("kind") == "coupon_pay":
+        _verified_coupon_session(session_snapshot, pending)
     res = await db.payment_transactions.find_one_and_update(
         {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
@@ -215,7 +249,7 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid":
-                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
+                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email}, session_snapshot=s)
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
@@ -252,7 +286,7 @@ async def stripe_webhook(request: Request):
         return {"status": "ignored", "reason": "dedicated_pix_webhook_required"}
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if obj.get("payment_status") == "paid":
-            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
+            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")}, session_snapshot=obj)
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
         await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
