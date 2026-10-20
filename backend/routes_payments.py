@@ -338,6 +338,10 @@ async def public_pay(body: PublicPayIn):
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
+    # P5: fail closed when partner-confirmed checkout is enabled. Never accept
+    # a customer-supplied gross amount as the authoritative bill.
+    if os.environ.get("P5_PARTNER_VALIDATION_REQUIRED", "").lower() in ("1", "true", "yes"):
+        raise HTTPException(status_code=409, detail="Pagamento direto indisponível: peça ao parceiro para confirmar o valor da conta no P5.")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
     base = dict(
