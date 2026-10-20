@@ -83,4 +83,5 @@ jobs:
             tests/test_financial_destructive_guards.py \
             tests/test_eur_fulfil_recovery.py \
             tests/test_pt_dual_split.py \
-            tests/test_clone_guard.py
+            tests/test_clone_guard.py \
+            tests/test_pix_provider_errors.py
