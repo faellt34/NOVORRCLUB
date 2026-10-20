@@ -1,0 +1,24 @@
+name: Finance safety checks
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/src/pages/AdminDashboard.jsx'
+      - 'frontend/src/pages/AdminPayouts.jsx'
+      - '.github/workflows/finance-safety.yml'
+  workflow_dispatch:
+
+jobs:
+  evidence-and-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile Python source
+        run: python -m compileall -q backend
+      - name: Test finance evidence classification (no Stripe keys)
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s backend/tests -p 'test_finance_evidence.py' -v
