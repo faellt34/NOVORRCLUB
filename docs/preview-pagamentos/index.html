@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+  <title>RRClub — Prévia isolada de pagamentos P5</title>
+  <style>
+    :root{color-scheme:dark;--bg:#08071b;--card:#15142d;--stroke:#383457;--muted:#bbb8d1;--lilac:#b49aff;--accent:#7847ea;--green:#50dbac}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(ellipse 800px 450px at 80% -8%,#4526a3 0%,transparent 76%),radial-gradient(ellipse 600px 450px at 0% 80%,#22225b 0%,transparent 72%),var(--bg);color:#f9f8ff;min-height:100vh}
+    main{width:min(1160px,calc(100% - 36px));margin:0 auto;padding:34px 0 54px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:42px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:-1px;font-size:24px}.symbol{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#ccabff,#6a45df);display:grid;place-items:center;color:#151039;font-size:22px;font-weight:900;box-shadow:0 0 35px #794cee88}
+    .chip{border:1px solid #8d7fc2;color:#ddd7ff;background:#ffffff13;border-radius:999px;padding:10px 14px;font-size:12px;font-weight:750}
+    .eyebrow{color:#c4aaff;text-transform:uppercase;font-size:12px;letter-spacing:2.5px;font-weight:850}.intro{max-width:860px;margin-bottom:28px}h1{font-size:clamp(33px,5.5vw,59px);letter-spacing:-2.4px;line-height:1.06;margin:14px 0}h1 em{font-style:normal;color:#b79dff}
+    .intro p{font-size:16px;color:#d4d1e9;line-height:1.55;max-width:760px}
+    .notice{border:1px solid #a68ce1;background:#4d32903b;border-radius:16px;padding:13px 16px;color:#e8dfff;font-size:13px;line-height:1.4;margin-bottom:25px}
+    .layout{display:grid;grid-template-columns:1.02fr .98fr;gap:20px}
+    .panel{border:1px solid var(--stroke);background:linear-gradient(155deg,#1c1b38f5,#100f28f5);border-radius:22px;padding:26px;box-shadow:0 19px 50px #00000033}
+    .label{font-size:11px;color:#b4accd;letter-spacing:1.5px;text-transform:uppercase;font-weight:800}.panel h2{font-size:21px;margin:8px 0 24px;letter-spacing:-.5px}
+    .tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:5px;border-radius:13px;background:#0b0920;margin:0 0 26px}
+    button{font:inherit;cursor:pointer}.tabs button{border:0;background:transparent;color:#b6b1d1;padding:13px;border-radius:10px;font-size:13px;font-weight:750}.tabs button[aria-selected="true"]{color:white;background:linear-gradient(135deg,#7c52ed,#4d31b0);box-shadow:0 6px 22px #4d33b3bb}
+    .field{display:block;color:#c8c4df;font-weight:650;font-size:13px;margin-bottom:9px}
+    .amount-wrap{display:flex;align-items:center;gap:12px;border:1px solid #676084;background:#0c0b20;border-radius:13px;padding:12px 17px;max-width:100%}.amount-wrap span{font-size:24px;color:#ac9dd4}.amount-wrap input{border:none;outline:none;background:transparent;color:white;font-size:27px;font-weight:750;min-width:0;width:100%;font-variant-numeric:tabular-nums}
+    .hint{font-size:12px;color:#a9a5c2;margin-top:9px}.summary{margin:26px 0 24px}.line{display:flex;align-items:center;justify-content:space-between;gap:15px;color:#d6d4ea;padding:10px 0;font-size:14px;border-bottom:1px solid #ffffff17}.line strong{color:white;white-space:nowrap;font-variant-numeric:tabular-nums}.line.discount strong{color:#6be2b1}.line.big{font-size:20px;border:none;padding-top:18px;font-weight:800}.line.big strong{font-size:27px;color:white}
+    .action{display:flex;gap:10px;flex-wrap:wrap}.btn{border-radius:12px;padding:13px 16px;font-weight:750;border:1px solid #6556a6;background:#ffffff12;color:white}.btn.primary{background:linear-gradient(135deg,#9266ff,#6337df);border-color:#946cfc;flex:1}.btn.secondary{background:#2a2552}.btn:disabled{opacity:.35;cursor:not-allowed}
+    .status{display:flex;align-items:flex-start;gap:11px;border:1px solid #5b5276;border-radius:14px;padding:15px;background:#0b0920}.status .dot{width:12px;height:12px;border-radius:100%;background:#e9b659;box-shadow:0 0 12px #d7a442;margin-top:4px;flex:none}.status.good .dot{background:#5ce9b1;box-shadow:0 0 12px #36df9f}.status.bad .dot{background:#fd788f;box-shadow:0 0 12px #ed647b}
+    .status strong{font-size:14px}.status p{font-size:12px;color:#b9b4d1;margin:5px 0 0;line-height:1.55}
+    .qr{height:124px;width:124px;background:white;border-radius:10px;display:grid;grid-template-columns:repeat(13,1fr);grid-template-rows:repeat(13,1fr);padding:10px;gap:2px;margin:23px 0 14px}.qr i{background:transparent}.qr i.on{background:#13112a}
+    .simulation-detail{font-size:13px;color:#bbb6d7;line-height:1.55}.simulation-detail b{color:white}.divider{border-top:1px solid #ffffff1c;margin:21px 0}
+    .split{display:grid;gap:12px;margin-top:25px}.bar-name{display:flex;justify-content:space-between;font-size:13px;color:#cfcce4;margin-bottom:6px}.bar-track{height:7px;border-radius:8px;background:#302d4c;overflow:hidden}.bar-fill{height:100%;background:linear-gradient(90deg,#a06fff,#dbb6ff);border-radius:8px}
+    .foot{color:#9f9bb5;font-size:12px;line-height:1.7;margin-top:20px}.footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin-top:22px;color:#b4aecb;font-size:12px}.footer a{color:#bd9fff}
+    .hide{display:none!important}
+    @media(max-width:760px){main{width:min(100% - 24px,560px);padding-top:19px}header{margin-bottom:34px}.brand{font-size:20px}.chip{font-size:10px}.layout{grid-template-columns:1fr}.panel{padding:19px;border-radius:17px}.intro p{font-size:14px}.panel h2{margin-bottom:16px}.amount-wrap input{font-size:25px}}
+  </style>
+</head>
+<body>
+<main>
+<header>
+  <div class="brand"><div class="symbol" aria-hidden="true">RR</div>RRClub <span style="font-size:11px;color:#b5a4ff;letter-spacing:1.5px;margin-left:6px">CLONE</span></div>
+  <div class="chip">● PRÉVIA ISOLADA</div>
+</header>
+<div class="intro">
+  <div class="eyebrow">Banking & payments experience / P5</div>
+  <h1>Pix no Brasil.<br><em>MB WAY em Portugal.</em></h1>
+  <p>Prévia visual e interativa da experiência de pagamento RRClub. Explore os cálculos e estados do Checkout com valores de demonstração, sem criar cobranças ou transferências.</p>
+</div>
+<div class="notice" role="note"><strong>DEMONSTRAÇÃO — SEM DINHEIRO REAL.</strong> Esta página não contacta Stripe, não usa a base de dados da RRClub e não confirma pagamentos verdadeiros. A aplicação oficial continua separada.</div>
+<div class="layout">
+  <section class="panel">
+    <span class="label">01 / Checkout demonstrativo</span>
+    <h2>Simular pagamento P5</h2>
+    <div class="tabs" role="tablist" aria-label="Mercado">
+      <button type="button" role="tab" id="tab-br" aria-selected="true">🇧🇷 Pix Brasil</button>
+      <button type="button" role="tab" id="tab-pt" aria-selected="false">🇵🇹 MB WAY Portugal</button>
+    </div>
+    <label class="field" for="bill">Valor original da conta</label>
+    <div class="amount-wrap"><span id="currency-symbol">R$</span><input id="bill" aria-label="Valor da conta" type="number" min="1" max="10000" step="0.01" value="100" inputmode="decimal"></div>
+    <p class="hint">Valor entre 1 e 10 000, sem informações pessoais</p>
+    <div class="summary">
+      <div class="line"><span>Conta original</span><strong id="gross">R$ 100,00</strong></div>
+      <div class="line discount"><span>Benefício P5 (5%)</span><strong id="discount">− R$ 5,00</strong></div>
+      <div class="line big"><span>Total a pagar</span><strong id="net">R$ 95,00</strong></div>
+    </div>
+    <div class="action"><button id="start" class="btn primary" type="button">Gerar pagamento de demonstração</button><button id="reset" class="btn secondary" type="button">Reiniciar</button></div>
+    <p class="foot">Cálculo meramente ilustrativo. A validação real de valores, moedas e meios de pagamento acontece no backend RRClub e na Stripe.</p>
+  </section>
+  <section class="panel" aria-live="polite">
+    <span class="label">02 / Resposta demonstrativa</span>
+    <h2 id="panel-title">Estado do pagamento</h2>
+    <div class="status" id="status-box"><div class="dot"></div><div><strong id="status-title">Aguardando simulação</strong><p id="status-text">Escolha um país e um valor para testar a experiência.</p></div></div>
+    <div id="payment-body" class="hide">
+      <div id="pix-qr" class="hide">
+        <div class="qr" id="qr-pattern" role="img" aria-label="Padrão ilustrativo, não é um QR Code de pagamento"></div>
+        <div class="simulation-detail"><b>Padrão visual ilustrativo</b><br>Não pode ser lido como Pix e não representa uma cobrança.</div>
+      </div>
+      <div id="mbway-phone" class="hide" style="margin-top:25px;padding:20px;border-radius:14px;background:linear-gradient(145deg,#302463,#151632);border:1px solid #6859a7">
+        <div style="font-size:30px;margin-bottom:10px">📱</div><b>Pedido MB WAY de demonstração</b><p class="simulation-detail">A experiência real encaminha o cliente para a Stripe. Aqui é simulada apenas a confirmação.</p>
+      </div>
+      <div class="divider"></div>
+      <div class="action"><button id="confirm" class="btn primary" type="button">Simular confirmação</button><button id="fail" class="btn" type="button">Simular falha</button></div>
+    </div>
+    <div class="divider"></div>
+    <span class="label">03 / Regras financeiras ilustrativas</span>
+    <h2>Distribuição P5</h2>
+    <div id="br-split" class="split">
+      <div><div class="bar-name"><span>Parceiro (80% da conta original)</span><strong id="partner">R$ 80,00</strong></div><div class="bar-track"><div class="bar-fill" style="width:80%"></div></div></div>
+      <div><div class="bar-name"><span>Criador (5% da conta original)</span><strong id="creator">R$ 5,00</strong></div><div class="bar-track"><div class="bar-fill" style="width:5%"></div></div></div>
+      <div><div class="bar-name"><span>RRClub (10% da conta original, antes das taxas Stripe)</span><strong id="platform">R$ 10,00</strong></div><div class="bar-track"><div class="bar-fill" style="width:10%"></div></div></div>
+      <p class="simulation-detail">As taxas de processamento são suportadas pela plataforma. Os repasses reais só são efetuados após confirmação e validação no Stripe Connect.</p>
+    </div>
+    <div id="pt-split" class="hide"><p class="simulation-detail">Em Portugal, esta prévia apresenta apenas o valor com desconto e a experiência MB WAY. A distribuição financeira real deve ser conferida no Checkout Stripe PT, sem pressupor as regras brasileiras.</p></div>
+  </section>
+</div>
+<div class="footer"><span>© RRClub · Ambiente demonstrativo sem ligações externas</span><span>Código do clone: <a href="https://github.com/faellt34/NOVORRCLUB/tree/BRANCH-copia-editar-a-vontade" rel="noreferrer" target="_blank">GitHub</a></span></div>
+</main>
+<script>
+(function(){
+'use strict';
+const byId=(id)=>document.getElementById(id);
+let market='br',state='idle';
+const currency=(value)=>new Intl.NumberFormat(market==='br'?'pt-BR':'pt-PT',{style:'currency',currency:market==='br'?'BRL':'EUR'}).format(value);
+const amount=()=>Number(byId('bill').value);
+function round2(n){return Math.round((n+Number.EPSILON)*100)/100}
+function status(title,message,kind){byId('status-title').textContent=title;byId('status-text').textContent=message;byId('status-box').className='status '+(kind||'')}
+function drawFakeQR(){
+const box=byId('qr-pattern');box.replaceChildren();
+for(let y=0;y<13;y++)for(let x=0;x<13;x++){const cell=document.createElement('i');const finder=(a,b)=>x>=a&&x<a+4&&y>=b&&y<b+4;const dark=finder(0,0)||finder(9,0)||finder(0,9)||((x*17+y*31+x*y*7)%11<5);cell.className=dark?'on':'';box.appendChild(cell)}
+}
+function reset(){
+state='idle';byId('payment-body').classList.add('hide');byId('start').disabled=false;
+status('Aguardando simulação','Escolha um país e um valor para testar a experiência.','')
+}
+function render(){
+const gross=amount();const valid=Number.isFinite(gross)&&gross>=1&&gross<=10000;
+const cents=valid?Math.round(gross*100):0;
+const grossRounded=cents/100;
+const discount=round2(grossRounded*0.05),net=round2(grossRounded-discount);
+byId('currency-symbol').textContent=market==='br'?'R$':'€';
+byId('gross').textContent=currency(grossRounded);
+byId('discount').textContent='− '+currency(discount);
+byId('net').textContent=currency(net);
+byId('partner').textContent=currency(round2(grossRounded*0.8));
+byId('creator').textContent=currency(round2(grossRounded*0.05));
+byId('platform').textContent=currency(round2(grossRounded*0.1));
+byId('start').disabled=!valid||state!=='idle';
+byId('br-split').classList.toggle('hide',market!=='br');
+byId('pt-split').classList.toggle('hide',market!=='pt');
+byId('tab-br').setAttribute('aria-selected',market==='br'?'true':'false');
+byId('tab-pt').setAttribute('aria-selected',market==='pt'?'true':'false');
+}
+function choose(id){market=id;reset();render()}
+byId('tab-br').addEventListener('click',()=>choose('br'));
+byId('tab-pt').addEventListener('click',()=>choose('pt'));
+byId('bill').addEventListener('input',()=>{reset();render()});
+byId('reset').addEventListener('click',()=>{reset();render()});
+byId('start').addEventListener('click',()=>{
+state='pending';byId('payment-body').classList.remove('hide');
+byId('pix-qr').classList.toggle('hide',market!=='br');
+byId('mbway-phone').classList.toggle('hide',market!=='pt');
+status('Pagamento pendente — SIMULAÇÃO',market==='br'?'Padrão Pix ilustrativo gerado. Não existe QR Code real.':'Pedido MB WAY ilustrativo criado. Não houve contacto com Stripe.','');
+render()
+});
+byId('confirm').addEventListener('click',()=>{if(state!=='pending')return;state='paid';status('Confirmado — APENAS DEMONSTRAÇÃO','Confirmação fictícia: nenhum pagamento, recibo ou repasse foi efetuado.','good');byId('payment-body').classList.add('hide');render()});
+byId('fail').addEventListener('click',()=>{if(state!=='pending')return;state='failed';status('Não concluído — SIMULAÇÃO','Falha demonstrativa: nenhuma venda foi registada.','bad');byId('payment-body').classList.add('hide');render()});
+drawFakeQR();render();
+})();
+</script>
+</body></html>
