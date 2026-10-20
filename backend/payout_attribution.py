@@ -5,7 +5,7 @@ exige conciliação humana: nunca inferir beneficiários pelo nome da campanha.
 """
 
 
-def payout_evidence(redemption, campaigns, influencers, paid_sessions):
+def payout_evidence(redemption, campaigns, influencers, paid_transactions):
     influencer_id = redemption.get("influencer_id")
     if not influencer_id:
         return "beneficiary_id_missing"
@@ -21,8 +21,13 @@ def payout_evidence(redemption, campaigns, influencers, paid_sessions):
     if redemption.get("paid_online") is not True:
         return "manual_redemption_requires_payment_proof"
     session_id = redemption.get("idempotency_key")
-    if not session_id or session_id not in paid_sessions:
+    payment = paid_transactions.get(session_id) if session_id else None
+    if not payment or payment.get("payment_status") != "paid":
         return "stripe_payment_not_confirmed"
+    if (payment.get("campaign_id") != campaign_id
+            or payment.get("partner_id") != redemption.get("partner_id")
+            or payment.get("coupon") != redemption.get("coupon")):
+        return "stripe_payment_campaign_mismatch"
     return None
 
 
@@ -33,6 +38,7 @@ REASONS = {
     "beneficiary_not_registered": "Influenciador não registado ou inativo na base",
     "manual_redemption_requires_payment_proof": "Redenção manual: pagamento financeiro por comprovar",
     "stripe_payment_not_confirmed": "Pagamento Stripe sem confirmação associada",
+    "stripe_payment_campaign_mismatch": "Pagamento Stripe pertence a outra campanha ou parceiro",
 }
 
 
