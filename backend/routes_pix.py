@@ -4,7 +4,6 @@ Platform bears processing costs. All provider calls use the separate Brazilian k
 import asyncio
 import os
 import uuid
-import string
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -14,6 +13,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 from core import db, NO_ID, now_iso, require_role
+from partner_access import partner_record
+from payments.pix.checks import platform_checks, configuration_checks, receiving_status, webhook_checks
 
 router = APIRouter()
 
@@ -33,7 +34,7 @@ def pix_key():
 
 
 def stripe_client():
-    return stripe.StripeClient(pix_key())
+    return stripe.StripeClient(pix_key(), http_client=stripe.RequestsClient(timeout=15), max_network_retries=0)
 
 
 async def provider(operation,*args,**kwargs):
@@ -74,17 +75,47 @@ async def readiness(user: dict = Depends(require_role('admin'))):
     return {**state,'configuration':configuration,'rules':{'discount_percent':5,'partner_percent':80,'influencer_percent':5,'platform_percent':10,'processing_costs':'platform'},'external_validation_required':True}
 
 
+@router.get('/admin/pix/provider-readiness')
+async def provider_readiness(user: dict = Depends(require_role('admin'))):
+    """Explicit admin diagnostic: Stripe GETs only; never enables Pix or saves secrets."""
+    state, configuration = availability_configuration()
+    if not state['configured']:
+        return {**state, 'provider_verified': False, 'checks': {}, 'missing_configuration':
+                [key for key, value in configuration.items() if not value]}
+    platform = await provider('accounts.retrieve_current')
+    payment_config = await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
+    checks = {**platform_checks(platform), **configuration_checks(payment_config)}
+    endpoints = await provider('webhook_endpoints.list', limit=100)
+    origins = [v.strip() for v in os.getenv('PAYMENT_ALLOWED_ORIGINS', os.getenv('FRONTEND_URL', '')).split(',') if v.strip()]
+    checks['webhook_registered'] = any(webhook_checks(endpoints.get('data') or [], origin) for origin in origins)
+    key = pix_key()
+    expected_live = key.startswith(('sk_live_', 'rk_live_'))
+    checks['configuration_mode_matches'] = payment_config.get('livemode') is expected_live
+    return {**state, 'provider_verified': all(checks.values()), 'checks': checks,
+            'platform_country': platform.get('country'), 'settlement_currency': platform.get('default_currency'),
+            'livemode': expected_live, 'sandbox_validation_required': True,
+            'note': 'Verificação de configuração; não comprova entrega de webhook nem liquidação dos repasses.'}
+
+
 async def verify_accounts(partner, influencer):
     platform=await provider('accounts.retrieve_current')
-    if platform.get('country')!='BR':
-        raise HTTPException(409,'Pix exige plataforma Stripe domiciliada no Brasil')
+    if not all(platform_checks(platform).values()):
+        raise HTTPException(409,'Configure a plataforma brasileira com BRL, Pix, cobranças e depósitos bancários automáticos habilitados')
+    config=await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
+    if not all(configuration_checks(config).values()):
+        raise HTTPException(409,'Configure um checkout ativo exclusivamente para Pix antes de cobrar')
+    if config.get('livemode') is not pix_key().startswith(('sk_live_', 'rk_live_')):
+        raise HTTPException(409,'A configuração Pix e a chave Stripe devem pertencer ao mesmo modo')
+    destinations = [(entity or {}).get('pix_stripe_account_id') for entity in (partner, influencer)]
+    if destinations[0] and destinations[0] == destinations[1]:
+        raise HTTPException(409,'Parceiro e influencer precisam de contas de recebimento distintas')
     for entity in (partner,influencer):
         account=(entity or {}).get('pix_stripe_account_id')
         if not account:
             raise HTTPException(409,'Parceiro e influencer devem concluir recebimentos Stripe Connect Brasil')
         info=await provider('accounts.retrieve',account)
-        if info.get('country')!='BR' or not info.get('payouts_enabled') or (info.get('capabilities') or {}).get('transfers')!='active':
-            raise HTTPException(409,'Conta de destinatário brasileira ainda não habilitada para transferências')
+        if not receiving_status(info, entity)['receiving_ready']:
+            raise HTTPException(409,'Destinatário brasileiro precisa de transferências e depósitos bancários automáticos habilitados')
 
 
 def totals(amount, discount, commission):
@@ -132,6 +163,7 @@ async def checkout(body: PixResumeIn):
 
 @router.post('/partner/pix/checkout')
 async def partner_checkout(body: PixCheckoutIn, user: dict = Depends(require_role('partner'))):
+    await partner_record(user, db)
     existing=await db.payment_transactions.find_one({'id':'pix-'+str(body.request_id),'kind':'pix_coupon'},NO_ID)
     if existing:
         owner=existing.get('partner_id')
@@ -181,7 +213,7 @@ async def _checkout(body: PixCheckoutIn, creating_partner=None):
               'partner_cents':partner_cents,'influencer_cents':fee,'platform_cents':platform_cents,'partner_amount':partner_cents/100,'platform_amount':platform_cents/100,'influencer_destination':inf['pix_stripe_account_id'],'split_status':'pending','gross_amount':gross/100,'amount':net/100,'discount':(gross-net)/100,'commission':fee/100,'rate':0.05,'split_version':'br-fixed-5-80-5-10-v1','manual_payout_blocked':True,
               'campaign_id':campaign['id'],'campaign':campaign['nome'],'partner_id':partner['id'],'partner':partner.get('nome',''),
               'influencer_id':campaign.get('influencer_id'),'influencer':(inf or {}).get('nome','—'),'destination':partner['pix_stripe_account_id'],
-              'payment_method_configuration':os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'],'integration_identifier':'rrclub_pix_'+''.join(string.ascii_lowercase[b%26] for b in os.urandom(8)),'status':'initiated','payment_status':'pending','created_at':now_iso(),'updated_at':now_iso()}
+              'payment_method_configuration':os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'],'status':'initiated','payment_status':'pending','created_at':now_iso(),'updated_at':now_iso()}
         try:
             await db.payment_transactions.insert_one(dict(tx))
         except DuplicateKeyError:
@@ -194,9 +226,9 @@ async def _checkout(body: PixCheckoutIn, creating_partner=None):
         raise HTTPException(409, 'Pedido antigo sem confirmação; consulte o suporte antes de criar outra cobrança')
     try:
         session = await provider('checkout.sessions.create',
-            idempotency_key=txid, mode='payment', payment_method_configuration=tx['payment_method_configuration'], integration_identifier=tx['integration_identifier'],
+            idempotency_key=txid, mode='payment', payment_method_configuration=tx['payment_method_configuration'],
             line_items=[{'price_data':{'currency':'brl','unit_amount':tx['net_cents'],'product_data':{'name':tx['partner']+' · '+tx['campaign']}},'quantity':1}],
-            payment_method_options={'pix': {'amount_includes_iof': 'always'}},
+            payment_method_options={'pix': {'amount_includes_iof': 'always', 'expires_after_seconds': 600}},
             payment_intent_data={'transfer_group':txid,'metadata':{'kind':'pix_coupon','request_id':key}},
             metadata={'kind':'pix_coupon','request_id':key},
             success_url=origin+'/c/'+code+'?pix_request_id='+key,
@@ -214,6 +246,11 @@ async def _checkout(body: PixCheckoutIn, creating_partner=None):
 
 
 async def settle(tx, obj):
+    metadata = obj.get('metadata') or {}
+    if metadata.get('kind') != 'pix_coupon' or metadata.get('request_id') != tx['request_id']:
+        raise HTTPException(409, 'Confirmação Pix não pertence a este pedido')
+    if not tx['session_id'].startswith('pending-') and obj.get('id') != tx['session_id']:
+        raise HTTPException(409, 'Sessão Pix não corresponde ao pedido')
     if obj.get('currency') != 'brl' or obj.get('amount_total') != tx['net_cents']:
         raise HTTPException(409, 'Confirmação Pix não corresponde ao valor ou moeda do pedido')
     if obj.get('payment_status') != 'paid':
@@ -345,6 +382,13 @@ async def status(identifier: str):
             await settle(tx,obj)
         except stripe.error.StripeError:
             raise HTTPException(502,'Não foi possível confirmar o Pix; tente novamente')
+        except HTTPException as error:
+            # Settlement stores payment confirmation before attempting transfers.
+            # A temporary transfer outage must not tell a paid customer to pay again.
+            latest = await db.payment_transactions.find_one(query, NO_ID)
+            if error.status_code not in (502, 503) or not latest or latest.get('payment_status') != 'paid':
+                raise
+            return public(latest)
         tx=await db.payment_transactions.find_one(query,NO_ID)
     return public(tx)
 
@@ -358,7 +402,7 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role('partner
     origin=trusted_origin(body.get('origin_url',''))
     collection=db.influencers if user.get('role')=='influencer' else db.partners
     entity_id=user.get('influencer_id') if user.get('role')=='influencer' else user.get('partner_id')
-    partner=await collection.find_one({'id':entity_id},NO_ID)
+    partner=await collection.find_one({'id':entity_id},NO_ID) if user.get('role')=='influencer' else await partner_record(user, db)
     if not partner or (user.get('role')!='influencer' and partner.get('currency')!='brl'):
         raise HTTPException(409,'Recebimentos Pix disponíveis apenas para parceiro em reais')
     platform=await provider('accounts.retrieve_current')
@@ -369,10 +413,11 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role('partner
         if not account:
             created=await provider('accounts.create',idempotency_key='pix-connect-'+partner['id'],type='express',country='BR',email=user['email'],business_type=('individual' if user.get('role')=='influencer' else 'company'),capabilities={'card_payments':{'requested':True},'transfers':{'requested':True}},business_profile={'name':partner.get('nome',user['nome'])},metadata={'partner_id':partner['id']})
             account=created.id
-            await collection.update_one({'id':partner['id']},{'$set':{'pix_stripe_account_id':account,'pix_stripe_charges_enabled':False,'pix_stripe_payouts_enabled':False}})
+            saved=await collection.update_one({'id':partner['id'],'pix_stripe_account_id':None},{'$set':{'pix_stripe_account_id':account,'pix_stripe_charges_enabled':False,'pix_stripe_payouts_enabled':False}})
+            if saved is not None and not saved.matched_count:
+                raise HTTPException(409,'A conta de recebimento mudou durante a configuração; atualize antes de continuar')
         info=await provider('accounts.retrieve',account)
-        if info.get('country')!='BR':
-            raise HTTPException(409,'Conta de recebimento deve estar domiciliada no Brasil')
+        receiving_status(info, partner)
         link=await provider('account_links.create',account=account,refresh_url=origin+('/influencer/extrato' if user.get('role')=='influencer' else '/parceiro')+'?connect=refresh',return_url=origin+('/influencer/extrato' if user.get('role')=='influencer' else '/parceiro')+'?connect=return',type='account_onboarding')
     except stripe.error.StripeError:
         raise HTTPException(502,'Stripe Connect indisponível; confirme a habilitação de recebimentos no Brasil')
@@ -383,19 +428,18 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role('partner
 async def connect_status(user: dict = Depends(require_role('partner','influencer'))):
     collection=db.influencers if user.get('role')=='influencer' else db.partners
     entity_id=user.get('influencer_id') if user.get('role')=='influencer' else user.get('partner_id')
-    partner=await collection.find_one({'id':entity_id},NO_ID)
+    partner=await collection.find_one({'id':entity_id},NO_ID) if user.get('role')=='influencer' else await partner_record(user, db)
     if not partner or (user.get('role')!='influencer' and partner.get('currency')!='brl'):
         raise HTTPException(409,'Parceiro não opera em reais')
     account=partner.get('pix_stripe_account_id')
     if not account:
-        return {'connected':False,'charges_enabled':False,'payouts_enabled':False}
+        return {'connected':False,'status_verified':True,'charges_enabled':False,'payouts_enabled':False,'transfers_enabled':False,'receiving_ready':False}
     try:
         info=await provider('accounts.retrieve',account)
     except stripe.error.StripeError:
         raise HTTPException(502,'Não foi possível verificar os recebimentos; tente novamente')
-    ready=info.get('country')=='BR'
-    result={'connected':True,'charges_enabled':ready and bool(info.get('charges_enabled')),'payouts_enabled':ready and bool(info.get('payouts_enabled')),'details_submitted':bool(info.get('details_submitted')),'country':info.get('country')}
-    await collection.update_one({'id':partner['id']},{'$set':{'pix_stripe_charges_enabled':result['charges_enabled'],'pix_stripe_payouts_enabled':result['payouts_enabled'],'pix_stripe_transfers_enabled':(info.get('capabilities') or {}).get('transfers')=='active'}})
+    result=receiving_status(info, partner)
+    await collection.update_one({'id':partner['id'], 'pix_stripe_account_id':account},{'$set':{'pix_stripe_charges_enabled':result['charges_enabled'],'pix_stripe_payouts_enabled':result['payouts_enabled'],'pix_stripe_transfers_enabled':result['transfers_enabled'],'pix_stripe_status_synced_at':now_iso()}})
     return result
 
 
