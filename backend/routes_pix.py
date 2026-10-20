@@ -49,8 +49,23 @@ async def provider(operation,*args,**kwargs):
     try:
         result = await asyncio.wait_for(asyncio.to_thread(fn,*args,params=kwargs,options=options),timeout=30)
         return stripe_payload(result)
-    except (stripe.error.StripeError,asyncio.TimeoutError):
-        raise HTTPException(502,'Operação Pix pendente; repetir com a mesma referência')
+    except stripe.error.StripeError as exc:
+        import logging
+        code = str(getattr(exc, 'code', None) or '')[:48]
+        status = getattr(exc, 'http_status', None)
+        request_id = str(getattr(exc, 'request_id', None) or '')[:100]
+        # Never log API keys, user details, raw provider response or request bodies.
+        logging.getLogger(__name__).warning(
+            "pix_stripe_api_error operation=%s status=%s code=%s request_id=%s",
+            operation, status, code, request_id)
+        if operation.startswith(('accounts.create', 'account_links.create')) and status in (400, 403):
+            raise HTTPException(409,
+                'Stripe Connect Brasil recusou a configuração; reveja os requisitos e responsabilidades no painel Stripe.') from exc
+        raise HTTPException(502, 'Operação Pix pendente; repita com a mesma referência.') from exc
+    except asyncio.TimeoutError as exc:
+        import logging
+        logging.getLogger(__name__).warning("pix_stripe_timeout operation=%s", operation)
+        raise HTTPException(502, 'A Stripe demorou a responder; repita o mesmo pedido.') from exc
 
 
 def availability_configuration():
