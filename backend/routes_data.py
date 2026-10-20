@@ -186,6 +186,9 @@ class RedeemIn(BaseModel):
 
 @router.post("/redemptions")
 async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
+    from p5_checkout import enabled as p5_enabled
+    if p5_enabled():
+        raise HTTPException(409, "P5 ativo: leitura do QR não é pagamento. Gere uma cobrança P5 e aguarde a Stripe.")
     code = body.code.strip().upper()
     linked = await partner_record(user, db)
     existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
