@@ -493,6 +493,11 @@ async def pix_webhook(request: Request):
         raise HTTPException(503,'Webhook Pix não configurado')
     try:
         event=stripe.Webhook.construct_event(await request.body(),request.headers.get('stripe-signature',''),secret)
+        # The real Stripe SDK returns a StripeObject, not a dict with .get().
+        # Convert the already signature-verified payload before processing.
+        obj=event['data']['object']
+        if hasattr(obj,'to_dict'):
+            event['data']['object']=obj.to_dict()
     except (stripe.error.SignatureVerificationError,ValueError):
         raise HTTPException(400,'Assinatura Pix inválida')
     await handle_pix_event(event)
