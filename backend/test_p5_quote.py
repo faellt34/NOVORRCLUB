@@ -3,13 +3,13 @@ from p5_quote import quote, QuoteError
 
 class QuoteTests(unittest.TestCase):
     def test_pt(self):
-        q = quote("100", "10", "PT")
-        self.assertEqual((q["currency"], q["discount"], q["payable"]), ("eur", "10.00", "90.00"))
+        q = quote("100", "5", "PT")
+        self.assertEqual((q["currency"], q["discount"], q["payable"]), ("eur", "5.00", "95.00"))
         self.assertIn("mb_way", q["candidate_methods"])
         self.assertNotIn("pix", q["candidate_methods"])
     def test_br(self):
-        q = quote("100", 10, "BR")
-        self.assertEqual((q["currency"], q["payable"]), ("brl", "90.00"))
+        q = quote("100", 5, "BR")
+        self.assertEqual((q["currency"], q["payable"]), ("brl", "95.00"))
         self.assertIn("pix", q["candidate_methods"])
         self.assertNotIn("mb_way", q["candidate_methods"])
     def test_rounding(self):
