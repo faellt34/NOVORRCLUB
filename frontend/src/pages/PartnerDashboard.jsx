@@ -35,7 +35,7 @@ export default function PartnerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
-    if (ev.tipo === "split_executado" && ev.record) {
+    if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
         if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
@@ -151,11 +151,11 @@ export default function PartnerDashboard() {
 
       <div data-testid="partner-connect-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${connect?.charges_enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
+          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${connect?.charges_enabled && connect?.payouts_enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : connect.charges_enabled ? <>Ativo — cada pagamento é dividido automaticamente: a sua parte vai direta para a sua conta bancária{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : connect.charges_enabled ? <>Stripe Connect ativo — o repasse ao banco deve ser confirmado separadamente na Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
