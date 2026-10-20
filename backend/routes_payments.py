@@ -178,50 +178,109 @@ def _verified_coupon_session(session, transaction):
     return obj
 
 
+async def _fulfil_coupon(transaction: dict, extra: dict):
+    """Persist the sale FIRST; only then mark the payment fulfilled.
+
+    A Mongo failure is propagated so Stripe retries the webhook. A stable
+    redemption ID makes every retry safe, including crashes between writes.
+    """
+    import logging
+    sid = transaction["session_id"]
+    rid = "r-eur-" + sid
+    campaign = await db.campaigns.find_one({"id": transaction["campaign_id"]}, NO_ID)
+    if not campaign:
+        raise HTTPException(503, "Campanha não encontrada; confirmação pendente de conciliação.")
+    partner = await db.partners.find_one({"id": transaction["partner_id"]}, NO_ID) or {}
+    inf_id = transaction.get("influencer_id", campaign.get("influencer_id"))
+    influencer = await db.influencers.find_one({"id": inf_id}, NO_ID) if inf_id else None
+    gross = Decimal(str(transaction["gross_amount"]))
+    net = Decimal(str(transaction["amount"]))
+    pct = Decimal(str(transaction.get("commission_pct", campaign.get("comissao", 0))))
+    commission = (gross * pct / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # The provider cannot send a paid event to create records for a different coupon.
+    redemption = {
+        "id": rid, "coupon": transaction["coupon"],
+        "campaign_id": transaction["campaign_id"], "campaign": campaign.get("nome", ""),
+        "partner_id": transaction["partner_id"], "partner": partner.get("nome", ""),
+        "influencer_id": inf_id, "influencer": (influencer or {}).get("nome", "—"),
+        "currency": "eur", "amount": float(gross), "discount": float(gross-net),
+        "commission": float(commission), "rate": float(pct)/100,
+        "date": now_iso(), "staff": "Pagamento online (QR)",
+        "idempotency_key": sid, "paid_online": True,
+        "payment_method": transaction.get("payment_method")
+    }
+    # seed.ensure_indexes() creates a unique "id" index; fixed rid prevents duplicates.
+    await db.redemptions.update_one({"id": rid}, {"$setOnInsert": redemption}, upsert=True)
+    saved = await db.redemptions.find_one({"id": rid}, NO_ID)
+    if not saved or saved.get("coupon") != transaction["coupon"] or saved.get("campaign_id") != transaction["campaign_id"]:
+        raise HTTPException(503, "Redenção não conciliada com pagamento Stripe.")
+    # This update is the single authoritative commitment that a coupon sale is paid.
+    await db.payment_transactions.update_one(
+        {"session_id": sid, "kind": "coupon_pay"},
+        {"$set": {"status": "completed", "payment_status": "paid",
+                  "redemption_id": rid, "stripe_payment_intent_id": extra.get("stripe_payment_intent_id"),
+                  "customer_email": extra.get("customer_email"), "updated_at": now_iso()}},
+    )
+    # Post-payment notifications are non-financial; they must never undo the
+    # persisted sale or trigger a second transfer on retries.
+    try:
+        if not transaction.get("conversion_processed"):
+            from routes_data import mark_converted
+            await mark_converted(redemption["campaign_id"], saved)
+            await db.payment_transactions.update_one(
+                {"session_id": sid, "kind": "coupon_pay"},
+                {"$set": {"conversion_processed": True}},
+            )
+        if not transaction.get("notification_processed"):
+            await audit("REDENÇÃO",
+                f"{redemption['coupon']} · pago online {float(net):.2f}€ · {redemption['partner']}",
+                {"id": "cliente", "nome": "Cliente (QR)"}, rid)
+            from realtime import emit
+            emit("pagamento_atualizado", currency="eur", partner_id=redemption["partner_id"],
+                 influencer_id=inf_id, ref=rid)
+            targets = await admin_ids()
+            pu = await db.users.find_one({"partner_id": redemption["partner_id"]}, {"id": 1})
+            iu = await db.users.find_one({"influencer_id": inf_id}, {"id": 1}) if inf_id else None
+            targets += [u["id"] for u in (pu, iu) if u]
+            await notify(targets, "redencao", "Pagamento online recebido",
+                         f"{redemption['coupon']} · pagamento confirmado {float(net):.2f}€", "/parceiro")
+            await db.payment_transactions.update_one(
+                {"session_id": sid, "kind": "coupon_pay"},
+                {"$set": {"notification_processed": True}},
+            )
+        if extra.get("customer_email") and not transaction.get("receipt_emailed"):
+            from mailer import send_email
+            sent = await send_email(extra["customer_email"],
+                f"RRclub · Recibo {redemption['coupon']} · {float(net):.2f}€",
+                "Pagamento confirmado",
+                f"Pagamento: {float(net):.2f}€ · Cupom {redemption['coupon']} · Referência {rid}",
+                "Consultar cupom",
+                f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{redemption['coupon']}")
+            await db.payment_transactions.update_one(
+                {"session_id": sid, "kind": "coupon_pay"},
+                {"$set": {"receipt_emailed": sent}},
+            )
+    except Exception:
+        logging.getLogger(__name__).exception("Post-payment side effects failed for session %s", sid)
+        # Retain markers so the reconciliation job can retry safely.
+
+
 async def fulfil(session_id: str, extra: dict, session_snapshot=None):
     pending = await db.payment_transactions.find_one(
-        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, NO_ID)
+        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}}, NO_ID)
     if not pending:
         return
     if pending.get("kind") == "coupon_pay":
         _verified_coupon_session(session_snapshot, pending)
+        if pending.get("payment_status") != "paid" or not pending.get("redemption_id"):
+            await _fulfil_coupon(pending, extra)
+        return
+    if pending.get("payment_status") == "paid":
+        return
     res = await db.payment_transactions.find_one_and_update(
         {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
-        return
-    if res.get("kind") == "coupon_pay":
-        c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
-        partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
-        inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
-        rate = float(c["comissao"]) / 100 if c else 0
-        gross = float(res["gross_amount"])
-        rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
-               "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
-               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
-        try:
-            await db.redemptions.insert_one(dict(rec))
-        except Exception:
-            return
-        await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
-        from realtime import emit
-        emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
-             influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
-        from routes_data import mark_converted
-        await mark_converted(rec["campaign_id"], rec)
-        targets = await admin_ids()
-        pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
-        targets += [u["id"] for u in (pu, iu) if u]
-        await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
-        cust_email = extra.get("customer_email")
-        if cust_email:
-            from mailer import send_email
-            sent = await send_email(cust_email, f"RRclub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
-                f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
-                "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
-            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"customer_email": cust_email, "receipt_emailed": sent, "redemption_id": rec["id"]}})
-        else:
-            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"redemption_id": rec["id"]}})
         return
     if res.get("ebook_id"):
         await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
@@ -245,7 +304,7 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
         user = await user_from_query_or_header(authorization, None)
         if user["role"] != "admin" and rec.get("user_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Sem acesso a esta transação")
-    if rec["payment_status"] != "paid":
+    if rec["payment_status"] != "paid" or (rec.get("kind") == "coupon_pay" and not rec.get("redemption_id")):
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid":
@@ -432,7 +491,7 @@ async def public_pay(body: PublicPayIn):
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "commission_pct": float(c.get("comissao", 0)), "influencer_id": c.get("influencer_id"), "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
 
 
