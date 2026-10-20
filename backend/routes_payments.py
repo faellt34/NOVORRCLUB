@@ -166,7 +166,7 @@ async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
 
 async def fulfil(session_id: str, extra: dict):
     res = await db.payment_transactions.find_one_and_update(
-        {"session_id": session_id, "payment_status": {"$ne": "paid"}},
+        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
         return
@@ -219,6 +219,8 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
     rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
     if not rec:
         raise HTTPException(status_code=404, detail="Transação não encontrada")
+    if rec.get("kind") == "pix_coupon":
+        raise HTTPException(status_code=409, detail="Este pagamento Pix usa a rota própria de confirmação.")
     if rec.get("kind") != "coupon_pay":
         user = await user_from_query_or_header(authorization, None)
         if user["role"] != "admin" and rec.get("user_id") != user["id"]:
@@ -226,7 +228,7 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
     if rec["payment_status"] != "paid":
         try:
             s = stripe.checkout.Session.retrieve(session_id)
-            if s.payment_status == "paid" or s.status == "complete":
+            if s.payment_status == "paid":
                 await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
@@ -254,12 +256,15 @@ async def stripe_webhook(request: Request):
     except (stripe.error.SignatureVerificationError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid signature")
     obj, t = event["data"]["object"], event["type"]
+    if (obj.get("metadata") or {}).get("kind") == "pix_coupon":
+        # Pix is confirmed only through the separately signed BR webhook.
+        return {"status": "ignored", "reason": "dedicated_pix_webhook_required"}
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
-        if obj.get("payment_status", "paid") == "paid":
+        if obj.get("payment_status") == "paid":
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
-        await db.payment_transactions.update_one({"session_id": obj["id"]}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
@@ -363,15 +368,10 @@ async def public_pay(body: PublicPayIn):
         fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
         base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
         split = True
-    session = None
+    # Use methods activated for the PT Stripe account. Never silently retry
+    # with card-only when MB WAY is rejected: that hides the configuration issue.
     try:
-        for pm in (["card", "mb_way"], ["card"]):
-            try:
-                session = stripe.checkout.Session.create(**base, payment_method_types=pm)
-                break
-            except stripe.error.InvalidRequestError as e:
-                if pm == ["card"]:
-                    raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
+        session = stripe.checkout.Session.create(**base)
     except stripe.error.AuthenticationError:
         raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
     except stripe.error.StripeError as e:
