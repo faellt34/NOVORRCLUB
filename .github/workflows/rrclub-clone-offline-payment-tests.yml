@@ -68,4 +68,5 @@ jobs:
           python -m pytest -q \
             tests/test_pix_service.py \
             tests/test_pix_readiness.py \
-            tests/test_payment_confirmation.py
+            tests/test_payment_confirmation.py \
+            tests/test_mbway_sandbox.py
