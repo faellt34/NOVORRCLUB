@@ -13,6 +13,7 @@ TEST_COLLECTIONS = ("redemptions", "coupon_claims", "audit_log", "notifications"
 
 @router.post("/admin/reset-all")
 async def reset_all(body: dict, user: dict = Depends(require_role("admin"))):
+    raise HTTPException(status_code=403, detail="RESET ALL desativado para proteção dos dados financeiros.")
     if body.get("confirm") != "RESET-ALL":
         raise HTTPException(status_code=400, detail='Escreva "RESET-ALL" para confirmar')
     out = {c: (await db[c].delete_many({})).deleted_count for c in TEST_COLLECTIONS}
@@ -104,6 +105,7 @@ async def delete_test_run(run_id: str, user: dict = Depends(require_role("admin"
 
 @router.post("/admin/test-run/clear-all")
 async def clear_all_tests(body: dict, user: dict = Depends(require_role("admin"))):
+    raise HTTPException(status_code=403, detail="LIMPAR tudo desativado para proteção dos dados financeiros.")
     if body.get("confirm") != "LIMPAR":
         raise HTTPException(status_code=400, detail='Escreva "LIMPAR" para confirmar')
     reds = await db.redemptions.distinct("id", {"is_test": True})
