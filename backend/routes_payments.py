@@ -354,15 +354,11 @@ async def public_pay(body: PublicPayIn):
         fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
         base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
         split = True
-    session = None
+    # Dynamic methods: Stripe displays MB WAY when enabled in the Portuguese
+    # platform account and eligible for this EUR Checkout payment. Do not
+    # silently retry card-only: that hides configuration errors from operators.
     try:
-        for pm in (["card", "mb_way"], ["card"]):
-            try:
-                session = stripe.checkout.Session.create(**base, payment_method_types=pm)
-                break
-            except stripe.error.InvalidRequestError as e:
-                if pm == ["card"]:
-                    raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
+        session = stripe.checkout.Session.create(**base)
     except stripe.error.AuthenticationError:
         raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
     except stripe.error.StripeError as e:
