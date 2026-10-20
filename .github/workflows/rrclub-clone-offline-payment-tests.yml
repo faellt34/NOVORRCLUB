@@ -63,7 +63,9 @@ jobs:
             backend/payments/pix/checks.py \
             backend/payments/stripe_normalize.py \
             backend/payments/pt_split.py \
-            backend/scripts/stripe_sandbox_probe.py
+            backend/scripts/stripe_sandbox_probe.py \
+            backend/clone_guard.py \
+            backend/server.py
 
       - name: Run mocked payment regressions (no network payments)
         working-directory: backend
@@ -80,4 +82,5 @@ jobs:
             tests/test_payment_reconciliation.py \
             tests/test_financial_destructive_guards.py \
             tests/test_eur_fulfil_recovery.py \
-            tests/test_pt_dual_split.py
+            tests/test_pt_dual_split.py \
+            tests/test_clone_guard.py
