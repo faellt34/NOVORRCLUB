@@ -239,6 +239,11 @@ async def stripe_webhook(request: Request):
     payload = await request.body()
     try:
         event = stripe.Webhook.construct_event(payload, request.headers.get("stripe-signature", ""), WEBHOOK_SECRET)
+        # Stripe SDK events contain StripeObject instances; downstream .get()
+        # calls need a plain mapping even when the signature is valid.
+        obj = event["data"]["object"]
+        if hasattr(obj, "to_dict"):
+            event["data"]["object"] = obj.to_dict()
     except (stripe.error.SignatureVerificationError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid signature")
     obj, t = event["data"]["object"], event["type"]
