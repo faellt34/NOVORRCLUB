@@ -76,4 +76,5 @@ jobs:
             tests/test_stripe_sdk_compatibility.py \
             tests/test_stripe_sandbox_probe_guard.py \
             tests/test_maria_eduarda_sandbox.py \
-            tests/test_payment_reconciliation.py
+            tests/test_payment_reconciliation.py \
+            tests/test_financial_destructive_guards.py
