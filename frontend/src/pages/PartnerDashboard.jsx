@@ -239,8 +239,8 @@ export default function PartnerDashboard() {
                 </div>
               </div>
             )}
-            <button type="submit" disabled={submitting || (preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : p5Enabled ? "Enviar cobrança validada ao seguidor" : "Validar Venda"}
+            <button type="submit" disabled={submitting || (p5Enabled && !p5Ref) || (!p5Enabled && preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
+              {submitting ? "A processar..." : p5Enabled ? "Enviar cobrança validada ao seguidor" : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
             </button>
           </form>
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
