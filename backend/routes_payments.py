@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
 from storage import put_object, get_object, APP_NAME
+from payments import pt_split
 import jwt
 
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
@@ -274,6 +275,10 @@ async def fulfil(session_id: str, extra: dict, session_snapshot=None):
         _verified_coupon_session(session_snapshot, pending)
         if pending.get("payment_status") != "paid" or not pending.get("redemption_id"):
             await _fulfil_coupon(pending, extra)
+        if pending.get("split_mode") == "pt_separate_v2":
+            latest = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
+            if latest.get("split_status") not in ("completed", "held"):
+                await pt_split.settle(latest, db)
         return
     if pending.get("payment_status") == "paid":
         return
@@ -304,7 +309,9 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
         user = await user_from_query_or_header(authorization, None)
         if user["role"] != "admin" and rec.get("user_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Sem acesso a esta transação")
-    if rec["payment_status"] != "paid" or (rec.get("kind") == "coupon_pay" and not rec.get("redemption_id")):
+    if (rec["payment_status"] != "paid" or
+        (rec.get("kind") == "coupon_pay" and not rec.get("redemption_id")) or
+        (rec.get("split_mode") == "pt_separate_v2" and rec.get("split_status") not in ("completed", "held"))):
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid":
@@ -478,7 +485,23 @@ async def public_pay(body: PublicPayIn):
     if body.email:
         base["customer_email"] = body.email.strip().lower()
     split = False
-    if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
+    split_mode = "legacy_partner_or_platform"
+    pt_quote = None
+    influencer = None
+    transaction_id = new_id("tx")
+    if pt_split.requested():
+        if not pt_split.enabled():
+            raise HTTPException(503, "Split PT de teste requer chave Stripe Portugal sk_test_.")
+        influencer = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID)
+        await pt_split.verify(partner, influencer)
+        pt_quote = pt_split.quote(body.amount, c.get("desconto"), c.get("comissao"))
+        base["payment_intent_data"] = {
+            "transfer_group": transaction_id,
+            "metadata": {"kind": "coupon_pay", "coupon": code, "rrclub_transaction": transaction_id}
+        }
+        split = True
+        split_mode = "pt_separate_v2"
+    elif partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
         fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
         base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
         split = True
@@ -490,8 +513,19 @@ async def public_pay(body: PublicPayIn):
         raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
-    await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "commission_pct": float(c.get("comissao", 0)), "influencer_id": c.get("influencer_id"), "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+    await db.payment_transactions.insert_one({"id": transaction_id, "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "commission_pct": float(c.get("comissao", 0)), "influencer_id": c.get("influencer_id"),
+                                              "split_mode": split_mode, "split_status": "pending" if pt_quote else "not_applicable",
+                                              **({
+                                                  "gross_cents": pt_quote["gross_cents"],
+                                                  "net_cents": pt_quote["net_cents"],
+                                                  "partner_cents": pt_quote["partner_cents"],
+                                                  "influencer_cents": pt_quote["influencer_cents"],
+                                                  "platform_cents": pt_quote["platform_cents"],
+                                                  "partner_destination": partner["stripe_account_id"],
+                                                  "influencer_destination": influencer["stripe_account_id"],
+                                                  "manual_payout_blocked": True,
+                                              } if pt_quote else {}), "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
 
 
