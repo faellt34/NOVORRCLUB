@@ -17,6 +17,58 @@ export default function PublicCoupon() {
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(null);
   const [email, setEmail] = useState("");
+  const [p5Enabled, setP5Enabled] = useState(false);
+  const [p5Session, setP5Session] = useState(null);
+  const [p5Charge, setP5Charge] = useState(null);
+  const p5Key = `rrclub_p5_${code.toUpperCase()}`;
+  const moneyP5 = (value) => new Intl.NumberFormat(c?.currency === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: (c?.currency || "eur").toUpperCase() }).format(value || 0);
+  useEffect(() => {
+    let stopped = false;
+    const boot = async () => {
+      const { data: cfg } = await api.get("/public/p5/config");
+      if (!cfg.enabled || stopped) return;
+      let sess;
+      try { sess = JSON.parse(sessionStorage.getItem(p5Key) || "null"); } catch {}
+      if (!sess?.session_token || !sess?.scan_ref) {
+        const res = await api.post("/public/p5/sessions", { code });
+        sess = res.data;
+        sessionStorage.setItem(p5Key, JSON.stringify(sess));
+      }
+      if (!stopped) { setP5Enabled(true); setP5Session(sess); }
+    };
+    boot().catch((e) => { if (!stopped) toast.error(apiError(e)); });
+    return () => { stopped = true; };
+  }, [code, p5Key]);
+  useEffect(() => {
+    if (!p5Enabled || !p5Session?.session_token) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get("/public/p5/charges/current",
+          { params: { code }, headers: { "X-P5-Session": p5Session.session_token } });
+        if (stopped) return;
+        setP5Charge(data.status === "none" ? null : data);
+        if (data.status === "paid") setPaid({
+          payment_status: "paid", amount: data.net_minor / 100, gross_amount: data.gross_minor / 100,
+          discount: data.discount_minor / 100, redemption_id: data.charge_id, session_id: data.charge_id
+        });
+      } catch (e) { if (!stopped && e.response?.status === 403) setP5Session(null); }
+    };
+    tick();
+    const timer = setInterval(tick, 3000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [code, p5Enabled, p5Session?.session_token]);
+  const payP5 = async () => {
+    if (paying || !p5Charge?.charge_id || !p5Session?.session_token) return;
+    setPaying(true);
+    try {
+      const { data } = await api.post("/public/p5/charges/checkout",
+        { charge_id: p5Charge.charge_id, email: email || null },
+        { headers: { "X-P5-Session": p5Session.session_token } });
+      window.location.assign(data.checkout_url);
+    } catch (e) { toast.error(apiError(e)); setPaying(false); }
+  };
+
 
   useEffect(() => {
     if (!sessionId) return;
@@ -88,7 +140,7 @@ export default function PublicCoupon() {
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
                   <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
-                    <QRCodeSVG value={window.location.href} size={92} fgColor="#3B0764" />
+                    <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}${p5Enabled && p5Session?.scan_ref ? `?p5_ref=${encodeURIComponent(p5Session.scan_ref)}` : ""}`} size={92} fgColor="#3B0764" />
                     <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -118,7 +170,20 @@ export default function PublicCoupon() {
                 )}
                 {active && paid?.failed && <p data-testid="public-pay-failed" className="text-xs text-red-600 bg-red-50 rounded-xl px-3 py-2">O pagamento não foi concluído. Pode tentar novamente.</p>}
                 {active && sessionId && !paid && <p data-testid="public-pay-polling" className="text-xs text-purple-700 bg-purple-50 rounded-xl px-3 py-2 animate-pulse">A confirmar o pagamento...</p>}
-                {active && paid?.payment_status !== "paid" && (
+                {active && p5Enabled && paid?.payment_status !== "paid" && (
+                  <div data-testid="public-p5-payment" className="rounded-2xl p-4 border border-purple-100 bg-purple-50 space-y-3">
+                    <p className="text-sm font-semibold text-purple-900">Pagamento validado pelo estabelecimento</p>
+                    {!p5Charge || p5Charge.status === "none" ? <p className="text-sm text-purple-700">Mostre o QR ao parceiro. O valor da conta aparece aqui.</p>
+                      : ["pending", "checkout"].includes(p5Charge.status) ? <>
+                        <p className="text-xs text-slate-700">Conta: {moneyP5(p5Charge.gross_minor / 100)} · Desconto: {moneyP5(p5Charge.discount_minor / 100)}</p>
+                        <p className="font-bold text-lg text-purple-800">Total: {moneyP5(p5Charge.net_minor / 100)}</p>
+                        <p className="text-xs text-slate-500">Valor bloqueado pelo parceiro.</p>
+                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email para recibo (opcional)" className="w-full h-10 px-3 rounded-xl border bg-white text-sm" />
+                        <button onClick={payP5} disabled={paying} data-testid="public-p5-pay" className="w-full py-2.5 rounded-xl bg-purple-700 text-white font-semibold text-sm">{paying ? "A abrir..." : "Pagar valor confirmado"}</button>
+                      </> : <p className="text-sm text-amber-700">Cobrança expirada. Peça uma nova confirmação ao parceiro.</p>}
+                  </div>
+                )}
+                {active && !p5Enabled && paid?.payment_status !== "paid" && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
                     <div className="flex gap-2">
