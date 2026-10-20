@@ -113,7 +113,8 @@ def test_portugal_checkout_to_signed_webhook_to_one_redemption(pt):
     # Use real signature verification, but no Stripe network or payment.
     event = {"type": "checkout.session.completed", "data": {"object": {
         "id": "cs_test_pt_http", "payment_status": "paid",
-        "payment_intent": "pi_test_http", "metadata": {"kind": "coupon_pay"},
+        "currency": "eur", "amount_total": 9500, "livemode": False,
+        "payment_intent": "pi_test_http", "metadata": {"kind": "coupon_pay", "coupon": "EURP5", "campaign_id": "cpt", "partner_id": "ppt"},
     }}}
     body, headers = signed_event(event, "whsec_local_http_only")
     paid_reply = request(pt.app, "POST", "/api/stripe/webhook", content=body, headers=headers)
