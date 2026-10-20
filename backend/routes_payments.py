@@ -176,11 +176,11 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Invalid signature")
     obj, t = event["data"]["object"], event["type"]
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
-        if obj.get("payment_status", "paid") == "paid":
+        if obj.get("payment_status") == "paid":
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
-        await db.payment_transactions.update_one({"session_id": obj["id"]}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        await db.payment_transactions.update_one({"session_id": obj["id"], "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
@@ -266,15 +266,23 @@ async def public_pay(body: PublicPayIn):
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+        raise HTTPException(status_code=409, detail="Cupom expirado")
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    if not (0 <= float(c["desconto"]) < 100):
+        raise HTTPException(status_code=409, detail="Desconto inválido")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    if to_pay < 0.50:
+        raise HTTPException(status_code=409, detail="Valor após desconto inferior ao mínimo")
+    if not os.environ.get("FRONTEND_URL", "").startswith("https://"):
+        raise HTTPException(status_code=503, detail="FRONTEND_URL HTTPS não configurado")
     base = dict(
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
         mode="payment",
-        success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
+        success_url=f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{code}?cancel=1",
         metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id", ""),
                   "influencer_id": c.get("influencer_id", ""), "commission_rate_pct": str(c.get("comissao", 0))},
     )
