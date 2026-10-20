@@ -27,6 +27,11 @@ def enabled():
 def require_enabled():
     if not enabled():
         raise HTTPException(503, "P5 ainda não ativado nesta instalação")
+    # Esta linha Brasil ainda não contém o ledger/webhook Pix do P5.
+    # Falha de forma fechada até a integração financeira existir.
+    import importlib.util
+    if importlib.util.find_spec("routes_pix") is None:
+        raise HTTPException(503, "P5 Brasil depende do módulo Pix com webhook e repasses seguros")
 
 
 def digest(value):
@@ -63,7 +68,10 @@ class CheckoutCharge(BaseModel):
 
 @router.get("/public/p5/config")
 async def p5_config():
-    return {"enabled": enabled(), "requires_partner_approval": True}
+    import importlib.util
+    ready = importlib.util.find_spec("routes_pix") is not None
+    return {"enabled": enabled() and ready, "requires_partner_approval": True,
+            "checkout_ready": ready}
 
 
 @router.post("/public/p5/sessions")
@@ -103,8 +111,9 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
     require_enabled()
     code = body.code.strip().upper()
     # O parceiro só pode confirmar cobranças de campanhas próprias.
-    from partner_access import partner_record
-    partner = await partner_record(user, db)
+    partner = await db.partners.find_one({"id": user.get("partner_id")}, NO_ID)
+    if not partner:
+        raise HTTPException(403, "Parceiro sem estabelecimento associado")
     campaign = await db.campaigns.find_one({"cupom": code, "parceiro_id": partner["id"]}, NO_ID)
     if not campaign or campaign.get("status") != "Ativa":
         raise HTTPException(404, "Campanha não encontrada ou inativa")
