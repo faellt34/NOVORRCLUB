@@ -1,0 +1,40 @@
+name: RRClub Clone - Real Stripe Test Sandbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stripe-test-only:
+    if: github.ref == 'refs/heads/BRANCH-copia-editar-a-vontade'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # GitHub Actions secrets; NEVER add live keys or paste any key into code.
+      RRCLUB_STRIPE_PT_TEST_KEY: ${{ secrets.RRCLUB_STRIPE_PT_TEST_KEY }}
+      RRCLUB_STRIPE_BR_TEST_KEY: ${{ secrets.RRCLUB_STRIPE_BR_TEST_KEY }}
+      RRCLUB_STRIPE_BR_TEST_PMC: ${{ vars.RRCLUB_STRIPE_BR_TEST_PMC }}
+    steps:
+      - name: Checkout clone only
+        uses: actions/checkout@v4
+
+      - name: Python test tooling
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Stripe SDK
+        run: python -m pip install stripe==15.6.0
+
+      - name: Reject missing or live credentials
+        shell: bash
+        run: |
+          case "$RRCLUB_STRIPE_PT_TEST_KEY" in sk_test_????????????????????*) ;; *) echo "::error::PT test key not configured (sk_test_ required)"; exit 1 ;; esac
+          case "$RRCLUB_STRIPE_BR_TEST_KEY" in sk_test_????????????????????*) ;; *) echo "::error::BR test key not configured (sk_test_ required)"; exit 1 ;; esac
+          case "$RRCLUB_STRIPE_BR_TEST_PMC" in pmc_*) ;; *) echo "::error::BR test Pix-only payment-method configuration is missing"; exit 1 ;; esac
+
+      - name: Verify both real Stripe test accounts and create-expire test Checkouts
+        working-directory: backend
+        run: python scripts/stripe_sandbox_probe.py
