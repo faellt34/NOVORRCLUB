@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core import client, db
+import p5_checkout
 from seed import seed
 import routes_pix
 import routes_auth, routes_data, routes_admin, routes_leads, routes_messages, routes_payments, routes_ops, realtime, routes_test, routes_ai, routes_diretor
@@ -28,7 +29,7 @@ async def root():
     return {"message": "Robson Club API", "status": "ok"}
 
 
-for r in (routes_pix.router, routes_auth.router, routes_ops.router, routes_test.router, routes_ai.router, routes_diretor.router, routes_payments.router, routes_data.router, routes_leads.router, routes_messages.router, routes_admin.router, realtime.router):
+for r in (p5_checkout.router, routes_pix.router, routes_auth.router, routes_ops.router, routes_test.router, routes_ai.router, routes_diretor.router, routes_payments.router, routes_data.router, routes_leads.router, routes_messages.router, routes_admin.router, realtime.router):
     api_router.include_router(r)
 
 app.include_router(api_router)
@@ -47,6 +48,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 @app.on_event("startup")
 async def on_startup():
+    await p5_checkout.ensure_p5_indexes()
     await db.users.create_index("google_sub", unique=True, partialFilterExpression={"google_sub": {"$type": "string"}})
     await db.google_challenges.create_index("expires_at", expireAfterSeconds=0)
     await seed()
