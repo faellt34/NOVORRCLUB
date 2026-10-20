@@ -1,4 +1,4 @@
-name: NodeJS with Webpack
+name: Frontend build
 
 on:
   push:
@@ -9,20 +9,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-
+    defaults:
+      run:
+        working-directory: frontend
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-
-    - name: Build
-      run: |
-        npm install
-        npx webpack
+      - uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          # CRA5's schema-utils/ajv-keywords require AJV 8; this repository
+          # has no committed lockfile and otherwise may hoist AJV 6.
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Compile production frontend
+        env:
+          CI: false
+        run: npm run build

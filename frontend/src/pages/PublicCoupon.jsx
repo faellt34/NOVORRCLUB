@@ -127,7 +127,7 @@ export default function PublicCoupon() {
                     </div>
                     <input data-testid="public-pay-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email para receber o recibo (opcional)" className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
                     {parsed >= 1 && <p data-testid="public-pay-preview" className="text-xs text-slate-600">Paga <b className="text-purple-700">{eur(+(parsed * (1 - c.desconto / 100)).toFixed(2))}</b> em vez de {eur(parsed)} · poupa {eur(+(parsed * c.desconto / 100).toFixed(2))}</p>}
-                    <p className="text-[11px] text-slate-400 flex items-center gap-1"><Smartphone className="w-3 h-3" /> MB WAY · Cartão de débito/crédito · pagamento seguro via Stripe</p>
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1"><Smartphone className="w-3 h-3" /> MB WAY quando disponível · cartão · opções confirmadas no checkout Stripe</p>
                   </div>
                 )}
                 {active
