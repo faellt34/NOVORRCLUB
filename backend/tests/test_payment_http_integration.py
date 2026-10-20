@@ -40,7 +40,7 @@ def http_app(router):
 def request(app, method, path, **kwargs):
     async def call():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
             base_url=ORIGIN,
             timeout=4.0,
         ) as client:
