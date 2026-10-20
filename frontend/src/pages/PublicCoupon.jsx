@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { StripeModeBanner } from "../components/StripeModeBanner";
+import MbWaySandboxTest from "../components/MbWaySandboxTest";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -14,6 +15,8 @@ export default function PublicCoupon() {
   const [err, setErr] = useState("");
   const [params] = useSearchParams();
   const sessionId = params.get("session_id");
+  const testSessionId = params.get("mbway_sandbox_session_id");
+  const [testState, setTestState] = useState(null);
   const [amount, setAmount] = useState("");
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(null);
@@ -31,6 +34,14 @@ export default function PublicCoupon() {
   };
   const pixRequestId = params.get("pix_request_id") || attempt?.request_id;
   const currency = (c?.currency || "eur").toLowerCase();
+  useEffect(() => {
+    if (!testSessionId) return;
+    let active = true;
+    api.get(`/payments/mbway-sandbox/status/${encodeURIComponent(testSessionId)}?coupon=${encodeURIComponent(code)}`)
+      .then(({ data }) => { if (active) setTestState(data); })
+      .catch(() => { if (active) setTestState({ message: "Não foi possível verificar o teste MB WAY." }); });
+    return () => { active = false; };
+  }, [testSessionId, code]);
   const money = (value, selected = currency) => new Intl.NumberFormat(selected.toLowerCase() === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: selected.toUpperCase() }).format(Number(value) || 0);
   const receiptMoney = (value) => money(value, paid?.currency || currency);
   const terminal = ["failed", "expired"].includes(paid?.payment_status);
@@ -187,6 +198,8 @@ export default function PublicCoupon() {
                   {!paid?.blocked && !paid?.checkout_url && !attempt?.checkout_url && pixRequestId && <button disabled={paying} onClick={retryPixCheckout} className="block underline font-semibold">Retomar pedido de pagamento</button>}
                   {!paid?.blocked && (paid?.checkout_url || attempt?.checkout_url) && <a href={paid?.checkout_url || attempt.checkout_url} className="block underline font-semibold">Retomar a mesma cobrança</a>}
                 </div>}
+                {currency === "eur" && testSessionId && <div role="status" className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900" data-testid="mbway-sandbox-status"><strong>MB WAY — APENAS TESTE</strong><p>{testState?.message || "A consultar resultado simulado…"}</p></div>}
+                {active && currency === "eur" && !sessionId && !testSessionId && !awaiting && !completed && <MbWaySandboxTest code={code} amount={amount} />}
                 {active && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
                 {active && currency !== "brl" && !awaiting && !terminal && !completed && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
