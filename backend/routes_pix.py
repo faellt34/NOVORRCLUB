@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError
 from core import db, NO_ID, now_iso, require_role
 from partner_access import partner_record
 from payments.pix.checks import platform_checks, configuration_checks, receiving_status, webhook_checks
+from payments.stripe_normalize import stripe_payload
 
 router = APIRouter()
 
@@ -46,7 +47,8 @@ async def provider(operation,*args,**kwargs):
     if 'idempotency_key' in kwargs:
         options['idempotency_key']=kwargs.pop('idempotency_key')
     try:
-        return await asyncio.wait_for(asyncio.to_thread(fn,*args,params=kwargs,options=options),timeout=30)
+        result = await asyncio.wait_for(asyncio.to_thread(fn,*args,params=kwargs,options=options),timeout=30)
+        return stripe_payload(result)
     except (stripe.error.StripeError,asyncio.TimeoutError):
         raise HTTPException(502,'Operação Pix pendente; repetir com a mesma referência')
 
