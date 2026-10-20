@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from core import NO_ID, db, rate_limit
+from payments.stripe_normalize import stripe_payload
 
 router = APIRouter()
 
@@ -71,10 +72,10 @@ async def checkout(body: MbWayTestIn, request: Request):
     await rate_limit("mbway-sandbox:" + (request.client.host if request.client else "unknown"), 12, 3600)
     price = net_cents(body.amount, campaign.get("desconto", 0))
     try:
-        account = await asyncio.to_thread(stripe_client.v1.accounts.retrieve_current)
+        account = stripe_payload(await asyncio.to_thread(stripe_client.v1.accounts.retrieve_current))
         if account.get("country") != "PT":
             raise HTTPException(409, "É necessária uma conta Stripe de teste de Portugal.")
-        session = await asyncio.to_thread(
+        session = stripe_payload(await asyncio.to_thread(
             stripe_client.v1.checkout.sessions.create,
             params={
                 "mode": "payment", "payment_method_types": ["mb_way"],
@@ -85,7 +86,7 @@ async def checkout(body: MbWayTestIn, request: Request):
                 "cancel_url": origin + "/c/" + code + "?mbway_sandbox_cancel=1",
             },
             options={"idempotency_key": "rrclub-mbway-test-" + uuid.uuid4().hex},
-        )
+        ))
     except stripe.StripeError as exc:
         raise HTTPException(409, "Stripe Portugal (teste): " + (getattr(exc, "user_message", None) or "MB WAY indisponível nesta conta.")[:180])
 
@@ -100,7 +101,7 @@ async def status(session_id: str, coupon: str):
         raise HTTPException(400, "Sessão de teste inválida.")
     stripe_client = client()
     try:
-        session = await asyncio.to_thread(stripe_client.v1.checkout.sessions.retrieve, session_id)
+        session = stripe_payload(await asyncio.to_thread(stripe_client.v1.checkout.sessions.retrieve, session_id))
     except stripe.StripeError:
         raise HTTPException(502, "Não foi possível verificar a simulação na Stripe.")
     meta = session.get("metadata") or {}
