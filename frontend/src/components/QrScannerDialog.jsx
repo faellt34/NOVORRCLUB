@@ -26,7 +26,9 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected }) => {
   const finish = (text) => {
     if (doneRef.current) return;
     doneRef.current = true;
-    onDetected(extractCoupon(text));
+    let ref = null;
+    try { ref = new URL(String(text)).searchParams.get("p5_ref"); } catch {}
+    onDetected(extractCoupon(text), ref);
     onOpenChange(false);
   };
 
