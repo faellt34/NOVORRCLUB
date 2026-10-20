@@ -11,27 +11,70 @@ from pydantic import BaseModel
 
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, hash_password
 from mailer import send_email, configured
+from payout_attribution import payout_evidence, payout_status, REASONS
 
 router = APIRouter()
 
 
 @router.get("/admin/payouts")
 async def payouts_overview(user: dict = Depends(require_role("admin"))):
-    reds = await db.redemptions.find({}, {"influencer_id": 1, "influencer": 1, "date": 1, "commission": 1, "_id": 0}).to_list(100000)
-    agg = defaultdict(lambda: {"commission": 0.0, "count": 0})
-    names = {}
-    for r in reds:
-        k = (r["influencer_id"], r["date"][:7])
-        agg[k]["commission"] += r["commission"]; agg[k]["count"] += 1
-        names[r["influencer_id"]] = r["influencer"]
+    # Este relatório não certifica um payout bancário: registos "Pago"
+    # resultam apenas de uma marcação manual do administrador.
+    reds = await db.redemptions.find({}, {
+        "_id": 0, "influencer_id": 1, "influencer": 1, "campaign_id": 1,
+        "coupon": 1, "date": 1, "commission": 1, "paid_online": 1,
+        "idempotency_key": 1
+    }).to_list(100000)
+    inf_ids = {r.get("influencer_id") for r in reds if r.get("influencer_id")}
+    campaign_ids = {r.get("campaign_id") for r in reds if r.get("campaign_id")}
+    sessions = {r.get("idempotency_key") for r in reds if r.get("paid_online") is True and r.get("idempotency_key")}
+    campaigns = {c["id"]: c async for c in db.campaigns.find(
+        {"id": {"$in": list(campaign_ids)}},
+        {"_id": 0, "id": 1, "influencer_id": 1}
+    )}
+    influencers = {i["id"]: i async for i in db.influencers.find(
+        {"id": {"$in": list(inf_ids)}},
+        {"_id": 0, "id": 1, "nome": 1, "iban": 1}
+    )}
+    verified_sessions = {tx["session_id"] async for tx in db.payment_transactions.find(
+        {"session_id": {"$in": list(sessions)}, "kind": "coupon_pay", "payment_status": "paid"},
+        {"_id": 0, "session_id": 1}
+    )}
+    agg = defaultdict(lambda: {"commission": 0.0, "count": 0, "reasons": set(), "coupons": set()})
+    for rec in reds:
+        if not rec.get("date"):
+            continue
+        key = (rec.get("influencer_id"), rec["date"][:7])
+        row = agg[key]
+        row["commission"] += float(rec.get("commission") or 0)
+        row["count"] += 1
+        if rec.get("coupon"):
+            row["coupons"].add(rec["coupon"])
+        reason = payout_evidence(rec, campaigns, influencers, verified_sessions)
+        if reason:
+            row["reasons"].add(reason)
     paid = {(p["influencer_id"], p["month"]): p async for p in db.payouts.find({}, NO_ID)}
-    ibans = {i["id"]: i.get("iban") async for i in db.influencers.find({}, {"id": 1, "iban": 1, "_id": 0})}
     rows = []
-    for (inf, month), v in agg.items():
-        p = paid.get((inf, month))
-        rows.append({"influencer_id": inf, "influencer": names[inf], "month": month, "commission": round(v["commission"], 2), "count": v["count"],
-                     "status": "Pago" if p else "Pendente", "paid_at": p["paid_at"] if p else None, "note": p.get("note") if p else None, "iban": ibans.get(inf)})
-    rows.sort(key=lambda r: (r["month"], r["influencer"]), reverse=True)
+    for (inf_id, month), agg_row in agg.items():
+        payout = paid.get((inf_id, month))
+        verified_beneficiary = influencers.get(inf_id, {})
+        reasons = sorted(agg_row["reasons"])
+        rows.append({
+            "influencer_id": inf_id,
+            "influencer": verified_beneficiary.get("nome") or "Beneficiário por confirmar",
+            "month": month,
+            "commission": round(agg_row["commission"], 2),
+            "count": agg_row["count"],
+            "coupons": sorted(agg_row["coupons"]),
+            "attribution_verified": not reasons,
+            "audit_reasons": [REASONS.get(reason, reason) for reason in reasons],
+            "status": payout_status(reasons, already_paid=bool(payout)),
+            "paid_at": payout.get("paid_at") if payout else None,
+            "note": payout.get("note") if payout else None,
+            "iban_last4": (verified_beneficiary.get("iban") or "")[-4:] or None,
+            "settlement_proof": "manual_record_only" if payout else "not_verified"
+        })
+    rows.sort(key=lambda row: (row["month"], row["influencer"]), reverse=True)
     return rows
 
 
@@ -43,18 +86,52 @@ class PayoutIn(BaseModel):
 
 @router.post("/admin/payouts")
 async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin"))):
+    # Nem sequer a marcação manual de "Pago" é permitida sem beneficiário
+    # e venda confirmados. Não inicia qualquer transferência.
+    if not body.influencer_id or not body.month or len(body.month) != 7:
+        raise HTTPException(400, "Beneficiário ou mês inválido")
     if await db.payouts.find_one({"influencer_id": body.influencer_id, "month": body.month}):
-        raise HTTPException(status_code=409, detail="Este mês já está marcado como pago")
+        raise HTTPException(409, "Este mês já está marcado como pago")
     inf = await db.influencers.find_one({"id": body.influencer_id}, NO_ID)
-    if not inf:
-        raise HTTPException(status_code=404, detail="Influencer não encontrado")
-    total = sum([r["commission"] async for r in db.redemptions.find({"influencer_id": body.influencer_id, "date": {"$regex": f"^{body.month}"}}, {"commission": 1})])
-    doc = {"id": new_id("pay"), "influencer_id": body.influencer_id, "month": body.month, "paid_at": datetime.now(timezone.utc).date().isoformat(), "amount": round(total, 2), "note": body.note, "by": user["nome"]}
+    if not inf or not inf.get("nome"):
+        raise HTTPException(409, "Influenciador sem identidade confirmada na RRClub")
+    redemptions = await db.redemptions.find(
+        {"influencer_id": body.influencer_id, "date": {"$regex": f"^{body.month}"}},
+        NO_ID
+    ).to_list(10000)
+    if not redemptions:
+        raise HTTPException(409, "Sem redenções conciliadas neste mês")
+    campaign_ids = {r.get("campaign_id") for r in redemptions if r.get("campaign_id")}
+    sessions = {r.get("idempotency_key") for r in redemptions if r.get("paid_online") is True and r.get("idempotency_key")}
+    campaigns = {c["id"]: c async for c in db.campaigns.find(
+        {"id": {"$in": list(campaign_ids)}}, {"_id": 0, "id": 1, "influencer_id": 1}
+    )}
+    verified_sessions = {tx["session_id"] async for tx in db.payment_transactions.find(
+        {"session_id": {"$in": list(sessions)}, "kind": "coupon_pay", "payment_status": "paid"},
+        {"_id": 0, "session_id": 1}
+    )}
+    beneficiary = {body.influencer_id: inf}
+    reasons = {payout_evidence(r, campaigns, beneficiary, verified_sessions) for r in redemptions}
+    reasons.discard(None)
+    if reasons:
+        raise HTTPException(
+            409, "Comissões por reconciliar. Não marque como pago sem confirmar identidade, campanha e pagamento."
+        )
+    total = sum(float(r.get("commission") or 0) for r in redemptions)
+    if total <= 0:
+        raise HTTPException(409, "Não existem comissões positivas para pagar")
+    doc = {"id": new_id("pay"), "influencer_id": body.influencer_id,
+           "month": body.month, "paid_at": datetime.now(timezone.utc).date().isoformat(),
+           "amount": round(total, 2), "note": body.note, "by": user["nome"],
+           "record_type": "admin_manual_mark_paid", "bank_transfer_verified": False}
     await db.payouts.insert_one(dict(doc))
-    await audit("PAGAMENTO", f"Extrato {body.month} de {inf['nome']} marcado como pago · {total:.2f}€", user, doc["id"])
+    await audit("PAGAMENTO", f"Extrato {body.month} de {inf['nome']} marcado manualmente como pago; transferência bancária não verificada · {total:.2f}€",
+                user, doc["id"])
     inf_user = await db.users.find_one({"influencer_id": body.influencer_id}, {"id": 1})
     if inf_user:
-        await notify([inf_user["id"]], "pagamento", "Comissão paga 💸", f"O extrato de {body.month} ({total:.2f}€) foi marcado como pago em {doc['paid_at']}.", "/influencer/extrato")
+        await notify([inf_user["id"]], "pagamento",
+                     "Comissão declarada como paga", f"O administrador registou {total:.2f}€ como pago no extrato de {body.month}; verifique o seu banco.",
+                     "/influencer/extrato")
     return doc
 
 
