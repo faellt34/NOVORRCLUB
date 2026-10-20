@@ -12,6 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from core import client, db
 from seed import seed
+from clone_guard import require_isolated_clone
 import routes_pix
 import routes_mbway_sandbox
 import routes_auth, routes_data, routes_admin, routes_leads, routes_messages, routes_payments, routes_ops, realtime, routes_test, routes_ai, routes_diretor
@@ -48,6 +49,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 @app.on_event("startup")
 async def on_startup():
+    # Never initialize schemas, users or catalogs against a production environment.
+    require_isolated_clone()
     await db.users.create_index("google_sub", unique=True, partialFilterExpression={"google_sub": {"$type": "string"}})
     await db.google_challenges.create_index("expires_at", expireAfterSeconds=0)
     await seed()
@@ -62,15 +65,15 @@ async def on_startup():
         if list(index.get("key", [])) == [("influencer_id", 1), ("month", 1)]:
             await db.payouts.drop_index(index_name)
     await ensure_log_indexes()
-    try:
-        init_storage()
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Storage init failed: {e}")
-    try:
-        await asyncio.to_thread(ensure_tax_settings)
-        await asyncio.to_thread(ensure_price, SUBSCRIPTION["lookup_key"], SUBSCRIPTION["name"], SUBSCRIPTION["amount"], SUBSCRIPTION["emergent_product_id"], SUBSCRIPTION["interval"])
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Stripe catalog init failed: {e}")
+    # No automatic Stripe Tax modification: an incorrect legal address or
+    # tax setting could affect live accounting. No automatic catalog writes.
+    # Storage also remains disabled until the isolated deployment is configured.
+    if os.getenv("RRCLUB_CLONE_STORAGE_ENABLED", "").lower() == "true":
+        try:
+            init_storage()
+        except Exception:
+            logging.getLogger(__name__).exception("Clone storage initialization failed")
+
 
 
 @app.on_event("shutdown")
