@@ -1,0 +1,70 @@
+name: RRClub Clone - Offline Payment Tests
+
+on:
+  push:
+    branches:
+      - BRANCH-copia-editar-a-vontade
+    paths:
+      - 'backend/**'
+      - '.github/workflows/rrclub-clone-offline-payment-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-payment-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MONGO_URL: mongodb://127.0.0.1:1
+      DB_NAME: rrclub_clone_offline
+      JWT_SECRET: github-actions-offline-test-key-at-least-32-bytes
+      STRIPE_SECRET_KEY: sk_test_offline_no_calls
+      STRIPE_WEBHOOK_SECRET: whsec_offline
+      PIX_ENABLED: 'false'
+      MBWAY_PT_SANDBOX_ENABLED: 'false'
+      FRONTEND_URL: https://rrclub.invalid
+      PAYMENT_ALLOWED_ORIGINS: https://rrclub.invalid
+    steps:
+      - name: Checkout clone
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install isolated test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            fastapi==0.110.1 \
+            pydantic==2.13.5 \
+            motor==3.3.1 \
+            pymongo==4.6.3 \
+            stripe==15.6.0 \
+            requests==2.34.2 \
+            PyJWT==2.13.0 \
+            bcrypt==4.1.3 \
+            python-multipart==0.0.32 \
+            pytest==9.1.1 \
+            mongomock-motor==0.0.36 \
+            httpx==0.28.1
+
+      - name: Compile payment modules
+        run: |
+          python -m compileall -q \
+            backend/routes_payments.py \
+            backend/routes_pix.py \
+            backend/routes_mbway_sandbox.py \
+            backend/partner_access.py \
+            backend/payments/pix/checks.py
+
+      - name: Run mocked payment regressions (no network payments)
+        working-directory: backend
+        run: |
+          python -m pytest -q \
+            tests/test_pix_service.py \
+            tests/test_pix_readiness.py \
+            tests/test_payment_confirmation.py
