@@ -241,7 +241,7 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
         data["customer_email"] = body.email.strip().lower()
     split = False
     if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
-        fee = minor(Decimal(str(gross)) * Decimal(str(campaign.get("comissao", 0))) / Decimal(100))
+        fee = int((Decimal(rec["gross_minor"]) * Decimal(str(campaign.get("comissao", 0))) / Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         if fee > rec["net_minor"]:
             raise HTTPException(409, "Comissão superior ao pagamento")
         data["payment_intent_data"] = {"application_fee_amount": fee,
