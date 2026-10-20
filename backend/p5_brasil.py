@@ -4,7 +4,6 @@ Não ativa cobranças sem integração explícita; evita contar scan como pagame
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -37,6 +36,8 @@ async def prepare_charge(body: PrepareCharge, user: dict = Depends(require_role(
         raise HTTPException(403, "Sessão do seguidor não associada ao cupão")
     existing = await db.p5_charges.find_one({"partner_id": user["partner_id"], "idempotency_key": body.idempotency_key}, NO_ID)
     if existing:
+        if existing["coupon"] != code or existing["session_token"] != body.follower_session_token or existing["gross_minor"] != cents(body.gross_amount):
+            raise HTTPException(409, "Chave de idempotência reutilizada com dados diferentes")
         return {"charge_id": existing["id"], "status": existing["status"], "duplicate": True}
     gross = cents(body.gross_amount)
     discount_pct = Decimal(str(c["desconto"]))
