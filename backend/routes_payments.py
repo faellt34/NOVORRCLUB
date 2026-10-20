@@ -271,6 +271,8 @@ async def fulfil(session_id: str, extra: dict, session_snapshot=None):
         {"session_id": session_id, "kind": {"$ne": "pix_coupon"}}, NO_ID)
     if not pending:
         return
+    if pending.get("payment_status") in ("refunded", "partially_refunded", "disputed"):
+        return
     if pending.get("kind") == "coupon_pay":
         _verified_coupon_session(session_snapshot, pending)
         if pending.get("payment_status") != "paid" or not pending.get("redemption_id"):
@@ -309,9 +311,10 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
         user = await user_from_query_or_header(authorization, None)
         if user["role"] != "admin" and rec.get("user_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Sem acesso a esta transação")
-    if (rec["payment_status"] != "paid" or
-        (rec.get("kind") == "coupon_pay" and not rec.get("redemption_id")) or
-        (rec.get("split_mode") == "pt_separate_v2" and rec.get("split_status") not in ("completed", "held"))):
+    if (rec["payment_status"] not in ("paid", "refunded", "partially_refunded", "disputed") or
+        (rec.get("payment_status") == "paid" and rec.get("kind") == "coupon_pay" and not rec.get("redemption_id")) or
+        (rec.get("payment_status") == "paid" and rec.get("split_mode") == "pt_separate_v2"
+         and rec.get("split_status") not in ("completed", "held"))):
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid":
@@ -330,6 +333,56 @@ def _mask_email(e):
         return None
     n, d = e.split("@", 1)
     return f"{n[:2]}***@{d}"
+
+
+async def _pt_refund_or_dispute(kind: str, charge: dict):
+    """Refund/dispute accounting and reversals for explicit PT TEST v2 only."""
+    intent_id = charge.get("payment_intent")
+    if not intent_id:
+        return
+    tx = await db.payment_transactions.find_one(
+        {"kind": "coupon_pay", "stripe_payment_intent_id": intent_id}, NO_ID)
+    if not tx or tx.get("split_mode") != "pt_separate_v2":
+        return
+    if kind.startswith("charge.dispute."):
+        await db.payment_transactions.update_one({"id": tx["id"]},
+            {"$set": {"payment_status": "disputed", "dispute_hold": True,
+                      "split_status": "held", "manual_payout_blocked": True,
+                      "dispute_id": charge.get("id")}})
+        await db.redemptions.update_one({"id": tx.get("redemption_id")},
+            {"$set": {"commission": 0, "dispute_hold": True}})
+        return
+    if (charge.get("currency") != "eur"
+        or charge.get("amount") != tx.get("net_cents")
+        or not isinstance(charge.get("amount_refunded"), int)
+        or not 0 <= charge["amount_refunded"] <= tx["net_cents"]):
+        raise HTTPException(409, "Reembolso EUR não corresponde à cobrança original.")
+    cumulative = charge["amount_refunded"]
+    await pt_split.reverse(tx, db, cumulative)
+    latest = await db.payment_transactions.find_one({"id": tx["id"]}, NO_ID)
+    cumulative = latest.get("refunded_cents", 0)
+    if not cumulative:
+        return
+    # One cumulative negative record per original sale; retries never duplicate.
+    net = Decimal(tx["net_cents"])
+    ratio = Decimal(cumulative) / net
+    def portion(amount):
+        return int((Decimal(amount) * ratio).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    gross_cents = int((Decimal(str(tx["gross_amount"])) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    commission_cents = int((Decimal(str(tx.get("gross_amount", 0))) * Decimal(str(tx.get("commission_pct", 0)))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    adj = {"id": "refund-eur-"+tx["id"], "idempotency_key": "refund-eur-"+tx["id"],
+           "coupon": tx["coupon"], "campaign_id": tx["campaign_id"],
+           "partner_id": tx["partner_id"], "influencer_id": tx.get("influencer_id"),
+           "currency": "eur", "is_refund": True, "paid_online": True,
+           "amount": -portion(gross_cents)/100,
+           "discount": -portion(gross_cents - tx["net_cents"])/100,
+           "commission": -portion(commission_cents)/100,
+           "refunded_cents": cumulative, "date": now_iso()}
+    await db.redemptions.update_one({"id": adj["id"]}, {"$set": adj}, upsert=True)
+    await db.payment_transactions.update_one({"id": tx["id"]},
+        {"$set": {"payment_status": "refunded" if cumulative == tx["net_cents"] else "partially_refunded",
+                  "status": "refunded" if cumulative == tx["net_cents"] else "partially_refunded",
+                  "manual_payout_blocked": True}})
 
 
 @router.post("/stripe/webhook")
@@ -359,6 +412,8 @@ async def stripe_webhook(request: Request):
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
+    elif t in ("charge.refunded", "charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed"):
+        await _pt_refund_or_dispute(t, obj)
     elif t in ("transfer.failed", "payout.failed", "transfer.reversed"):
         from realtime import emit
         emit("erro_transferencia", detalhe=f"Stripe {t} · {obj.get('id', '')}", ref=obj.get("id"))
