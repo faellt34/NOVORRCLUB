@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
-    if (ev.tipo === "redencao_registada" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
+    if (ev.tipo === "redencao_registada") {
       // Receita comercial e comissões não são transferências bancárias.
       const gross = Number(ev.record?.amount ?? ev.valor_total ?? 0);
       const commission = Number(ev.record?.commission ?? ev.valor_plataforma ?? 0);
