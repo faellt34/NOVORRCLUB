@@ -140,7 +140,8 @@ def test_maria_pt_eur_p5_checkout_and_commission_only_in_mock_database(pt):
     # but signature and Stripe event are generated LOCALLY.
     event = {"type": "checkout.session.completed", "data": {"object": {
         "id": "cs_test_pt_http", "payment_status": "paid",
-        "payment_intent": "pi_test_maria_pt", "metadata": {"kind": "coupon_pay"},
+        "currency": "eur", "amount_total": 9500, "livemode": False,
+        "payment_intent": "pi_test_maria_pt", "metadata": {"kind": "coupon_pay", "coupon": "EURP5", "campaign_id": "cpt", "partner_id": "ppt"},
     }}}
     raw, headers = signed_event(event, "whsec_local_http_only")
     reply = request(pt.app, "POST", "/api/stripe/webhook", content=raw, headers=headers)
