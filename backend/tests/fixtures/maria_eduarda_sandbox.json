@@ -1,0 +1,38 @@
+{
+  "description": "RRClub clone-only OFFLINE synthetic identities. No real Stripe, user signup, login, referral credit, payout or production record.",
+  "profiles": [
+    {
+      "id": "fixture-maria-eduarda-br",
+      "name": "Maria Eduarda",
+      "role": "influencer",
+      "country": "BR",
+      "currency": "brl",
+      "email": "maria.eduarda.br@rrclub.invalid",
+      "is_test": true,
+      "source": "offline_fixture",
+      "stripe_connect_account_id": null,
+      "mock_stripe_account_id": "mock_connect_maria_eduarda_br",
+      "connect_verification": "simulated_only",
+      "test_partner_id": "fixture-parceiro-br"
+    },
+    {
+      "id": "fixture-maria-eduarda-pt",
+      "name": "Maria Eduarda",
+      "role": "influencer",
+      "country": "PT",
+      "currency": "eur",
+      "email": "maria.eduarda.pt@rrclub.invalid",
+      "is_test": true,
+      "source": "offline_fixture",
+      "stripe_connect_account_id": null,
+      "mock_stripe_account_id": "mock_connect_maria_eduarda_pt",
+      "connect_verification": "simulated_only",
+      "test_partner_id": "fixture-parceiro-pt"
+    }
+  ],
+  "rules": {
+    "indications": "Only test profiles are used for synthetic scenarios. Real unverified influencer referrals are not copied, simulated as paid, or counted in this fixture.",
+    "requires_real_test_keys_to_create_stripe_accounts": true,
+    "production_modified": false
+  }
+}
