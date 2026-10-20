@@ -90,7 +90,7 @@ class PayoutIn(BaseModel):
 async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin"))):
     # Nem sequer a marcação manual de "Pago" é permitida sem beneficiário
     # e venda confirmados. Não inicia qualquer transferência.
-    if not body.influencer_id or not re.fullmatch(r"20\\d\\d-(0[1-9]|1[0-2])", body.month):
+    if not body.influencer_id or not re.fullmatch(r"20\d\d-(0[1-9]|1[0-2])", body.month):
         raise HTTPException(400, "Beneficiário ou mês inválido")
     if await db.payouts.find_one({"influencer_id": body.influencer_id, "month": body.month}):
         raise HTTPException(409, "Este mês já está marcado como pago")
