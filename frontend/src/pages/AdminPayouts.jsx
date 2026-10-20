@@ -15,6 +15,25 @@ export default function AdminPayouts() {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("todos");
   const [busy, setBusy] = useState(null);
+  const [financeRows, setFinanceRows] = useState([]);
+  const [financeBusy, setFinanceBusy] = useState(null);
+  const [financeEvidence, setFinanceEvidence] = useState({});
+
+  useEffect(() => {
+    api.get("/admin/finance/reconciliation").then((r) => setFinanceRows(r.data))
+      .catch((e) => toast.error(apiError(e)));
+  }, []);
+
+  const verifyStripe = async (r) => {
+    setFinanceBusy(r.session_id);
+    try {
+      const { data } = await api.get(`/admin/finance/reconciliation/${encodeURIComponent(r.session_id)}`);
+      setFinanceEvidence((old) => ({ ...old, [r.session_id]: data }));
+    } catch (e) {
+      toast.error(apiError(e));
+    } finally { setFinanceBusy(null); }
+  };
+
 
   const load = useCallback(() => api.get("/admin/payouts").then((r) => setRows(r.data)).catch((e) => toast.error(apiError(e))), []);
   useEffect(() => { load(); }, [load]);
@@ -62,6 +81,50 @@ export default function AdminPayouts() {
         <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-paid-total">
           <span className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Wallet className="w-5 h-5" /></span>
           <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+paid.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Já pago</p></div>
+        </div>
+      </div>
+
+      <div className="card-soft p-5" data-testid="finance-reconciliation">
+        <h2 className="text-lg font-semibold text-slate-900">Auditoria financeira · Stripe Portugal</h2>
+        <p className="text-xs text-slate-500 mt-1 mb-4">
+          Pagamento confirmado não é o mesmo que transferência ao parceiro nem levantamento bancário.
+          Esta consulta à Stripe é de leitura apenas: não inicia pagamentos nem repasses.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-xs text-slate-500 border-b">
+              <th className="py-2 pr-3">Cupão / Parceiro</th>
+              <th className="py-2 pr-3">Pagamento</th>
+              <th className="py-2 pr-3">Transferência Stripe</th>
+              <th className="py-2 pr-3">Banco</th>
+              <th className="py-2">Verificação</th>
+            </tr></thead>
+            <tbody>
+              {financeRows.map((r) => {
+                const proof = financeEvidence[r.session_id];
+                return <tr key={r.session_id} className="border-b border-slate-100">
+                  <td className="py-3 pr-3"><p className="font-semibold">{r.coupon}</p>
+                    <p className="text-xs text-slate-500">{r.partner}</p></td>
+                  <td className="py-3 pr-3"><p>{r.currency === "eur" ? eur(r.amount || 0) : `${r.amount || 0} ${r.currency || ""}`}</p>
+                    <p className="text-xs text-slate-500">{r.payment_status === "paid" ? "Confirmado" : "Não confirmado"}</p></td>
+                  <td className="py-3 pr-3">
+                    {proof?.state === "transferred_to_connected_stripe_account"
+                      ? <span className="text-emerald-700 font-semibold">Confirmada na Stripe · {proof.transfer_id}</span>
+                      : <span className="text-amber-700">{proof ? `Sem confirmação: ${proof.state}` : "Por verificar"}</span>}
+                  </td>
+                  <td className="py-3 pr-3 text-xs text-slate-500">Não verificado</td>
+                  <td className="py-3"><button onClick={() => verifyStripe(r)}
+                    disabled={financeBusy === r.session_id || r.payment_status !== "paid"}
+                    className="px-3 py-1.5 rounded-lg border border-purple-200 text-purple-700 disabled:opacity-50 hover:bg-purple-50 text-xs font-semibold">
+                    {financeBusy === r.session_id ? "A consultar..." : "Verificar na Stripe"}
+                  </button></td>
+                </tr>;
+              })}
+              {!financeRows.length && <tr><td colSpan={5} className="py-5 text-slate-500 text-center">
+                Sem transações de cupões nesta consulta.
+              </td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
 
