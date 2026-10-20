@@ -169,7 +169,7 @@ export default function AdminPayouts() {
                     <td className="py-3 pr-4 font-bold text-purple-700">{eur(r.commission)}</td>
                     <td className="py-3 pr-4">
                       {r.status === "Pago"
-                        ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Pago em {new Date(r.paid_at).toLocaleDateString("pt-PT")}</span>
+                        ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Declarado em {new Date(r.paid_at).toLocaleDateString("pt-PT")} · banco por confirmar</span>
                         : <div data-testid={`payout-status-${key}`} className="text-xs text-amber-700">
                             <span className="inline-flex items-center gap-1 font-semibold bg-amber-50 px-2.5 py-1 rounded-full"><Clock className="w-3 h-3" />{r.status}</span>
                             {!!r.audit_reasons?.length && <p className="mt-1 max-w-xs text-[11px]">{r.audit_reasons.join(" · ")}</p>}
