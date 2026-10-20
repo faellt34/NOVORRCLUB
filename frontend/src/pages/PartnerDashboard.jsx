@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
@@ -13,12 +12,14 @@ import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { StatusBadge } from "../components/KpiCard";
+import { PixBillStatus } from "../components/PixBillStatus";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
 export default function PartnerDashboard() {
   const { user, refreshUnread } = useApp();
   const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [code, setCode] = useState("");
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
@@ -30,6 +31,7 @@ export default function PartnerDashboard() {
   const [iban, setIban] = useState("");
   const [ibanEdit, setIbanEdit] = useState(false);
   const [connect, setConnect] = useState(null);
+  const [pixAvailable, setPixAvailable] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
   const [flash, triggerFlash] = useFlash();
@@ -63,6 +65,7 @@ export default function PartnerDashboard() {
     const check = async () => {
       if (data?.partner?.currency === "brl") {
         const { data: availability } = await api.get("/public/pix/availability");
+        if (!cancelled) setPixAvailable(!!availability.accepting_new_payments);
         if (!availability.configured) {
           if (!cancelled) setConnect({ connected: false, available: false });
           return;
@@ -71,7 +74,7 @@ export default function PartnerDashboard() {
       const response = await api.get(data?.partner?.currency === "brl" ? "/partner/pix/connect/status" : "/partner/connect/status");
       if (!cancelled) setConnect(response.data);
     };
-    check().catch(() => { if (!cancelled) setConnect({ connected: false, available: false }); });
+    check().catch(() => { if (!cancelled) setConnect({ connected: false, available: false, status_verified: false, reason: "Não foi possível verificar os recebimentos. Tente novamente mais tarde." }); });
     return () => { cancelled = true; };
   }, [data?.partner?.currency, data?.partner?.id]);
 
@@ -90,7 +93,7 @@ export default function PartnerDashboard() {
     catch (err) { toast.error(apiError(err)); }
   };
 
-  const load = useCallback(() => api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))), []);
+  const load = useCallback(() => { setLoadError(""); return api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => { setLoadError(apiError(e)); }); }, []);
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
@@ -110,6 +113,7 @@ export default function PartnerDashboard() {
     setSubmitting(true);
     try {
       if (preview?.currency === "brl") {
+        if (!pixAvailable) { toast.info("Pix ainda não está liberado para cobranças nesta plataforma."); return; }
         const { data: bill } = await api.post("/partner/pix/checkout", { code, amount: parsedAmount, origin_url: window.location.origin, request_id: idemKey });
         setPixBill(bill);
         toast.success("Cobrança Pix criada. Aguarde a confirmação do pagamento.");
@@ -136,6 +140,7 @@ export default function PartnerDashboard() {
     toast.success("CSV exportado com sucesso");
   };
 
+  if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
   if (!data) return <PageSkeleton />;
   const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
@@ -166,7 +171,7 @@ export default function PartnerDashboard() {
         </div>
         {ibanEdit ? (
           <form onSubmit={saveIban} className="flex gap-2">
-            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-full sm:w-[280px]" />
+            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
             <button type="submit" data-testid="partner-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
           </form>
         ) : (
@@ -180,11 +185,11 @@ export default function PartnerDashboard() {
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (connect.charges_enabled && (data.partner?.currency !== "brl" || connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; a comissão fica na plataforma.</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (data.partner?.currency === "brl" ? connect.receiving_ready : connect.charges_enabled) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; {data.partner?.currency === "brl" ? "o influencer recebe a sua parte numa transferência separada." : "a comissão fica na plataforma."}</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
-        {(!connect?.charges_enabled || (data.partner?.currency === "brl" && !connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || (data.partner?.currency === "brl" && (connect === null || connect.available === false))} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
+        {(data.partner?.currency === "brl" ? !connect?.receiving_ready : !connect?.charges_enabled) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -218,16 +223,12 @@ export default function PartnerDashboard() {
                 </div>
               </div>
             )}
-            <button type="submit" disabled={submitting} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A processar..." : preview?.currency === "brl" ? "Gerar cobrança Pix" : "Validar Venda"}
+            <button type="submit" disabled={submitting || (preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
+              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
             </button>
           </form>
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
-            <p className="font-semibold text-purple-900">Cobrança Pix · {moneyIn(pixBill.amount, "brl")}</p>
-            <p className="text-xs text-slate-600 my-2">Peça ao cliente para abrir esta cobrança e pagar no checkout seguro.</p>
-            <div className="bg-white p-3 rounded-xl inline-block"><QRCodeSVG value={pixBill.customer_url || `${window.location.origin}/c/${encodeURIComponent(code.toUpperCase())}?pix_request_id=${pixBill.request_id}`} size={160} /></div>
-            <p className="text-xs text-purple-800 my-2">Aguardando pagamento. Gerar a cobrança não confirma a venda.</p>
-            <a className="text-sm underline text-purple-700 block" href={pixBill.customer_url || pixBill.checkout_url} target="_blank" rel="noreferrer">Abrir cobrança do cliente</a>
+            <PixBillStatus bill={pixBill} onPaid={() => { load(); refreshUnread(); }} />
             <button type="button" className="text-xs text-purple-700 underline mt-3" onClick={() => { setPixBill(null); setIdemKey(newKey()); }}>Preparar outra conta</button>
           </div>}
           {lastReceipt && (
