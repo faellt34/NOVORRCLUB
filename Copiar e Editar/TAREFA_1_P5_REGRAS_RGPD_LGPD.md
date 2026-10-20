@@ -28,3 +28,12 @@ Destino: NOVORRCLUB / BRANCH-copia-editar-a-vontade / Copiar e Editar. Não alte
 [ ] Verificar implementação e testes de segurança e privacidade.
 [ ] Obter revisão jurídica apropriada antes de afirmar conformidade integral.
 Estado: tarefa 1 em execução; documentação concluída, validação pendente.
+
+
+## Atualização de implementação e critérios de aceitação — 20/10/2026
+- O desconto de 10% no exemplo de EUR 100 para EUR 90 pertence ao fluxo de campanha P5; não substituir automaticamente os 5% fixos do Pix BR encontrados em backend/routes_pix.py.
+- Checkout P5: parceiro valida montante bruto; backend calcula desconto em unidades monetárias inteiras (cêntimos), guarda a origem da validação e associa valor líquido a uma única sessão/cupão, sem permitir edição pelo seguidor.
+- Cupão individual: gerar identificador aleatório não previsível; armazenar apenas representação protegida do segredo, estado, validade, campanha e seguidor; resgate atómico de uso único, sem conceder desconto por nome de influenciador.
+- Prémios: cadastro mínimo vinculado ao resgate e contacto para prémio, com aviso de privacidade e consentimento publicitário separado. Não tratar registo como prova de pagamento.
+- Dinheiro e Stripe: mesmo campaign_id e influencer_id; payment_method e settlement_status distintos; comissão só após reconciliação e nunca duplicada para o mesmo resgate.
+- Não foi demonstrado que estes critérios estejam implementados em todos os módulos; não ativar em produção sem testes de concorrência, isolamento de sessão, reembolsos, permissões e revisão jurídica.
