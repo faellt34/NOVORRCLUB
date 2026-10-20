@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
-      name: github-pages
+      name: rrclub-clone-preview
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout clone
