@@ -249,7 +249,7 @@ async def payment_status(session_id: str, authorization: Optional[str] = Header(
         try:
             s = stripe.checkout.Session.retrieve(session_id)
             if s.payment_status == "paid":
-                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email}, session_snapshot=s)
+                await fulfil(session_id, {"stripe_subscription_id": getattr(s, "subscription", None), "stripe_payment_intent_id": getattr(s, "payment_intent", None), "customer_email": (getattr(getattr(s, "customer_details", None), "email", None) or getattr(s, "customer_email", None))}, session_snapshot=s)
                 rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
         except stripe.error.StripeError:
             pass
