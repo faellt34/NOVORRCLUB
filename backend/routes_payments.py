@@ -259,6 +259,9 @@ class PublicPayIn(BaseModel):
 
 @router.post("/public/pay")
 async def public_pay(body: PublicPayIn):
+    from p5_checkout import enabled as p5_enabled
+    if p5_enabled():
+        raise HTTPException(409, "Valor deve ser confirmado pelo parceiro no P5; pagamento direto livre bloqueado.")
     code = body.code.strip().upper()
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
