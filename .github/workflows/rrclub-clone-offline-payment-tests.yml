@@ -62,6 +62,7 @@ jobs:
             backend/partner_access.py \
             backend/payments/pix/checks.py \
             backend/payments/stripe_normalize.py \
+            backend/payments/pt_split.py \
             backend/scripts/stripe_sandbox_probe.py
 
       - name: Run mocked payment regressions (no network payments)
@@ -78,4 +79,5 @@ jobs:
             tests/test_maria_eduarda_sandbox.py \
             tests/test_payment_reconciliation.py \
             tests/test_financial_destructive_guards.py \
-            tests/test_eur_fulfil_recovery.py
+            tests/test_eur_fulfil_recovery.py \
+            tests/test_pt_dual_split.py
