@@ -24,6 +24,12 @@ export default function PartnerDashboard() {
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [p5Enabled, setP5Enabled] = useState(false);
+  const [p5Ref, setP5Ref] = useState("");
+  useEffect(() => {
+    api.get("/public/p5/config").then((r) => setP5Enabled(!!r.data.enabled)).catch(() => {});
+  }, []);
+
   const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [idemKey, setIdemKey] = useState(newKey);
@@ -112,6 +118,15 @@ export default function PartnerDashboard() {
     if (!parsedAmount || parsedAmount <= 0) { toast.error("Informe um valor de compra válido."); return; }
     setSubmitting(true);
     try {
+      if (p5Enabled) {
+        if (!p5Ref) { toast.error("Leia o QR individual do seguidor ou introduza a referência P5."); return; }
+        const { data: charge } = await api.post("/partner/p5/charges", {
+          code, scan_ref: p5Ref.trim(), gross_amount: parsedAmount, idempotency_key: idemKey
+        });
+        toast.success(`Valor confirmado. Cobrança ${charge.charge_id} enviada ao seguidor. Aguarde a confirmação do pagamento.`);
+        setCode(""); setAmount(""); setPreview(null); setP5Ref(""); setIdemKey(newKey());
+        return;
+      }
       if (preview?.currency === "brl") {
         if (!pixAvailable) { toast.info("Pix ainda não está liberado para cobranças nesta plataforma."); return; }
         const { data: bill } = await api.post("/partner/pix/checkout", { code, amount: parsedAmount, origin_url: window.location.origin, request_id: idemKey });
@@ -132,7 +147,7 @@ export default function PartnerDashboard() {
     }
   };
 
-  const onDetected = useCallback((c) => { setCode(c); toast.success(`QR detetado: ${c}`); }, []);
+  const onDetected = useCallback((c, ref) => { setCode(c); setP5Ref(ref || ""); toast.success(ref ? `QR individual P5 detetado: ${c}` : `QR detetado: ${c}`); }, []);
 
   const exportCsv = () => {
     downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor;desconto;comissao;taxa;data;staff;moeda",
@@ -210,6 +225,7 @@ export default function PartnerDashboard() {
                   : <>Cupom {preview.status.toLowerCase()} — não redimível</>}
               </div>
             )}
+            {p5Enabled && <Input data-testid="p5-scan-ref" value={p5Ref} onChange={(e) => setP5Ref(e.target.value.trim())} placeholder="Referência P5 (QR do seguidor)" className="rounded-xl bg-purple-50" />}
             <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta na moeda da campanha" inputMode="decimal" className="rounded-xl bg-slate-50" />
             {preview?.status === "Ativa" && parsedAmount > 0 && (
               <div data-testid="live-calculation" className="grid grid-cols-2 gap-2 text-xs">
@@ -224,7 +240,7 @@ export default function PartnerDashboard() {
               </div>
             )}
             <button type="submit" disabled={submitting || (preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
+              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : p5Enabled ? "Enviar cobrança validada ao seguidor" : "Validar Venda"}
             </button>
           </form>
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
