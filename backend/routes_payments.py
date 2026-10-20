@@ -2,6 +2,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlsplit
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query, Header
@@ -337,6 +338,31 @@ async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None)):
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{eb.get("pdf_name") or ebook_id}.pdf"'})
 
 
+def _validated_checkout_origin(value: str) -> str:
+    """Restrict Stripe success/cancel redirects to approved HTTPS origins."""
+    origin = str(value or "").strip().rstrip("/")
+    allowed_value = os.getenv("PAYMENT_ALLOWED_ORIGINS") or os.getenv("FRONTEND_URL", "")
+    allowed = {entry.strip().rstrip("/") for entry in allowed_value.split(",") if entry.strip()}
+    try:
+        parsed = urlsplit(origin)
+        valid = (
+            origin in allowed
+            and parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.path
+            and not parsed.query
+            and not parsed.fragment
+            and (parsed.port is None or parsed.port > 0)
+        )
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(status_code=400, detail="Origem de pagamento não autorizada")
+    return origin
+
+
 class PublicPayIn(BaseModel):
     code: str
     amount: float
@@ -353,12 +379,17 @@ async def public_pay(body: PublicPayIn):
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    campaign_currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
+    partner_currency = str(partner.get("currency") or "eur").lower()
+    if campaign_currency != "eur" or partner_currency != "eur":
+        raise HTTPException(status_code=409, detail="Este Checkout aceita apenas campanhas e parceiros em EUR")
+    origin = _validated_checkout_origin(body.origin_url)
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
     base = dict(
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
         mode="payment",
-        success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
+        success_url=f"{origin}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/c/{code}?cancel=1",
         metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id", "")},
     )
     if body.email:
