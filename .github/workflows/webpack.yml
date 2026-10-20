@@ -19,7 +19,11 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --no-audit --no-fund
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          # CRA5's schema-utils/ajv-keywords require AJV 8; this repository
+          # has no committed lockfile and otherwise may hoist AJV 6.
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
       - name: Compile production frontend
         env:
           CI: false
