@@ -521,17 +521,30 @@ async def public_pay(body: PublicPayIn):
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
-    if body.amount < 1 or body.amount > 10000:
-        raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
+    try:
+        gross = Decimal(str(body.amount))
+        if (not gross.is_finite() or not Decimal("1") <= gross <= Decimal("10000")
+                or gross != gross.quantize(Decimal("0.01"))):
+            raise ValueError("invalid amount")
+        discount_pct = Decimal(str(c.get("desconto")))
+        if not discount_pct.is_finite() or not Decimal("0") <= discount_pct < Decimal("100"):
+            raise ValueError("invalid discount")
+    except (InvalidOperation, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Valor ou desconto inválido; use euros e cêntimos.")
+    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+        raise HTTPException(status_code=409, detail="Campanha expirada.")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    if not partner or partner.get("status", "Ativo") != "Ativo":
+        raise HTTPException(status_code=409, detail="Estabelecimento inativo ou não encontrado.")
     campaign_currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
     partner_currency = str(partner.get("currency") or "eur").lower()
     if campaign_currency != "eur" or partner_currency != "eur":
         raise HTTPException(status_code=409, detail="Este Checkout aceita apenas campanhas e parceiros em EUR")
     origin = _validated_checkout_origin(body.origin_url)
-    to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    net_cents = int((gross * (Decimal("100") - discount_pct)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    to_pay = net_cents / 100
     base = dict(
-        line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
+        line_items=[{"price_data": {"currency": "eur", "unit_amount": net_cents, "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
         mode="payment",
         success_url=f"{origin}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{origin}/c/{code}?cancel=1",
@@ -580,8 +593,8 @@ async def public_pay(body: PublicPayIn):
                                                   "partner_destination": partner["stripe_account_id"],
                                                   "influencer_destination": influencer["stripe_account_id"],
                                                   "manual_payout_blocked": True,
-                                              } if pt_quote else {}), "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
-    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
+                                              } if pt_quote else {}), "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split_mode == "pt_separate_v2", "legacy_partner_destination": split and split_mode != "pt_separate_v2", "created_at": now_iso(), "updated_at": now_iso()})
+    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split_mode == "pt_separate_v2", "settlement_mode": split_mode}
 
 
 class IbanIn(BaseModel):
