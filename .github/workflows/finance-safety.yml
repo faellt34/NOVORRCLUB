@@ -21,4 +21,4 @@ jobs:
       - name: Test finance evidence classification (no Stripe keys)
         env:
           PYTHONPATH: backend
-        run: python -m unittest discover -s backend/tests -p 'test_finance_evidence.py' -v
+        run: python -m unittest discover -s backend/tests -p 'test_*evidence.py' -v
