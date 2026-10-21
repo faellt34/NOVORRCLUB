@@ -105,6 +105,11 @@ export default function FinanceReconciliationPanel() {
                     <p className="text-xs text-slate-500">
                       {row.payment_status === "paid" ? "Registado como recebido" : "Não confirmado no registo local"}
                     </p>
+                    {proof && proof.stripe_session_paid && !proof.fee_verified && (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Taxa e valor líquido Stripe ainda não verificados — não assumir taxa zero.
+                      </p>
+                    )}
                     {proof?.fee_verified && (
                       <div className="mt-2 text-xs text-slate-600" data-testid="stripe-fees">
                         <p>Meio utilizado: <b>{proof.payment_method_actual === "mb_way" ? "MB WAY" : proof.payment_method_actual || "Por verificar"}</b></p>
