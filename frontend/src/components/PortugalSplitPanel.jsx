@@ -5,11 +5,15 @@ import { api, apiError } from "../lib/api";
 export default function PortugalSplitPanel() {
   const [report, setReport] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [accountInventory, setAccountInventory] = useState(null);
   const [checking, setChecking] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
+    api.get("/admin/finance/pt-split/accounts")
+      .then(({ data }) => { if (active) setAccountInventory(data); })
+      .catch((err) => { if (active) setError(apiError(err)); });
     api.get("/admin/finance/pt-split/health")
       .then(({ data }) => { if (active) setReport(data); })
       .catch((err) => { if (active) setError(apiError(err)); });
@@ -53,6 +57,38 @@ export default function PortugalSplitPanel() {
           <p className="mt-1 text-xs text-slate-500">
             Transferência Stripe Connect e depósito bancário são operações distintas.
           </p>
+          {accountInventory && (
+            <div className="mt-4 rounded-xl border border-slate-200 p-3 space-y-3" data-testid="pt-account-aliases">
+              <h3 className="text-sm font-semibold">Contas Stripe PT identificadas por ID</h3>
+              <p className="text-xs text-slate-600">
+                PT-01 e PT-02 são nomes provisórios, não representam o titular nem autorizam transferências.
+              </p>
+              {accountInventory.platform_status !== "verified_live_portugal" && (
+                <p className="text-xs text-amber-700" role="status">
+                  Não foi possível validar as contas na plataforma Stripe Portugal LIVE neste ambiente:
+                  {" "}{accountInventory.platform_status}.
+                </p>
+              )}
+              {accountInventory.accounts?.map((account) => (
+                <div key={account.account_id} className="rounded-lg bg-slate-50 p-3 text-xs space-y-1">
+                  <p className="font-semibold text-slate-800">{account.label}</p>
+                  <p className="font-mono text-slate-600 break-all">{account.account_id}</p>
+                  <p className={account.financially_capable ? "text-emerald-700" : "text-amber-700"}>
+                    {account.financially_capable ? "Recebimentos e transfers aptos"
+                      : account.status === "not_checked" ? "Verificação indisponível neste ambiente"
+                      : "Recebimentos não comprovados agora"}
+                  </p>
+                  <p className={account.binding_verified ? "text-emerald-700" : "text-amber-700"}>
+                    {account.binding_verified
+                      ? ("Vínculo confirmado: " + (account.role === "partner" ? "Parceiro" : "Influenciador"))
+                      : "Titularidade não associada por ID: não usar para split"}
+                  </p>
+                  {account.partner_record && <p>Registo de parceiro encontrado: {account.partner_record.name || account.partner_record.id} (não comprova titularidade)</p>}
+                  {account.influencer_record && <p>Registo de influenciador encontrado: {account.influencer_record.name || account.influencer_record.id} (não comprova titularidade)</p>}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="mt-3 space-y-2">
             {report.campaigns?.map((c) => (
               <div key={c.id} className="flex flex-wrap gap-2 items-center justify-between border-b border-slate-100 py-2">
