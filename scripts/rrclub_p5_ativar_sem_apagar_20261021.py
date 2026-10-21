@@ -143,7 +143,7 @@ def patch_payments(ours):
             stop("Webhook EUR alterado, não foi possível inserir a reconciliação P5 com segurança.")
         offset = pos + m.end()
         indent = m.group("indent")
-        s = s[:offset] + "\n" + indent + "from pt_split import settle_webhook_safely\n" + indent + 'await settle_webhook_safely(obj["id"])' + s[offset:]
+        s = s[:offset] + "\n" + indent + "from pt_split import settle_webhook_safely\n" + indent + 'await settle_webhook_safely(obj["id"])' + "\n" + s[offset:]
     return s.encode("utf-8")
 
 
@@ -164,7 +164,7 @@ def activate_env(original):
         stop("Split PT live automático já ativo; avaliar antes de alterar P5 no workspace.")
     for k in ("P5_ENABLED", "P5_EUR_ENABLED", "P5_BRL_ENABLED"):
         lines = s.splitlines(keepends=True)
-        matches = [i for i, line in enumerate(lines) if re.match(r"^\\s*"+re.escape(k)+r"\\s*=", line)]
+        matches = [i for i, line in enumerate(lines) if re.match(r"^\s*"+re.escape(k)+r"\s*=", line)]
         if len(matches) > 1:
             stop("Variável P5 repetida em .env: " + k)
         if matches:
