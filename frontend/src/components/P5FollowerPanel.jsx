@@ -173,6 +173,12 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
             <div data-testid="p5-awaiting-connect" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800" role="status">
               <strong>Ligação P5 confirmada — pagamento em verificação</strong>
               <p className="mt-1">{status?.message || "O pagamento aguarda a verificação financeira desta operação; não houve cobrança."}</p>
+              {checkCurrency === "eur" && (
+                <button type="button" disabled data-testid="p5-mbway-unavailable"
+                  className="mt-2 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-800 opacity-80 cursor-not-allowed">
+                  MB WAY / cartão · a aguardar validação financeira
+                </button>
+              )}
               {checkoutEnabled && status?.charge_id && (
                 <button type="button" disabled={busy} onClick={checkout} className="mt-2 font-semibold underline disabled:opacity-50">
                   {busy ? "A verificar..." : "Verificar condições e continuar para pagamento"}
