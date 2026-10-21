@@ -159,13 +159,22 @@ async def fulfil(session_id: str, extra: dict):
     if res.get("kind") == "coupon_pay":
         c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
         partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
-        inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
-        rate = float(c["comissao"]) / 100 if c else 0
+        original_influencer_id = res.get("influencer_id")
+        resolved_influencer_id = original_influencer_id or (c.get("influencer_id") if c else None)
+        inf = await db.influencers.find_one({"id": resolved_influencer_id}, NO_ID) if resolved_influencer_id else None
+        rate = float(res.get("commission_percent_snapshot")
+                     if res.get("commission_percent_snapshot") is not None
+                     else c["comissao"] if c else 0) / 100
+        attribution_mismatch = bool(
+            original_influencer_id and
+            (not c or c.get("influencer_id") != original_influencer_id)
+        )
         gross = float(res["gross_amount"])
         rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
-               "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
+               "influencer_id": resolved_influencer_id, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
                "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method"),
-               "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "accrued_unpaid"}
+               "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "review_required" if attribution_mismatch else "accrued_unpaid",
+               "attribution_hold": attribution_mismatch, "attribution_source": "checkout_snapshot" if original_influencer_id else "legacy_campaign_lookup"}
         try:
             await db.redemptions.insert_one(dict(rec))
         except Exception:
@@ -400,7 +409,10 @@ async def public_pay(body: PublicPayIn):
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending",
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur",
+                                              "influencer_id": c.get("influencer_id"),
+                                              "commission_percent_snapshot": float(c["comissao"]),
+                                              "status": "initiated", "payment_status": "pending",
                                               "payment_method": selected_methods, "split": split,
                                               "distribution_status": "stripe_transfer_unverified" if split else "manual_reconciliation_required",
                                               "commission_settlement_status": "accrued_unpaid",
