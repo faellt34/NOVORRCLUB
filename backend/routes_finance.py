@@ -10,7 +10,7 @@ import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db, NO_ID, require_role
-from finance_evidence import transfer_evidence
+from finance_evidence import transfer_evidence, connect_account_evidence
 
 router = APIRouter()
 
@@ -55,19 +55,7 @@ def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, 
     connected = None
     if destination:
         account = stripe.Account.retrieve(destination, api_key=secret)
-        linked_partner = (account.get("metadata") or {}).get("partner_id")
-        linked_status = (
-            "verified" if linked_partner == expected["partner_id"]
-            else "mismatch" if linked_partner else "unverified"
-        )
-        connected = {
-            "account_link_verified": linked_status,
-            "charges_enabled": bool(account.get("charges_enabled")),
-            "payouts_enabled": bool(account.get("payouts_enabled")),
-            "transfers_active": (account.get("capabilities") or {}).get("transfers") == "active",
-            "requirements_pending": bool((account.get("requirements") or {}).get("currently_due")),
-            "disabled_reason": (account.get("requirements") or {}).get("disabled_reason"),
-        }
+        connected = connect_account_evidence(account, expected["partner_id"])
     result = transfer_evidence(intent, charge, transfer, expected_amount_minor, destination)
     if connected and connected["account_link_verified"] != "verified":
         result["state"] = "partner_connect_binding_" + connected["account_link_verified"]
