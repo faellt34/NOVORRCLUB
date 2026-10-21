@@ -156,7 +156,13 @@ async def fulfil(session_id: str, extra: dict):
         {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
-        return
+        # Retomar uma redação financeira interrompida após marcar pagamento
+        # como recebido; o webhook pode ser repetido sem duplicar comissão.
+        res = await db.payment_transactions.find_one(
+            {"session_id": session_id, "kind": "coupon_pay", "payment_status": "paid"}, NO_ID
+        )
+        if not res:
+            return
     if res.get("kind") == "coupon_pay":
         c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
         partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
@@ -176,9 +182,15 @@ async def fulfil(session_id: str, extra: dict):
                "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method"),
                "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "review_required" if attribution_mismatch else "accrued_unpaid",
                "attribution_hold": attribution_mismatch, "attribution_source": "checkout_snapshot" if original_influencer_id else "legacy_campaign_lookup"}
-        try:
-            await db.redemptions.insert_one(dict(rec))
-        except Exception:
+        inserted = await db.redemptions.update_one(
+            {"idempotency_key": session_id}, {"$setOnInsert": dict(rec)}, upsert=True
+        )
+        if inserted.upserted_id is None:
+            existing = await db.redemptions.find_one({"idempotency_key": session_id}, NO_ID)
+            if existing:
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id}, {"$set": {"redemption_id": existing["id"]}}
+                )
             return
         await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
         from realtime import emit
@@ -352,6 +364,12 @@ async def public_pay(body: PublicPayIn):
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    from p5_checkout import currency_enabled
+    currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
+    if currency != "eur":
+        raise HTTPException(status_code=409, detail="Esta campanha não usa o checkout EUR. Pague pelo fluxo local do parceiro.")
+    if currency_enabled("eur"):
+        raise HTTPException(status_code=409, detail="P5 ativo: o parceiro deve ler o QR individual e confirmar o valor antes do pagamento.")
     if not 0 <= float(c["desconto"]) < 100:
         raise HTTPException(status_code=409, detail="Desconto inválido")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
