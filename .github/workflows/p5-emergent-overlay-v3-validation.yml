@@ -1,0 +1,79 @@
+name: P5 Emergent Merge v3 Safety
+on:
+  push:
+    paths:
+      - scripts/rrclub_emergent_p5_safe_overlay_v3.py
+      - .github/workflows/p5-emergent-overlay-v3-validation.yml
+  workflow_dispatch:
+
+jobs:
+  test-local-conflicts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Installer Python syntax
+        run: python -m py_compile scripts/rrclub_emergent_p5_safe_overlay_v3.py
+      - name: Simulate historic Emergent workspace with custom edits
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/p5-legacy" 65122258cfe9d95e03af9c390182a42a432c8748
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"p5-legacy"
+          p=root/"backend/server.py"
+          s=p.read_text()
+          s=s.replace("    api_router.include_router(r)", "    api_router.include_router(r)  # LOCAL_SERVER_CUSTOM")
+          s=s.replace("realtime.router):", "realtime.router):  # CUSTOM_ROUTER_LAYOUT")
+          p.write_text(s)
+          p=root/"backend/routes_auth.py"
+          content=p.read_text()
+          content=(
+            'cd /app && curl -fsSL "https://raw.githubusercontent.com/faellt34/NOVORRCLUB/65122258cfe9d95e03af9c390182a42a432c8748/scripts/rrclub_finance_route_smoke.py" -o /tmp/rrclub_finance_smoke.py && python3 /tmp/rrclub_finance_smoke.py\n'
+            + content.split("\n",1)[1]
+          )
+          p.write_text(content)
+          for name,mark in (
+            ("backend/routes_payments.py","# LOCAL_PT_PRESERVED"),
+            ("backend/routes_pix.py","# LOCAL_PIX_PRESERVED"),
+            ("frontend/src/pages/PublicCoupon.jsx","// LOCAL_FOLLOWER_PRESERVED"),
+            ("frontend/src/pages/PartnerDashboard.jsx","// LOCAL_PARTNER_PRESERVED"),
+          ):
+            p=root/name
+            p.write_text(p.read_text()+"\n"+mark+"\n")
+          PY
+      - name: Install JSX parser
+        working-directory: ${{ runner.temp }}/p5-legacy/frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Integrate P5 and confirm local edits survive
+        working-directory: ${{ runner.temp }}/p5-legacy
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_p5_safe_overlay_v3.py"
+          grep -F "CUSTOM_ROUTER_LAYOUT" backend/server.py
+          grep -F "LOCAL_SERVER_CUSTOM" backend/server.py
+          grep -F "LOCAL_PIX_PRESERVED" backend/routes_pix.py
+          grep -F "LOCAL_PT_PRESERVED" backend/routes_payments.py
+          grep -F "LOCAL_FOLLOWER_PRESERVED" frontend/src/pages/PublicCoupon.jsx
+          grep -F "LOCAL_PARTNER_PRESERVED" frontend/src/pages/PartnerDashboard.jsx
+          grep -F "import re" backend/routes_auth.py
+          grep -F "p5_checkout.router" backend/server.py
+          grep -F "await p5_checkout.ensure_p5_indexes()" backend/server.py
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_p5_safe_overlay_v3.py"
+      - name: No environment modifications or financial operations
+        working-directory: ${{ runner.temp }}/p5-legacy
+        run: |
+          test ! -f backend/.env
+          test -f backend/p5_checkout.py
+          test -f backend/p5_rules.py
+          grep -F "PIX_STRIPE_SECRET_KEY" backend/routes_pix.py
+          python -m compileall -q backend
