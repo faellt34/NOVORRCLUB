@@ -31,8 +31,8 @@ def quote_minor(gross, discount_pct, commission_pct, currency):
         raise P5QuoteError("Desconto inválido")
     if not Decimal("0") <= commission < Decimal("100"):
         raise P5QuoteError("Comissão inválida")
-    if c == "brl" and (discount != 5 or commission != 5):
-        raise P5QuoteError("Pix Brasil requer 5% de desconto e 5% de comissão")
+    if c in ("eur", "brl") and (discount != 5 or commission != 5):
+        raise P5QuoteError("P5 Portugal/Brasil requer 5% de desconto e 5% de comissão")
     gross_cents = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     discount_cents = int(
         (Decimal(gross_cents) * discount / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
