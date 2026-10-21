@@ -17,7 +17,7 @@ const cameraError = (e) => {
   return "Não foi possível aceder à câmara. Use uma foto do QR ou digite o código.";
 };
 
-export const QrScannerDialog = ({ open, onOpenChange, onDetected }) => {
+export const QrScannerDialog = ({ open, onOpenChange, onDetected, preserveRaw = false }) => {
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
   const scannerRef = useRef(null);
@@ -26,7 +26,7 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected }) => {
   const finish = (text) => {
     if (doneRef.current) return;
     doneRef.current = true;
-    onDetected(extractCoupon(text));
+    onDetected(preserveRaw ? String(text) : extractCoupon(text));
     onOpenChange(false);
   };
 
