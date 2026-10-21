@@ -1,0 +1,19 @@
+name: Emergent P5 auth corruption safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  auth-prefix-repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check script syntax
+        run: python -m py_compile scripts/rrclub_auth_prefix_guard.py scripts/rrclub_auth_prefix_guard_test.py
+      - name: Run local-only guard tests
+        run: python -m unittest discover -s scripts -p 'rrclub_auth_prefix_guard_test.py' -v
+      - name: Ensure installed app auth original is clean
+        run: python -m py_compile backend/routes_auth.py
