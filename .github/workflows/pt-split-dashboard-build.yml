@@ -1,0 +1,29 @@
+name: PT Split Dashboard Build
+on:
+  push:
+    paths:
+      - frontend/src/components/PortugalSplitPanel.jsx
+      - frontend/src/pages/AdminPayouts.jsx
+      - .github/workflows/pt-split-dashboard-build.yml
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Compile dashboard
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build
