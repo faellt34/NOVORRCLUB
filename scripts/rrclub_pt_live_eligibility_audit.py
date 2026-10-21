@@ -49,7 +49,7 @@ async def main():
             meta = data.get("metadata") or {}
             connected_candidates.append({
                 "account_id": ident,
-                "stripe_display_name": (data.get("settings") or {}).get("dashboard", {}).get("display_name"),
+                "stripe_display_name": ((data.get("settings") or {}).get("dashboard") or {}).get("display_name"),
                 "partner_db_record": (
                     {"id": stored_partner.get("id"), "name": stored_partner.get("nome")}
                     if stored_partner else None
