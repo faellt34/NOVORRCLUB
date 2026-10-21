@@ -1,0 +1,50 @@
+name: PT Connect Account Labels
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  pt-account-labels-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile changed Python and admin-only tests
+        run: |
+          python -m py_compile backend/pt_split.py scripts/rrclub_pt_live_eligibility_audit.py scripts/rrclub_pt_labels_safe_apply.py
+          python -m unittest discover -s backend/tests -p 'test_pt_connect_aliases.py' -v
+      - name: Financial policy remains unchanged
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code=Path("backend/pt_split.py").read_text()
+          start=code.index('async def pt_accounts_inventory(')
+          end=code.index('@router.get("/admin/finance/pt-split/health")',start)
+          body=code[start:end]
+          assert 'stripe.Transfer.create' not in body
+          assert 'stripe.Account.modify' not in body
+          assert 'db.partners.update_' not in body
+          assert 'db.influencers.update_' not in body
+          assert "binding_verified" in body
+          assert "require_role" in body
+          print("Admin-only, no beneficiary mutations")
+          PY
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - run: npm run build
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
