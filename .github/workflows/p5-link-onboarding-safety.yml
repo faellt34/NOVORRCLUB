@@ -1,0 +1,58 @@
+name: P5 QR and Stripe Onboarding Safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+
+jobs:
+  p5-rules-and-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile changed backend
+        run: python -m compileall -q backend
+      - name: Verify QR enabled independently from payments
+        run: |
+          PYTHONPATH=backend python -m unittest discover -s backend/tests -p 'test_p5_activation_policy.py' -v
+          PYTHONPATH=backend python -m unittest discover -s backend/tests -p 'test_p5_rules.py' -v
+      - name: Check no automatic financial enablement
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code = Path("backend/p5_checkout.py").read_text()
+          assert "await wait_for_connect(rec" in code
+          assert "checkout_globally_enabled" in code
+          assert "recipients_ready" in code
+          assert '"status": "awaiting_connect"' in code
+          assert "P5_ENABLED" in code
+          assert "P5_EUR_ENABLED" not in code or "P5_" in code
+          print("P5: QR can work while transfer eligibility remains a separate check.")
+          PY
+
+  p5-interface:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Test follower pending-state UI
+        env:
+          CI: 'true'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm test -- --watch=false --runInBand src/components/P5FollowerPanel.test.jsx
+      - name: Build for preview
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build

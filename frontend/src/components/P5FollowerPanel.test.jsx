@@ -11,7 +11,7 @@ jest.mock("../lib/api", () => ({
 jest.mock("qrcode.react", () => ({
   QRCodeSVG: ({ value }) => <span data-testid="p5-qr-payload">{value}</span>,
 }));
-jest.mock("sonner", () => ({ toast: { error: jest.fn() } }));
+jest.mock("sonner", () => ({ toast: { error: jest.fn(), info: jest.fn() } }));
 
 let root, div;
 beforeEach(() => {
@@ -64,4 +64,25 @@ test("P5 customer cannot change a partner-approved bill; checkout only after con
   expect(div.querySelector('input[inputmode="decimal"]')).toBeNull();
   expect(api.post).toHaveBeenCalledWith("/public/p5/sessions", { code: "RR-BR-5" });
   expect(api.post).toHaveBeenCalledTimes(1); // displaying QR or bill never charges
+});
+
+test("P5 displays awaiting Stripe onboarding, not a platform error", async () => {
+  api.post.mockResolvedValueOnce({
+    data: {
+      scan_ref: "p5_ref_buyer_12345678901234567890",
+      session_token: "p5_secret_123456789012345678901234567890",
+      expires_at: new Date(Date.now() + 600000).toISOString(),
+    },
+  });
+  api.get.mockResolvedValue({ data: {
+    status: "awaiting_connect", charge_id: "p5_charge_waiting",
+    currency: "eur", gross_minor: 10000, discount_minor: 500, net_minor: 9500,
+  } });
+  await act(async () => {
+    root.render(<P5FollowerPanel code="PT-PENDING" currency="eur" checkoutEnabled={false} />);
+  });
+  expect(div.querySelector('[data-testid="p5-awaiting-connect"]')).not.toBeNull();
+  expect(div.textContent).toContain("recebimentos em ativação");
+  expect(div.querySelector('[data-testid="p5-pay-button"]')).toBeNull();
+  expect(api.post).toHaveBeenCalledTimes(1);
 });

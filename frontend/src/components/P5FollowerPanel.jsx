@@ -7,7 +7,7 @@ import { api, apiError, moneyIn } from "../lib/api";
  * P5 follow-up: the QR contains only the scan reference, never the
  * follower's private session token. The follower does not choose the bill.
  */
-export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
+export default function P5FollowerPanel({ code, currency, onPaymentStart, checkoutEnabled = true }) {
   const storageKey = "rrclub_p5_session_" + String(code || "").toUpperCase();
   const [session, setSession] = useState(null);
   const [status, setStatus] = useState(null);
@@ -82,6 +82,11 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
         },
         { headers: { "X-P5-Session": session.session_token } }
       );
+      if (data.status === "awaiting_connect") {
+        setStatus((previous) => ({ ...previous, status: "awaiting_connect", charge_id: data.charge_id || previous?.charge_id }));
+        toast.info("Ligação confirmada. O parceiro ou influenciador está a concluir a ativação de recebimentos na Stripe.");
+        return;
+      }
       if (!data.checkout_url) throw new Error("Checkout indisponível");
       onPaymentStart?.(data);
       window.location.assign(data.checkout_url);
@@ -107,7 +112,8 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
       "?p5_ref=" + encodeURIComponent(session.scan_ref)
     : null;
   const state = status?.status || "none";
-  const ready = state === "pending" && status?.charge_id;
+  const ready = state === "pending" && status?.charge_id && checkoutEnabled;
+  const waitingForConnect = state === "awaiting_connect" || (state === "pending" && !checkoutEnabled);
   const due = Number(status?.net_minor || 0) / 100;
 
   return (
@@ -147,6 +153,17 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
             <span>Total a pagar</span>
             <strong>{moneyIn(due, checkCurrency)}</strong>
           </div>
+          {waitingForConnect && (
+            <div data-testid="p5-awaiting-connect" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800" role="status">
+              <strong>Ligação P5 confirmada — recebimentos em ativação</strong>
+              <p className="mt-1">O parceiro e o seguidor podem concluir a demonstração. O pagamento aguarda os requisitos Stripe Connect e a configuração financeira; não houve cobrança.</p>
+              {checkoutEnabled && status?.charge_id && (
+                <button type="button" disabled={busy} onClick={checkout} className="mt-2 font-semibold underline disabled:opacity-50">
+                  {busy ? "A verificar..." : "Verificar condições e continuar para pagamento"}
+                </button>
+              )}
+            </div>
+          )}
           {ready && (
             <>
               <input
