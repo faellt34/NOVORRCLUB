@@ -305,18 +305,22 @@ def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
     )
     if customer_email:
         base["customer_email"] = customer_email
+    # Never silently downgrade an advertised MB WAY checkout to card-only.
+    # On missing Stripe capability/configuration, keep the same charge pending:
+    # the follower can retry after an operator fixes the payment method.
     try:
         return stripe.checkout.Session.create(
             **base,
             payment_method_types=["card", "mb_way"],
             idempotency_key="p5-" + rec["id"] + "-mbway",
         )
-    except stripe.error.InvalidRequestError:
-        return stripe.checkout.Session.create(
-            **base,
-            payment_method_types=["card"],
-            idempotency_key="p5-" + rec["id"] + "-card",
-        )
+    except stripe.error.InvalidRequestError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=("MB WAY não está disponível para esta cobrança Portugal. "
+                    "Verifique a configuração de pagamentos Stripe; "
+                    "nenhuma cobrança alternativa por cartão foi criada."),
+        ) from exc
 
 
 @router.post("/public/p5/charges/checkout")
