@@ -1,0 +1,54 @@
+name: P5 Portugal loja QR
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+
+jobs:
+  pt-qr-parser-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Test personal P5 QR and MB WAY waiting state
+        env:
+          CI: 'true'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm test -- --watch=false --runInBand src/lib/p5Scan.test.js src/components/P5FollowerPanel.test.jsx
+      - name: Verify production frontend compiles
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build
+
+  pt-installer-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile new safe installer
+        run: python -m py_compile scripts/rrclub_p5_portugal_ativar_qr.py
+      - name: Verify only EUR QR flags activated; no financial calls in installer
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast
+          s=Path("scripts/rrclub_p5_portugal_ativar_qr.py").read_text()
+          tree=ast.parse(s)
+          assert 'P5_ENABLED' in s and 'P5_EUR_ENABLED' in s
+          assert 'P5_BRL_ENABLED' not in s and 'PT_SPLIT_AUTO_TRANSFER=true' not in s
+          assert 'stripe.Transfer.create' not in s and 'stripe.checkout.Session.create' not in s
+          assert '--check' in s and '--apply' in s
+          assert "target" in s.lower()
+          print("Installer changes EUR QR only; finance remains guarded")
+          PY

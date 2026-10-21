@@ -84,5 +84,9 @@ test("P5 displays awaiting Stripe onboarding, not a platform error", async () =>
   expect(div.querySelector('[data-testid="p5-awaiting-connect"]')).not.toBeNull();
   expect(div.textContent).toContain("pagamento em verificação");
   expect(div.querySelector('[data-testid="p5-pay-button"]')).toBeNull();
+  const disabledMbway = div.querySelector('[data-testid="p5-mbway-unavailable"]');
+  expect(disabledMbway).not.toBeNull();
+  expect(disabledMbway.disabled).toBe(true);
+  expect(div.textContent).toContain("MB WAY / cartão");
   expect(api.post).toHaveBeenCalledTimes(1);
 });
