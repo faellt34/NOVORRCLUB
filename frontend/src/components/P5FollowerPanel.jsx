@@ -15,6 +15,7 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [pollVersion, setPollVersion] = useState(0);
+  const [sessionVersion, setSessionVersion] = useState(0);
   const busyRef = useRef(false);
   const checkCurrency = currency === "brl" ? "brl" : "eur";
 
@@ -38,7 +39,7 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
       })
       .catch((e) => { if (!cancelled) setError(apiError(e)); });
     return () => { cancelled = true; };
-  }, [code, storageKey]);
+  }, [code, storageKey, sessionVersion]);
 
   useEffect(() => {
     if (!session?.session_token) return;
@@ -91,6 +92,14 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
       setBusy(false);
       busyRef.current = false;
     }
+  };
+
+  const renewSession = () => {
+    try { sessionStorage.removeItem(storageKey); } catch {}
+    setSession(null);
+    setStatus(null);
+    setPollVersion(0);
+    setSessionVersion((n) => n + 1);
   };
 
   const qrUrl = session?.scan_ref
@@ -161,9 +170,17 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
           )}
           {state === "creating" && <p className="text-xs text-purple-700">A preparar a cobrança. Aguarde.</p>}
           {state === "checkout" && (
-            <p className="text-xs text-amber-700">
-              Pagamento iniciado. Aguarde a confirmação; não efetue outra cobrança.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-amber-700">
+                Pagamento iniciado. Aguarde a confirmação; não efetue outra cobrança.
+              </p>
+              {status.checkout_url && (
+                <a
+                  href={status.checkout_url}
+                  className="block text-xs font-semibold text-purple-700 underline"
+                >Retomar esta mesma cobrança</a>
+              )}
+            </div>
           )}
           {state === "paid" && (
             <p className="text-sm font-semibold text-emerald-700" role="status">
@@ -171,9 +188,16 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart }) {
             </p>
           )}
           {["expired", "failed"].includes(state) && (
-            <p className="text-xs text-red-700">
-              Cobrança não concluída. Peça ao parceiro que confirme um novo QR P5.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-red-700">
+                Cobrança não concluída. Peça ao parceiro que confirme um novo QR P5.
+              </p>
+              <button
+                type="button"
+                onClick={renewSession}
+                className="text-xs font-semibold text-purple-700 underline"
+              >Criar novo QR P5</button>
+            </div>
           )}
         </div>
       )}
