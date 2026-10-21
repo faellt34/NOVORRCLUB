@@ -222,7 +222,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         return {"record": existing, "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
     from realtime import emit
-    emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
+    emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
          influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
     await mark_converted(c["id"], rec)
     inf_user = await db.users.find_one({"influencer_id": c.get("influencer_id")}, {"id": 1}) if inf else None
