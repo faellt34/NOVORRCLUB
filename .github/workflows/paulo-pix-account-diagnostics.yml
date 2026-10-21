@@ -14,7 +14,7 @@ jobs:
           python-version: '3.11'
       - name: Syntax
         run: |
-          python -m py_compile backend/routes_pix.py scripts/rrclub_diagnose_partner_pix.py
+          python -m py_compile backend/routes_pix.py scripts/rrclub_diagnose_partner_pix.py scripts/rrclub_paulo_pix_apply.py
       - name: Safe Pix pending state
         run: python -m unittest discover -s backend/tests -p 'test_pix_connect_pending_ui.py' -v
   frontend-build:
