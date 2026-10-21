@@ -1,0 +1,17 @@
+name: P5 Campaign Status Diagnostics
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  p5-campaign-diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax without dependencies
+        run: python -m py_compile backend/routes_admin.py scripts/rrclub_p5_campaigns_readonly.py
+      - name: Read-only and currency-aware campaign contract tests
+        run: python -m unittest discover -s backend/tests -p 'test_p5_campaign_status_audit.py' -v
