@@ -14,6 +14,10 @@ def transfer_evidence(intent, charge=None, transfer=None, expected_amount=None,
         return {"state": "amount_mismatch", "bank_payout": "not_verified"}
     if not expected_destination:
         return {"state": "destination_unlinked", "bank_payout": "not_verified"}
+    if charge and (charge.get("refunded") or (charge.get("amount_refunded") or 0) > 0):
+        return {"state": "charge_refunded_or_partially_refunded", "bank_payout": "not_verified"}
+    if charge and charge.get("disputed"):
+        return {"state": "charge_disputed", "bank_payout": "not_verified"}
     if not charge or not charge.get("transfer"):
         return {"state": "no_transfer_evidence", "bank_payout": "not_verified"}
     transfer_id = charge.get("transfer")
