@@ -9,7 +9,8 @@ class AttributionTest(unittest.TestCase):
         self.camps = {"c1": {"influencer_id": "i1"}}
         self.infs = {"i1": {"nome": "Exemplo"}}
         self.tx = {"cs_paid_1": {"payment_status": "paid", "kind": "coupon_pay",
-                                "campaign_id": "c1", "partner_id": "p1", "coupon": "R-EXAMPLE"}}
+                                "campaign_id": "c1", "partner_id": "p1", "coupon": "R-EXAMPLE",
+                                "influencer_id": "i1"}}
 
     def check(self, rec=None, tx=None, camps=None, infs=None):
         return payout_evidence(self.r if rec is None else rec,
@@ -37,6 +38,19 @@ class AttributionTest(unittest.TestCase):
 
     def test_unpaid_session(self):
         self.assertEqual(self.check(tx={}), "stripe_payment_not_confirmed")
+
+    def test_legacy_checkout_cannot_allocate_commission_without_frozen_beneficiary(self):
+        old = {**self.tx["cs_paid_1"]}
+        old.pop("influencer_id")
+        self.assertEqual(
+            self.check(tx={"cs_paid_1": old}), "checkout_beneficiary_not_verified"
+        )
+
+    def test_checkout_snapshot_mismatch(self):
+        altered = {**self.tx["cs_paid_1"], "influencer_id": "other"}
+        self.assertEqual(
+            self.check(tx={"cs_paid_1": altered}), "checkout_beneficiary_not_verified"
+        )
 
     def test_wrong_partner(self):
         self.assertEqual(self.check(tx={"cs_paid_1": {**self.tx["cs_paid_1"], "partner_id": "p2"}}),
