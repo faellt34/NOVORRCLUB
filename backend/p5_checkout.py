@@ -133,6 +133,8 @@ async def start_session(body: StartSession, request: Request):
     campaign = await db.campaigns.find_one({"cupom": code, "status": "Ativa"}, NO_ID)
     if not campaign:
         raise HTTPException(404, "Cupom inválido ou inativo")
+    if not (campaign.get("influencer_id") and float(campaign.get("desconto", -1)) == 5 and float(campaign.get("comissao", -1)) == 5):
+        raise HTTPException(409, "Esta campanha usa o fluxo de cupão habitual; P5 requer desconto e comissão de 5%.")
     if campaign.get("validade") and campaign["validade"] < utc_now().date().isoformat():
         raise HTTPException(409, "Cupom expirado")
     partner = await db.partners.find_one({"id": campaign.get("parceiro_id")}, NO_ID) or {}

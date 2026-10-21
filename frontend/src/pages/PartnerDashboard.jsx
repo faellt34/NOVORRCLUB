@@ -114,7 +114,8 @@ export default function PartnerDashboard() {
     return () => { active = false; };
   }, []);
 
-  const p5Mode = Boolean(p5Currencies[String(preview?.currency || data?.partner?.currency || "eur").toLowerCase()]);
+  const p5EligibleCampaign = preview && Number(preview.desconto) === 5 && Number(preview.comissao) === 5 && Boolean(preview.influencer_id);
+  const p5Mode = Boolean(p5EligibleCampaign && p5Currencies[String(preview.currency || data?.partner?.currency || "eur").toLowerCase()]);
   const parsedAmount = parseFloat(String(amount).replace(",", ".")) || 0;
 
   const handleValidate = async (e) => {

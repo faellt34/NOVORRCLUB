@@ -83,7 +83,7 @@ export default function PublicCoupon() {
     api.get("/public/p5/config").then(({ data }) => {
       if (cancelled) return;
       const selected = (c.currency || "eur").toLowerCase();
-      setP5Enabled(Boolean(data?.currencies?.[selected]));
+      setP5Enabled(Boolean(c.p5_eligible && data?.currencies?.[selected]));
       setP5CheckoutEnabled(Boolean(data?.checkout_currencies?.[selected]));
     }).catch(() => {
       if (!cancelled) { setP5Enabled(false); setP5CheckoutEnabled(false); }

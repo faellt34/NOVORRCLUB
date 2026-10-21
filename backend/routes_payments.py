@@ -371,8 +371,8 @@ async def public_pay(body: PublicPayIn):
     currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
     if currency != "eur":
         raise HTTPException(status_code=409, detail="Esta campanha não usa o checkout EUR. Pague pelo fluxo local do parceiro.")
-    if currency_enabled("eur"):
-        raise HTTPException(status_code=409, detail="P5 ativo: o parceiro deve ler o QR individual e confirmar o valor antes do pagamento.")
+    if currency_enabled("eur") and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5 and c.get("influencer_id"):
+        raise HTTPException(status_code=409, detail="P5 ativo para esta campanha: o parceiro deve ler o QR individual e confirmar o valor.")
     if not 0 <= float(c["desconto"]) < 100:
         raise HTTPException(status_code=409, detail="Desconto inválido")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
