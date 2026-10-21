@@ -138,7 +138,7 @@ def patch_payments(ours):
         pos = s.find("async def stripe_webhook")
         if pos < 0:
             stop("Webhook EUR inexistente.")
-        m = re.search(r'(?m)^(?P<indent>[ ]+)await fulfil\(obj\["id"\], .*?\)[ \t]*, s[pos:])
+        m = re.search(r'(?m)^(?P<indent>[ ]+)await fulfil\(obj\["id"\], .*?\)[ \t]*$', s[pos:])
         if not m:
             stop("Webhook EUR alterado, não foi possível inserir a reconciliação P5 com segurança.")
         offset = pos + m.end()
