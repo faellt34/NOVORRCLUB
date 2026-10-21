@@ -19,7 +19,7 @@ ROOT = Path("/app") if Path("/app/backend/server.py").is_file() else Path.cwd()
 BASE = "7baea06b20ed5e23aec165017c8810ca91b65247"
 TARGET = "fix/p5-portugal-mbway-loja-20261021"
 REPO = "faellt34/NOVORRCLUB"
-MANIFEST = [["frontend/src/pages/PartnerDashboard.jsx","8d015e3ff19c0c62896d017426f4d082dccdb43c","88b5e268a5641da96d61093382b4a8ba2698130f"],["frontend/src/components/P5FollowerPanel.jsx","1dfd5df44e99c7baffbf0fd9c5aff0db251507d0","a2d7c73fed116ec31dcdfeccf20b094263b9d812"],["frontend/src/components/P5FollowerPanel.test.jsx","779250ac628af0ee3cf272f98927978c9d64ba20","f78cbcac254cc5a106ce7969e4498228bb83d53c"],["frontend/src/lib/p5Scan.js",null,"59d9037dc7b639d10e8089c473f6bf35cefa7049"],["frontend/src/lib/p5Scan.test.js",null,"6014b643956d429e230f692e6eb3df350e2986ec"]]
+MANIFEST = [["frontend/src/pages/PartnerDashboard.jsx","8d015e3ff19c0c62896d017426f4d082dccdb43c","88b5e268a5641da96d61093382b4a8ba2698130f"],["frontend/src/components/P5FollowerPanel.jsx","1dfd5df44e99c7baffbf0fd9c5aff0db251507d0","a2d7c73fed116ec31dcdfeccf20b094263b9d812"],["frontend/src/components/P5FollowerPanel.test.jsx","779250ac628af0ee3cf272f98927978c9d64ba20","f78cbcac254cc5a106ce7969e4498228bb83d53c"],["frontend/src/lib/p5Scan.js",None,"59d9037dc7b639d10e8089c473f6bf35cefa7049"],["frontend/src/lib/p5Scan.test.js",None,"6014b643956d429e230f692e6eb3df350e2986ec"]]
 
 def stop(message):
     raise RuntimeError(message)
