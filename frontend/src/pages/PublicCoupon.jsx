@@ -18,6 +18,7 @@ export default function PublicCoupon() {
   const [amount, setAmount] = useState("");
   const [paying, setPaying] = useState(false);
   const [p5Enabled, setP5Enabled] = useState(false);
+  const [p5CheckoutEnabled, setP5CheckoutEnabled] = useState(false);
   const [paid, setPaid] = useState(null);
   const [email, setEmail] = useState("");
   const [checkVersion, setCheckVersion] = useState(0);
@@ -77,10 +78,16 @@ export default function PublicCoupon() {
   useEffect(() => {
     let cancelled = false;
     setP5Enabled(false);
+    setP5CheckoutEnabled(false);
     if (!c || c.status !== "Ativa") return () => { cancelled = true; };
     api.get("/public/p5/config").then(({ data }) => {
-      if (!cancelled) setP5Enabled(Boolean(data?.currencies?.[(c.currency || "eur").toLowerCase()]));
-    }).catch(() => { if (!cancelled) setP5Enabled(false); });
+      if (cancelled) return;
+      const selected = (c.currency || "eur").toLowerCase();
+      setP5Enabled(Boolean(data?.currencies?.[selected]));
+      setP5CheckoutEnabled(Boolean(data?.checkout_currencies?.[selected]));
+    }).catch(() => {
+      if (!cancelled) { setP5Enabled(false); setP5CheckoutEnabled(false); }
+    });
     return () => { cancelled = true; };
   }, [c?.cupom, c?.currency, c?.status]);
 
@@ -201,7 +208,7 @@ export default function PublicCoupon() {
                 </div>}
                 {active && !p5Enabled && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
                 {active && p5Enabled && !awaiting && !terminal && !completed && (
-                  <P5FollowerPanel code={code} currency={currency} />
+                  <P5FollowerPanel code={code} currency={currency} checkoutEnabled={p5CheckoutEnabled} />
                 )}
                 {active && !p5Enabled && currency !== "brl" && !awaiting && !terminal && !completed && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
