@@ -37,7 +37,7 @@ async def _eur_payout_sources(reds):
             "payment_status": "paid",
         }, "eur"),
         {"_id": 0, "session_id": 1, "kind": 1, "payment_status": 1,
-         "campaign_id": 1, "partner_id": 1, "coupon": 1}
+         "campaign_id": 1, "partner_id": 1, "coupon": 1, "influencer_id": 1}
     )}
     return camps, infs, transactions
 
@@ -47,6 +47,7 @@ async def payouts_overview(user: dict = Depends(require_role("admin")), currency
     reds = await db.redemptions.find(currency_query({}, currency), {
         "influencer_id": 1, "influencer": 1, "date": 1, "commission": 1,
         "campaign_id": 1, "partner_id": 1, "coupon": 1, "idempotency_key": 1,
+        "attribution_hold": 1,
         "paid_online": 1, "is_refund": 1, "dispute_hold": 1, "_id": 0
     }).to_list(100000)
     camps, infs, txs = await _eur_payout_sources(reds) if currency == "eur" else ({}, {}, {})
