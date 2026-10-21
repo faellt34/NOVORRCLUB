@@ -54,3 +54,8 @@ jobs:
           CI: "false"
           REACT_APP_BACKEND_URL: "https://example.invalid"
         run: npm run build
+      - name: Test EUR finance reconciliation widget with local mock API
+        env:
+          CI: "true"
+          REACT_APP_BACKEND_URL: "https://example.invalid"
+        run: npm test -- --watch=false --runInBand src/components/FinanceReconciliationPanel.test.jsx
