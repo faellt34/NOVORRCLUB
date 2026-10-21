@@ -44,3 +44,13 @@ Este diretório é a **fonte única de verdade** para saber o que já foi tratad
 - Manual de apresentação comercial: `TREM_FODD_DEMONSTRACAO.md`
 
 **Regra de segurança:** esta pasta não contém segredos, passwords, IBAN, e-mails privados nem dados KYC.
+
+
+## Publicação P5 — comando único validado
+- Instalador: `scripts/rrclub_p5_ativar_sem_apagar_20261021.py`
+- CI de integração com workspace V3 simulado: https://github.com/faellt34/NOVORRCLUB/actions/runs/39648968772 (**aprovado**)
+- O instalador faz backup, merge seletivo e ativa P5 QR EUR/BRL no `backend/.env`.
+- O instalador **não** ativa o split financeiro PT, não publica em produção e não executa Stripe.
+- Após APROVADO no Terminal, atualizar a Prévia, fazer Deploy no Emergent e validar `/api/public/p5/config` no domínio publicado.
+- Se o instalador parar por conflito, preservar o código e o backup e analisar o motivo antes de tentar outro comando.
+- Compatibilidade: P5 apenas para campanhas com desconto e comissão de 5% e influenciador associado; cupões legados mantêm fluxo original.
