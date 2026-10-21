@@ -27,15 +27,42 @@ def enabled():
 
 
 def currency_enabled(currency):
-    if not enabled() or os.environ.get("P5_" + currency.upper() + "_ENABLED", "false").lower() != "true":
+    """P5 QR + aprovação do valor: independente da elegibilidade Stripe."""
+    return bool(
+        currency in ("eur", "brl")
+        and enabled()
+        and os.environ.get("P5_" + currency.upper() + "_ENABLED", "false").lower() == "true"
+    )
+
+
+def checkout_globally_enabled(currency):
+    """Gate financeiro distinto do QR. Nunca libera um repasse por si só."""
+    if not currency_enabled(currency):
         return False
     if currency == "eur":
-        # Do not offer checkout with live funds before a verified PT beneficiary policy.
-        return os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_test_") or (os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_live_") and __import__("pt_split").automatic())
+        key = os.environ.get("STRIPE_SECRET_KEY", "")
+        if key.startswith("sk_test_"):
+            return True
+        if key.startswith("sk_live_"):
+            from pt_split import automatic
+            return bool(automatic())
+        return False
     if currency == "brl":
         from routes_pix import availability_configuration
-        return availability_configuration()[0]["accepting_new_payments"]
+        return bool(availability_configuration()[0]["accepting_new_payments"])
     return False
+
+
+async def wait_for_connect(rec, reason="recebimentos_em_validacao"):
+    """Estado operacional, não falha. NÃO abre Stripe Checkout nem paga ninguém."""
+    await db.p5_charges.update_one(
+        {"id": rec["id"], "status": {"$in": ["pending", "awaiting_connect"]}},
+        {"$set": {"status": "awaiting_connect", "financial_state": reason,
+                  "financial_checked_at": now_iso()}},
+    )
+    return {"status": "awaiting_connect", "charge_id": rec["id"],
+            "payment_status": "not_started",
+            "message": "A conta está aprovada. Os recebimentos Stripe ainda aguardam ativação; nenhum pagamento foi iniciado."}
 
 
 def require_enabled(currency=None):
@@ -84,7 +111,10 @@ async def p5_config():
     return {
         "enabled": enabled(),
         "currencies": {"eur": currency_enabled("eur"), "brl": currency_enabled("brl")},
+        "checkout_currencies": {"eur": checkout_globally_enabled("eur"),
+                                "brl": checkout_globally_enabled("brl")},
         "requires_partner_approval": True,
+        "partner_onboarding_can_continue_without_connect": True,
         "live_pt_checkout_ready": False,
         "financial_settlement_verified": False,
     }
@@ -197,9 +227,11 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
     if not rec:
         return {"status": "none"}
     require_enabled(rec["currency"])
-    if rec["status"] in ("pending", "creating") and rec["expires_at"] <= now_iso():
+    if rec["status"] in ("pending", "awaiting_connect", "creating") and rec["expires_at"] <= now_iso():
         return {"status": "expired"}
     state = rec["status"]
+    if state == "pending" and not checkout_globally_enabled(rec["currency"]):
+        state = "awaiting_connect"
     paid = None
     if rec.get("session_id") or rec.get("pix_request_id"):
         q = {"kind": "coupon_pay", "session_id": rec["session_id"]} if rec.get("session_id") else {"kind": "pix_coupon", "request_id": rec["pix_request_id"]}
@@ -288,7 +320,7 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
             "session_id": rec.get("session_id"),
             "pix_request_id": rec.get("pix_request_id"),
         }
-    if rec["status"] != "pending":
+    if rec["status"] not in ("pending", "awaiting_connect"):
         raise HTTPException(409, "Cobrança em preparação. Aguarde e consulte a mesma referência.")
 
     from routes_pix import trusted_origin, availability_configuration
@@ -313,8 +345,22 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
     expected_discount = int((Decimal(rec["gross_minor"]) * discount_rate / Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     if expected_discount != rec["discount_minor"] or rec["gross_minor"] - expected_discount != rec["net_minor"]:
         raise HTTPException(409, "Desconto alterado. Não é possível cobrar esta conta.")
-    if rec["currency"] == "brl" and not availability_configuration()[0]["accepting_new_payments"]:
-        raise HTTPException(503, "Pix Brasil ainda não habilitado no servidor")
+    if not checkout_globally_enabled(rec["currency"]):
+        return await wait_for_connect(rec, "configuracao_financeira_pendente")
+    if rec["currency"] == "brl":
+        # O QR e a aprovação são possíveis mesmo sem KYC; a cobrança NÃO é.
+        from routes_pix import verify_accounts
+        creator = await db.influencers.find_one(
+            {"id": rec.get("influencer_id")}, NO_ID
+        ) if rec.get("influencer_id") else None
+        if not partner.get("pix_stripe_account_id") or not (creator or {}).get("pix_stripe_account_id"):
+            return await wait_for_connect(rec, "connect_brasil_onboarding_pendente")
+        try:
+            await verify_accounts(partner, creator)
+        except HTTPException as exc:
+            if exc.status_code in (409, 502, 503):
+                return await wait_for_connect(rec, "connect_brasil_recebimentos_pendentes")
+            raise
     # Live P5 only with BOTH frozen, KYC-verified Connect beneficiaries.
     from pt_split import automatic, recipients_ready, quote, VERSION
     pt_quote = None
@@ -323,19 +369,19 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
         live_key = os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_live_")
         if live_key:
             if not automatic():
-                raise HTTPException(503, "P5 Portugal live indisponível: split ainda desativado")
+                return await wait_for_connect(rec, "split_portugal_aguarda_ativacao")
             pt_quote = quote(int(rec["gross_minor"]))
             if pt_quote["payment_minor"] != int(rec["net_minor"]):
                 raise HTTPException(409, "A repartição Portugal não corresponde ao valor cobrado")
             pt_destinations = await recipients_ready(rec["partner_id"], rec.get("influencer_id"))
             if not pt_destinations.get("ok"):
-                raise HTTPException(409, "Parceiro ou influenciador ainda não pode receber por Stripe Connect Portugal")
+                return await wait_for_connect(rec, "connect_portugal_onboarding_pendente")
 
 
     # Atomic claim protects against follower double-click; Stripe/Pix idempotency
     # protects retry after a partial network/database failure.
     claimed = await db.p5_charges.find_one_and_update(
-        {"id": rec["id"], "status": "pending"},
+        {"id": rec["id"], "status": {"$in": ["pending", "awaiting_connect"]}},
         {"$set": {"status": "creating", "checkout_started_at": now_iso()}},
         projection=NO_ID,
     )
