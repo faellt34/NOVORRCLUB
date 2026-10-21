@@ -36,7 +36,7 @@ test("auditoria verifica na Stripe mesmo quando o ledger local ainda está pendi
       local_payment_status: "pending",
       fee_verified: true, stripe_gross_minor: 90, stripe_fee_minor: 26,
       stripe_net_minor: 64, commission_minor: 5, fee_exceeds_commission: true,
-      payment_method_actual: "mb_way",
+      payment_method_actual: "mb_way", balance_transaction_status: "pending",
     } });
 
   await act(async () => {
@@ -58,6 +58,7 @@ test("auditoria verifica na Stripe mesmo quando o ledger local ainda está pendi
   expect(container.textContent).toContain("MB WAY");
   expect(container.textContent).toContain("0.26 EUR");
   expect(container.textContent).toContain("0.64 EUR");
+  expect(container.textContent).toContain("Saldo deste movimento ainda pendente na Stripe");
   expect(container.textContent).toContain("0.05 EUR");
   expect(container.textContent).toContain(
     "a taxa Stripe é superior à comissão contabilizada"
