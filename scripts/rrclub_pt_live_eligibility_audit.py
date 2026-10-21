@@ -28,45 +28,52 @@ def p5_eligible(c):
 
 async def main():
     records = await db.campaigns.find({"status": "Ativa"}, NO_ID).limit(1000).to_list(1000)
+    aliases = {
+        "acct_1UIajlE123roTruk": "Conta PT-01",
+        "acct_1UIacdCy6KhbVjNX": "Conta PT-02",
+    }
     connected_candidates = []
+    stripe_context = "unverified"
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
     try:
-        all_accounts = await asyncio.to_thread(
-            stripe.Account.list, limit=100, api_key=os.environ.get("STRIPE_SECRET_KEY")
-        )
-        for a in all_accounts.get("data") or []:
-            data = dict(a)
-            req = data.get("requirements") or {}
-            if not (data.get("country") == "PT"
-                    and data.get("payouts_enabled") is True
-                    and (data.get("capabilities") or {}).get("transfers") == "active"
-                    and not (req.get("currently_due") or req.get("past_due") or req.get("disabled_reason"))):
-                continue
-            ident = data.get("id")
-            stored_partner, stored_creator = await asyncio.gather(
-                db.partners.find_one({"stripe_account_id": ident}, NO_ID),
-                db.influencers.find_one({"stripe_account_id": ident}, NO_ID)
-            )
-            meta = data.get("metadata") or {}
-            connected_candidates.append({
-                "account_id": ident,
-                "stripe_display_name": ((data.get("settings") or {}).get("dashboard") or {}).get("display_name"),
-                "partner_db_record": (
-                    {"id": stored_partner.get("id"), "name": stored_partner.get("nome")}
-                    if stored_partner else None
-                ),
-                "influencer_db_record": (
-                    {"id": stored_creator.get("id"), "name": stored_creator.get("nome")}
-                    if stored_creator else None
-                ),
-                "partner_binding_verified": bool(
-                    stored_partner and meta.get("partner_id") == stored_partner.get("id")
-                ),
-                "influencer_binding_verified": bool(
-                    stored_creator and meta.get("influencer_id") == stored_creator.get("id")
-                ),
-            })
+        platform = await asyncio.to_thread(stripe.Account.retrieve, api_key=key)
+        stripe_context = ("verified_live_portugal"
+                          if platform.get("id") == "acct_1UIZ90CZnwrqCuCt"
+                          else "wrong_stripe_account")
     except Exception as exc:
-        connected_candidates = [{"lookup": "unavailable", "reason": type(exc).__name__}]
+        stripe_context = "lookup_failed_" + type(exc).__name__
+    for ident, label in aliases.items():
+        item = {"label": label, "account_id": ident, "status": "not_checked",
+                "partner_db_record": None, "influencer_db_record": None,
+                "partner_binding_verified": False, "influencer_binding_verified": False}
+        if stripe_context == "verified_live_portugal":
+            try:
+                remote = await asyncio.to_thread(stripe.Account.retrieve, ident, api_key=key)
+                req = remote.get("requirements") or {}
+                item["status"] = "stripe_ready" if (
+                    remote.get("country") == "PT"
+                    and remote.get("payouts_enabled") is True
+                    and (remote.get("capabilities") or {}).get("transfers") == "active"
+                    and not (req.get("currently_due") or req.get("past_due")
+                             or req.get("disabled_reason"))) else "stripe_requirements_pending"
+                db_partner, db_influencer = await asyncio.gather(
+                    db.partners.find_one({"stripe_account_id": ident}, NO_ID),
+                    db.influencers.find_one({"stripe_account_id": ident}, NO_ID)
+                )
+                meta = remote.get("metadata") or {}
+                if db_partner:
+                    item["partner_db_record"] = {
+                        "id": db_partner.get("id"), "name": db_partner.get("nome")}
+                    item["partner_binding_verified"] = (
+                        not db_influencer and meta.get("partner_id") == db_partner.get("id"))
+                if db_influencer:
+                    item["influencer_db_record"] = {
+                        "id": db_influencer.get("id"), "name": db_influencer.get("nome")}
+                    item["influencer_binding_verified"] = (
+                        not db_partner and meta.get("influencer_id") == db_influencer.get("id"))
+            except Exception as exc:
+                item["status"] = "lookup_failed_" + type(exc).__name__
+        connected_candidates.append(item)
     checked = []
     for campaign in records:
         if not p5_eligible(campaign):
@@ -99,6 +106,9 @@ async def main():
         "automatic_transfer_enabled": automatic(),
         "one_euro_bill_quote_minor": quote(100),
         "connected_candidates": connected_candidates,
+        "stripe_context": stripe_context,
+        "database_name": os.environ.get("DB_NAME") or "not_set",
+        "active_campaigns_in_db": len(records),
         "eligible_campaigns": [c for c in checked if c["ready_for_live_split"]],
         "blocked_campaigns": [c for c in checked if not c["ready_for_live_split"]],
         "note": "Conta tecnicamente apta nao comprova titularidade. Associar por ID exato na Stripe e base."
