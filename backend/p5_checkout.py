@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
 from core import db, NO_ID, new_id, now_iso, require_role
-from finance_evidence import connect_account_evidence
+from p5_rules import quote_minor, P5QuoteError
 
 router = APIRouter()
 
@@ -146,19 +146,15 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
     require_enabled(currency)
     if currency not in ("eur", "brl") or currency != str(partner.get("currency") or currency).lower():
         raise HTTPException(409, "Moeda da campanha e do parceiro incompatíveis")
-    gross = minor(body.gross_amount)
-    rate = Decimal(str(campaign.get("desconto", 0)))
-    if not (Decimal("0") <= rate < Decimal("100")):
-        raise HTTPException(409, "Desconto inválido")
-    discount = int((Decimal(gross) * rate / Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-    net = gross - discount
-    if net < 50:
-        raise HTTPException(409, "Valor após desconto abaixo do mínimo")
-    commission_rate = Decimal(str(campaign.get("comissao", 0)))
-    if not commission_rate.is_finite() or not 0 <= commission_rate < 100:
-        raise HTTPException(409, "Comissão da campanha inválida")
-    if currency == "brl" and (rate != 5 or commission_rate != 5):
-        raise HTTPException(409, "Pix Brasil P5 exige a campanha 5% desconto / 5% comissão")
+    try:
+        quote = quote_minor(
+            body.gross_amount, campaign.get("desconto", 0),
+            campaign.get("comissao", 0), currency,
+        )
+    except P5QuoteError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    gross, discount, net = quote["gross_minor"], quote["discount_minor"], quote["net_minor"]
+    commission_rate = quote["commission_percent_snapshot"]
     existing = await db.p5_charges.find_one(
         {"partner_id": partner["id"], "idempotency_key": body.idempotency_key}, NO_ID
     )
@@ -174,7 +170,7 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
         "coupon": code, "campaign_id": campaign["id"], "partner_id": partner["id"],
         "gross_minor": gross, "discount_minor": discount, "net_minor": net,
         "influencer_id": campaign.get("influencer_id"),
-        "commission_percent_snapshot": str(commission_rate),
+        "commission_percent_snapshot": commission_rate,
         "currency": currency, "status": "pending", "idempotency_key": body.idempotency_key,
         "created_at": now_iso(), "expires_at": expiration(20),
         "session_id": None, "pix_request_id": None, "checkout_url": None,
