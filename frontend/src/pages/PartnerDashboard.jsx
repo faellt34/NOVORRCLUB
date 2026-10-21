@@ -40,7 +40,7 @@ export default function PartnerDashboard() {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
-    if (ev.tipo === "split_executado" && ev.record) {
+    if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
         if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
@@ -181,15 +181,15 @@ export default function PartnerDashboard() {
 
       <div data-testid="partner-connect-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${connect?.charges_enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
+          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${(data.partner?.currency === "brl" ? connect?.receiving_ready : (connect?.charges_enabled && connect?.payouts_enabled)) ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (data.partner?.currency === "brl" ? connect.receiving_ready : connect.charges_enabled) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; {data.partner?.currency === "brl" ? "o influencer recebe a sua parte numa transferência separada." : "a comissão fica na plataforma."}</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (data.partner?.currency === "brl" ? connect.receiving_ready : (connect.charges_enabled && connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; {data.partner?.currency === "brl" ? "o influencer recebe a sua parte numa transferência separada." : "a comissão fica na plataforma."}</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
-        {(data.partner?.currency === "brl" ? !connect?.receiving_ready : !connect?.charges_enabled) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
+        {(data.partner?.currency === "brl" ? !connect?.receiving_ready : !(connect?.charges_enabled && connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import FinanceReconciliationPanel from "../components/FinanceReconciliationPanel";
 import { Wallet, CheckCircle2, Clock, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError, dashboardMoney as eur, reportCurrency, num } from "../lib/api";
@@ -20,6 +21,10 @@ export default function AdminPayouts() {
   useEffect(() => { load(); }, [load]);
 
   const markPaid = async (r) => {
+    if (reportCurrency() === "eur" && (r.status !== "Pendente" || !r.attribution_verified)) {
+      toast.error("Comissão sem conciliação. Confirme beneficiário, campanha e pagamento antes de declarar pagamento.");
+      return;
+    }
     if (!window.confirm(`Marcar ${monthLabel(r.month)} de ${r.influencer} (${eur(r.commission)}) como pago?`)) return;
     setBusy(`${r.influencer_id}-${r.month}`);
     try { await api.post("/admin/payouts", { influencer_id: r.influencer_id, month: r.month }); toast.success(`Pagamento registado · ${r.influencer} notificado`); load(); }
@@ -35,6 +40,8 @@ export default function AdminPayouts() {
   if (!rows) return <PageSkeleton />;
   const shown = rows.filter((r) => filter === "todos" || r.status === filter);
   const pending = rows.filter((r) => r.status === "Pendente").reduce((s, r) => s + r.commission, 0);
+  const unresolved = rows.filter((r) => ["Atribuição por confirmar", "Pagamento por confirmar"].includes(r.status))
+    .reduce((s, r) => s + r.commission, 0);
   const paid = rows.filter((r) => r.status === "Pago").reduce((s, r) => s + r.commission, 0);
 
   return (
@@ -42,29 +49,43 @@ export default function AdminPayouts() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 data-testid="payouts-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Pagamentos de Comissões</h1>
-          <p className="text-sm text-slate-500 mt-1">{reportCurrency() === "brl" ? "Comissões Pix com divisão automática: confira os repasses na Stripe antes de qualquer ação manual." : "Marque cada extrato mensal como pago após a transferência — o influencer é notificado e vê a data"}</p>
+          <p className="text-sm text-slate-500 mt-1">{reportCurrency() === "brl" ? "Comissões Pix com divisão automática: confira os repasses na Stripe antes de qualquer ação manual." : "Comissões sem provas suficientes ficam bloqueadas. A marcação manual não comprova um payout bancário."}</p>
         </div>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger data-testid="payouts-filter" className="w-[160px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="Pendente">Pendentes</SelectItem>
-            <SelectItem value="Pago">Pagos</SelectItem>
+            <SelectItem value="Pendente">Pendentes conciliados</SelectItem>
+            {reportCurrency() === "eur" && <SelectItem value="Atribuição por confirmar">Atribuição por confirmar</SelectItem>}
+            {reportCurrency() === "eur" && <SelectItem value="Pagamento por confirmar">Pagamento por confirmar</SelectItem>}
+            <SelectItem value="Pago">Declarados pagos</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-pending-total">
           <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="w-5 h-5" /></span>
-          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+pending.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Por pagar</p></div>
+          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+pending.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Por pagar (conciliado)</p></div>
         </div>
+        {reportCurrency() === "eur" && (
+          <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-unresolved-total">
+            <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+              <Clock className="w-5 h-5" />
+            </span>
+            <div>
+              <p className="font-display text-2xl font-extrabold text-slate-900">{eur(+unresolved.toFixed(2))}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Por reconciliar</p>
+            </div>
+          </div>
+        )}
         <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-paid-total">
           <span className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Wallet className="w-5 h-5" /></span>
-          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+paid.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Já pago</p></div>
+          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+paid.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Declarado como pago</p></div>
         </div>
       </div>
 
+      {reportCurrency() === "eur" && <FinanceReconciliationPanel />}
       <div className="card-soft p-5">
         <div className="overflow-x-auto -mx-5 px-5">
           <table className="w-full text-sm" data-testid="payouts-table">
@@ -84,17 +105,26 @@ export default function AdminPayouts() {
                 return (
                   <tr key={key} data-testid={`payout-row-${key}`} className="border-b border-slate-50 last:border-0 hover:bg-purple-50/40 transition-colors">
                     <td className="py-3 pr-4 font-semibold text-slate-900">{monthLabel(r.month)}</td>
-                    <td className="py-3 pr-4 text-slate-700">{r.influencer}{r.iban && <p className="text-[11px] font-mono text-slate-400">{r.iban}</p>}</td>
+                    <td className="py-3 pr-4 text-slate-700">
+                      {r.influencer}
+                      {r.iban_last4 && <p className="text-[11px] font-mono text-slate-400">IBAN ••••{r.iban_last4}</p>}
+                      {!!r.coupons?.length && <p className="text-[11px] text-slate-500">{r.coupons.join(", ")}</p>}
+                    </td>
                     <td className="py-3 pr-4 text-slate-600">{num(r.count)}</td>
                     <td className="py-3 pr-4 font-bold text-purple-700">{eur(r.commission)}</td>
                     <td className="py-3 pr-4">
                       {r.status === "Pago"
-                        ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Pago em {new Date(r.paid_at).toLocaleDateString("pt-PT")}</span>
-                        : <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full"><Clock className="w-3 h-3" /> Pendente</span>}
+                        ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Declarado em {new Date(r.paid_at).toLocaleDateString("pt-PT")} · banco não verificado</span>
+                        : <div data-testid={`payout-status-${key}`} className="text-xs text-amber-700">
+                            <span className="inline-flex items-center gap-1 font-semibold bg-amber-50 px-2.5 py-1 rounded-full">
+                              <Clock className="w-3 h-3" /> {r.status}
+                            </span>
+                            {!!r.audit_reasons?.length && <p className="mt-1 max-w-xs text-[11px]">{r.audit_reasons.join(" · ")}</p>}
+                          </div>}
                     </td>
                     <td className="py-3 text-right">
                       {reportCurrency() === "brl" ? <span className="text-xs text-slate-500">Conciliação automática Stripe</span> : r.status === "Pendente"
-                        ? <button data-testid={`mark-paid-${key}`} disabled={busy === key} onClick={() => markPaid(r)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold btn-press">Marcar como pago</button>
+                        ? <button data-testid={`mark-paid-${key}`} disabled={busy === key || (reportCurrency() === "eur" && !r.attribution_verified)} onClick={() => markPaid(r)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold btn-press">Declarar pagamento manual</button>
                         : <button data-testid={`revert-paid-${key}`} disabled={busy === key} onClick={() => revert(r)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold btn-press"><Undo2 className="w-3 h-3" /> Reverter</button>}
                     </td>
                   </tr>

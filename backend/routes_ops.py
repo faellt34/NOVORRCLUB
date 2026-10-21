@@ -13,26 +13,88 @@ from pydantic import BaseModel
 
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, hash_password
 from mailer import send_email, configured
+from payout_attribution import payout_evidence, payout_status, REASONS
 
 router = APIRouter()
 
 
+async def _eur_payout_sources(reds):
+    """Cruzamento em leitura apenas. Não modifica comissões nem cria transferências."""
+    inf_ids = list({r.get("influencer_id") for r in reds if r.get("influencer_id")})
+    camp_ids = list({r.get("campaign_id") for r in reds if r.get("campaign_id")})
+    session_ids = list({r.get("idempotency_key") for r in reds
+                        if r.get("paid_online") is True and r.get("idempotency_key")})
+    camps = {c["id"]: c async for c in db.campaigns.find(
+        {"id": {"$in": camp_ids}}, {"_id": 0, "id": 1, "influencer_id": 1}
+    )}
+    infs = {i["id"]: i async for i in db.influencers.find(
+        {"id": {"$in": inf_ids}}, {"_id": 0, "id": 1, "nome": 1, "iban": 1}
+    )}
+    transactions = {t["session_id"]: t async for t in db.payment_transactions.find(
+        currency_query({
+            "session_id": {"$in": session_ids},
+            "kind": "coupon_pay",
+            "payment_status": "paid",
+        }, "eur"),
+        {"_id": 0, "session_id": 1, "kind": 1, "payment_status": 1,
+         "campaign_id": 1, "partner_id": 1, "coupon": 1, "influencer_id": 1}
+    )}
+    return camps, infs, transactions
+
+
 @router.get("/admin/payouts")
 async def payouts_overview(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
-    reds = await db.redemptions.find(currency_query({}, currency), {"influencer_id": 1, "influencer": 1, "date": 1, "commission": 1, "is_refund": 1, "dispute_hold": 1, "_id": 0}).to_list(100000)
-    agg = defaultdict(lambda: {"commission": 0.0, "count": 0})
+    reds = await db.redemptions.find(currency_query({}, currency), {
+        "influencer_id": 1, "influencer": 1, "date": 1, "commission": 1,
+        "campaign_id": 1, "partner_id": 1, "coupon": 1, "idempotency_key": 1,
+        "attribution_hold": 1,
+        "paid_online": 1, "is_refund": 1, "dispute_hold": 1, "_id": 0
+    }).to_list(100000)
+    camps, infs, txs = await _eur_payout_sources(reds) if currency == "eur" else ({}, {}, {})
+    agg = defaultdict(lambda: {"commission": 0.0, "count": 0, "reasons": set(), "coupons": set()})
     names = {}
     for r in reds:
-        k = (r["influencer_id"], r["date"][:7])
-        agg[k]["commission"] += 0 if r.get("dispute_hold") else r["commission"]; agg[k]["count"] += 0 if r.get("is_refund") else 1
-        names[r["influencer_id"]] = r["influencer"]
+        if not r.get("date"):
+            continue
+        influencer_id = r.get("influencer_id")
+        key = (influencer_id, r["date"][:7])
+        entry = agg[key]
+        entry["commission"] += 0 if r.get("dispute_hold") else float(r.get("commission") or 0)
+        entry["count"] += 0 if r.get("is_refund") else 1
+        names[influencer_id] = r.get("influencer") or "Beneficiário por confirmar"
+        if r.get("coupon"):
+            entry["coupons"].add(r["coupon"])
+        if currency == "eur":
+            reason = payout_evidence(r, camps, infs, txs)
+            if reason:
+                entry["reasons"].add(reason)
     paid = {(p["influencer_id"], p["month"]): p async for p in db.payouts.find(currency_query({}, currency), NO_ID)}
-    ibans = {i["id"]: i.get("iban") async for i in db.influencers.find({}, {"id": 1, "iban": 1, "_id": 0})}
+    # Não devolver IBAN completo ao ecrã. Mostrar apenas os últimos quatro dígitos.
+    ibans = {i["id"]: i.get("iban") async for i in db.influencers.find(
+        {}, {"id": 1, "iban": 1, "_id": 0}
+    )}
     rows = []
     for (inf, month), v in agg.items():
         p = paid.get((inf, month))
-        rows.append({"influencer_id": inf, "influencer": names[inf], "month": month, "commission": round(v["commission"], 2), "count": v["count"],
-                     "status": "Pago" if p else "Pendente", "paid_at": p["paid_at"] if p else None, "note": p.get("note") if p else None, "iban": ibans.get(inf)})
+        reasons = sorted(v["reasons"]) if currency == "eur" else []
+        resolved_name = infs.get(inf, {}).get("nome") if currency == "eur" else names.get(inf)
+        rows.append({
+            "influencer_id": inf,
+            "influencer": resolved_name or "Beneficiário por confirmar",
+            "month": month,
+            "commission": round(v["commission"], 2),
+            "count": v["count"],
+            "coupons": sorted(v["coupons"]),
+            "attribution_verified": not reasons if currency == "eur" else bool(inf),
+            "audit_reasons": [REASONS.get(reason, reason) for reason in reasons],
+            "status": payout_status(reasons, has_manual_record=bool(p)) if currency == "eur"
+                      else ("Pago" if p else "Pendente"),
+            "paid_at": p.get("paid_at") if p else None,
+            "note": p.get("note") if p else None,
+            "iban_last4": (ibans.get(inf) or "")[-4:] or None,
+            "settlement_proof": "manual_record_only" if p else "not_verified",
+            "currency": currency,
+        })
     rows.sort(key=lambda r: (r["month"], r["influencer"]), reverse=True)
     return rows
 
@@ -52,12 +114,32 @@ async def mark_paid(body: PayoutIn, user: dict = Depends(require_role("admin")),
     inf = await db.influencers.find_one({"id": body.influencer_id}, NO_ID)
     if not inf:
         raise HTTPException(status_code=404, detail="Influencer não encontrado")
-    if not re.fullmatch(r"\d{4}-\d{2}", body.month):
+    if not re.fullmatch(r"20\d\d-(0[1-9]|1[0-2])", body.month):
         raise HTTPException(status_code=400, detail="Mês inválido (AAAA-MM)")
+    if currency == "eur":
+        reds = await db.redemptions.find(
+            currency_query({
+                "influencer_id": body.influencer_id,
+                "date": {"$regex": f"^{body.month}"},
+            }, "eur"), NO_ID
+        ).to_list(10000)
+        if not reds:
+            raise HTTPException(status_code=409, detail="Não existem comissões conciliadas neste mês")
+        camps, infs, txs = await _eur_payout_sources(reds)
+        reasons = {payout_evidence(rec, camps, infs, txs) for rec in reds}
+        reasons.discard(None)
+        if reasons:
+            raise HTTPException(
+                status_code=409,
+                detail="Comissão ainda não conciliada: verifique beneficiário, campanha e pagamento na Stripe",
+            )
     total = sum([r["commission"] async for r in db.redemptions.find(currency_query({"influencer_id": body.influencer_id, "date": {"$regex": f"^{body.month}"}}, currency), {"commission": 1, "dispute_hold": 1}) if not r.get("dispute_hold")])
-    doc = {"id": new_id("pay"), "influencer_id": body.influencer_id, "month": body.month, "currency": currency, "paid_at": datetime.now(timezone.utc).date().isoformat(), "amount": round(total, 2), "note": body.note, "by": user["nome"]}
+    if total <= 0:
+        raise HTTPException(status_code=409, detail="Comissão nula ou negativa")
+    doc = {"id": new_id("pay"), "influencer_id": body.influencer_id, "month": body.month, "currency": currency, "paid_at": datetime.now(timezone.utc).date().isoformat(), "amount": round(total, 2), "note": body.note, "by": user["nome"],
+           "record_type": "manual_administrator_declaration", "bank_transfer_verified": False}
     await db.payouts.insert_one(dict(doc))
-    await audit("PAGAMENTO", f"Extrato {body.month} de {inf['nome']} marcado como pago · {total:.2f} {currency.upper()}", user, doc["id"])
+    await audit("PAGAMENTO", f"Extrato {body.month} de {inf['nome']} declarado manualmente como pago · {total:.2f} {currency.upper()} · banco por verificar", user, doc["id"])
     inf_user = await db.users.find_one({"influencer_id": body.influencer_id}, {"id": 1})
     if inf_user:
         await notify([inf_user["id"]], "pagamento", "Comissão paga 💸", f"O extrato de {body.month} ({total:.2f} {currency.upper()}) foi marcado como pago em {doc['paid_at']}.", "/influencer/extrato")

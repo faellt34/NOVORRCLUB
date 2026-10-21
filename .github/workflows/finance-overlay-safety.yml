@@ -1,0 +1,61 @@
+name: Finance overlay safety
+on:
+  pull_request:
+    branches: ["integracao-google-rrclub-20261019", "main"]
+  workflow_dispatch:
+
+jobs:
+  financial-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile backend syntax
+        run: python -m compileall -q backend
+      - name: Test EUR Stripe and commission evidence (no Stripe keys or network)
+        env:
+          PYTHONPATH: backend
+        run: |
+          python -m unittest discover -s backend/tests -p 'test_finance_evidence.py' -v
+          python -m unittest discover -s backend/tests -p 'test_payout_attribution.py' -v
+      - name: Confirm Pix workflow is present and isolated
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          server = Path("backend/server.py").read_text()
+          pix = Path("backend/routes_pix.py").read_text()
+          route = Path("backend/routes_finance.py").read_text()
+          assert "routes_pix.router" in server
+          assert "routes_finance.router" in server
+          assert "pix_coupon" in pix
+          assert 'kind": "coupon_pay"' in route
+          assert '"currency": "eur"' in route
+          print("Portugal-only reconciliation; Brazil Pix still routed.")
+          PY
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Compile React frontend without production secrets
+        env:
+          CI: "false"
+          REACT_APP_BACKEND_URL: "https://example.invalid"
+        run: npm run build
+      - name: Test EUR finance reconciliation widget with local mock API
+        env:
+          CI: "true"
+          REACT_APP_BACKEND_URL: "https://example.invalid"
+        run: npm test -- --watch=false --runInBand src/components/FinanceReconciliationPanel.test.jsx

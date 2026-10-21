@@ -55,10 +55,12 @@ export default function AdminDashboard() {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
-    if (ev.tipo === "split_executado" || (ev.tipo === "pagamento_iniciado" && ev.status === "succeeded")) {
-      const v = Number(ev.valor_plataforma || 0);
-      setStats((s) => ({ ...s, receita: s.receita + v, comissoes: s.comissoes + v * 0.10, usos: s.usos + 1 }));
-      pushAudit("REDENÇÃO", `${ev.cupom} · ${ev.parceiro}${ev.origem === "qr" ? " · pago por QR" : ""} · ${ev.influencer || ""}`, v);
+    if (ev.tipo === "redencao_registada") {
+      // Recarregar os totais contabilizados no servidor: valor de venda não é comissão
+      // e nenhum destes totais é prova de repasse bancário.
+      load();
+      const gross = Number(ev.record?.amount ?? ev.valor_total ?? 0);
+      pushAudit("REDENÇÃO", `${ev.cupom} · ${ev.parceiro}${ev.origem === "qr" ? " · pagamento confirmado por QR, repasse por verificar" : " · redenção registada" } · ${ev.influencer || ""}`, gross);
       triggerFlash("receita"); triggerFlash("comissoes"); triggerFlash("usos"); triggerFlash("conv"); triggerFlash("ticket");
       setClicksKey((k) => k + 1);
     } else if (ev.tipo === "clique_cupao") {
