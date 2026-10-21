@@ -24,7 +24,7 @@ import stripe
 PT_PLATFORM = "acct_1UIZ90CZnwrqCuCt"
 BR_PLATFORM = "acct_1URXWqEKAxcuX59L"
 KNOWN = (
-    ("BR", "Paulo/Maraca — Conta BR", "acct_1URwjTEKs764BXlZ",
+    ("BR", "Conta BR-01 (candidata a Paulo/Maraca)", "acct_1URwjTEKs764BXlZ",
      "PIX_STRIPE_SECRET_KEY", BR_PLATFORM, "BR", "pix_stripe_account_id"),
     ("PT", "Conta PT-01", "acct_1UIajlE123roTruk",
      "STRIPE_SECRET_KEY", PT_PLATFORM, "PT", "stripe_account_id"),
@@ -44,6 +44,10 @@ def verified_financial_capability(account, expected_country):
         and (account.get("capabilities") or {}).get("transfers") == "active"
         and not (needs.get("currently_due") or needs.get("past_due")
                  or needs.get("disabled_reason"))
+        and (
+            expected_country != "BR"
+            or (((account.get("settings") or {}).get("payouts") or {}).get("schedule") or {}).get("interval") == "daily"
+        )
     )
 
 
