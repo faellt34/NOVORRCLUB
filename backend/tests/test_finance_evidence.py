@@ -1,5 +1,5 @@
 import unittest
-from finance_evidence import transfer_evidence
+from finance_evidence import transfer_evidence, connect_account_evidence
 
 
 class FinanceEvidenceTest(unittest.TestCase):
@@ -31,6 +31,41 @@ class FinanceEvidenceTest(unittest.TestCase):
     def test_reversed(self):
         x = {**self.transfer, "amount_reversed": 1}
         self.assertEqual(transfer_evidence(self.pi, self.charge, x, 90, "acct_partner")["state"], "reversed_or_partially_reversed")
+
+    def test_realistic_connected_account_with_overdue_verification_is_not_ready(self):
+        disabled = {
+            "metadata": {"partner_id": "partner-A"},
+            "charges_enabled": False, "payouts_enabled": False,
+            "capabilities": {"transfers": "inactive"},
+            "requirements": {"currently_due": ["company.tax_id"], "disabled_reason": "requirements.past_due"},
+        }
+        result = connect_account_evidence(disabled, "partner-A")
+        self.assertEqual(result["account_link_verified"], "verified")
+        self.assertFalse(result["ready_for_partner_transfer"])
+        self.assertTrue(result["requirements_pending"])
+        self.assertEqual(result["disabled_reason"], "requirements.past_due")
+
+    def test_active_account_with_correct_partner_is_ready(self):
+        ready = {
+            "metadata": {"partner_id": "partner-A"},
+            "charges_enabled": True, "payouts_enabled": True,
+            "capabilities": {"transfers": "active"},
+            "requirements": {"currently_due": [], "disabled_reason": None},
+        }
+        self.assertTrue(connect_account_evidence(ready, "partner-A")["ready_for_partner_transfer"])
+        self.assertFalse(connect_account_evidence(ready, "partner-B")["ready_for_partner_transfer"])
+
+    def test_unlabelled_connected_account_is_not_auto_approved(self):
+        ready_unlinked = {
+            "metadata": {},
+            "charges_enabled": True, "payouts_enabled": True,
+            "capabilities": {"transfers": "active"},
+            "requirements": {},
+        }
+        x = connect_account_evidence(ready_unlinked, "partner-A")
+        self.assertEqual(x["account_link_verified"], "unverified")
+        self.assertFalse(x["ready_for_partner_transfer"])
+
 
 
 if __name__ == "__main__":
