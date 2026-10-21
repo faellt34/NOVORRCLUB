@@ -1,0 +1,17 @@
+name: Portugal P5 MB WAY checkout safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  payment-method-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax of Portugal P5 checkout
+        run: python -m py_compile backend/p5_checkout.py
+      - name: No live calls — MB WAY unit contract
+        run: python -m unittest discover -s backend/tests -p 'test_p5_pt_mbway_checkout_no_downgrade.py' -v
