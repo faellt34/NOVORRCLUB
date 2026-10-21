@@ -351,7 +351,8 @@ async def public_coupon(code: str, request: Request):
         emit("clique_cupao", currency=cl.get("currency", "eur"), cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
         emit("novo_clique", currency=cl.get("currency", "eur"), dados=dados, influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"))
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
-    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
+    p5_eligible = bool(c.get("influencer_id")) and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5
+    return {"p5_eligible": p5_eligible, "cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id, "currency": c.get("currency", partner.get("currency", "eur"))}
 
