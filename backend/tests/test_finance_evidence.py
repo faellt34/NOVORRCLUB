@@ -25,6 +25,20 @@ class FinanceEvidenceTest(unittest.TestCase):
         self.assertEqual(transfer_evidence({**self.pi, "currency": "brl"}, self.charge, self.transfer, 90, "acct_partner")["state"],
                          "payment_currency_mismatch")
 
+    def test_refunded_charge_cannot_be_confirmed_as_transferred(self):
+        refunded = {**self.charge, "refunded": True, "amount_refunded": 90}
+        self.assertEqual(
+            transfer_evidence(self.pi, refunded, self.transfer, 90, "acct_partner")["state"],
+            "charge_refunded_or_partially_refunded"
+        )
+
+    def test_disputed_charge_cannot_be_confirmed_as_transferred(self):
+        disputed = {**self.charge, "disputed": True}
+        self.assertEqual(
+            transfer_evidence(self.pi, disputed, self.transfer, 90, "acct_partner")["state"],
+            "charge_disputed"
+        )
+
     def test_wrong_destination(self):
         self.assertEqual(transfer_evidence(self.pi, self.charge, self.transfer, 90, "acct_other")["state"], "destination_mismatch")
 
