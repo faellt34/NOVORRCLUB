@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import FinanceReconciliationPanel from "../components/FinanceReconciliationPanel";
+import PortugalSplitPanel from "../components/PortugalSplitPanel";
 import { Wallet, CheckCircle2, Clock, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError, dashboardMoney as eur, reportCurrency, num } from "../lib/api";
@@ -85,6 +86,7 @@ export default function AdminPayouts() {
         </div>
       </div>
 
+      {reportCurrency() === "eur" && <PortugalSplitPanel />}
       {reportCurrency() === "eur" && <FinanceReconciliationPanel />}
       <div className="card-soft p-5">
         <div className="overflow-x-auto -mx-5 px-5">
