@@ -60,18 +60,22 @@ async def payments_config():
 async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
     c = await stripe_config(force=True)
     partners = await db.partners.count_documents({"status": "Ativo"})
-    connected = await db.partners.count_documents({"stripe_charges_enabled": True})
-    missing = [p["nome"] async for p in db.partners.find({"status": "Ativo", "stripe_charges_enabled": {"$ne": True}}, {"_id": 0, "nome": 1})]
+    linked_filter = {"status": "Ativo", "stripe_account_id": {"$regex": "^acct_"}}
+    connected = await db.partners.count_documents(linked_filter)
+    missing = [p["nome"] async for p in db.partners.find(
+        {"status": "Ativo", "$nor": [{"stripe_account_id": {"$regex": "^acct_"}}]},
+        {"_id": 0, "nome": 1}
+    )]
     steps = [
         {"id": "chave", "label": "Chave Stripe válida" + (f" · {c['account_name']}" if c.get("account_name") else ""), "ok": c["account_ok"], "action": None if c["account_ok"] else f"Verifique STRIPE_SECRET_KEY nos secrets de produção. Erro: {c.get('erro')}"},
         {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
         {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
-        {"id": "connect", "label": "Stripe Connect ativo (split automático 80/5/10)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
-        {"id": "perfil", "label": "Perfil de plataforma Connect (verificação manual necessária)", "ok": c.get("platform_profile_ok") is True, "action": "Confirme em dashboard.stripe.com → Settings → Connect → Platform profile se os requisitos e responsabilidades estão concluídos. Esta consulta não cria contas para testar a aprovação."},
-        {"id": "parceiros", "label": f"Parceiros ligados ao Connect (hotéis, rooftops, restaurantes): {connected}/{partners}", "ok": partners > 0 and connected == partners,
-         "action": None if partners > 0 and connected == partners else f"Falta ligar: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. Cada parceiro entra no seu Painel do Parceiro → secção Pagamentos → botão 'Ativar split automático' e conclui o onboarding Stripe (só funciona depois do Connect e do perfil de plataforma estarem ativos)." if missing else "Ainda não há parceiros ativos."},
+        {"id": "connect", "label": "Stripe Connect acessível (aptidão financeira validada por operação)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
+        {"id": "perfil", "label": "Perfil da plataforma Connect — estado não confirmado por esta consulta", "ok": c.get("platform_profile_ok"), "action": "Esta consulta não confirma o perfil da plataforma. Este aviso informativo não bloqueia o P5; cada operação verifica os seus destinatários. Consulte o perfil na Stripe se houver um requisito explícito."},
+        {"id": "parceiros", "label": f"Parceiros com conta Connect associada: {connected}/{partners}", "ok": True if partners > 0 and connected == partners else None,
+         "action": None if partners > 0 and connected == partners else f"Sem associação registada: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. A associação não comprova aptidão para receber. Os requisitos são verificados nos destinatários de cada operação; outros parceiros podem continuar." if missing else "Ainda não há parceiros ativos."},
     ]
-    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": len(steps)}
+    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": sum(1 for s in steps if s["ok"] is not None), "informational": sum(1 for s in steps if s["ok"] is None)}
 
 
 def _product(entry_id: str, name: str):

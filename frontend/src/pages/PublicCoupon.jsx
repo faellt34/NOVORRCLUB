@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StripeModeBanner } from "../components/StripeModeBanner";
 import P5FollowerPanel from "../components/P5FollowerPanel";
+import { saveQr } from "../lib/saveQr";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -122,16 +123,16 @@ export default function PublicCoupon() {
   };
 
   const copy = () => { navigator.clipboard?.writeText(c.cupom).catch(() => {}); toast.success("Código copiado — mostre-o no local"); };
-  const downloadQr = () => {
-    const svg = document.querySelector("[data-testid=public-coupon-download-qr]")?.parentElement?.querySelector("svg");
-    if (svg) {
-      const img = new Image();
-      img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = 600; const ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 600, 600); ctx.drawImage(img, 30, 30, 540, 540); const a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = `qr-${c.cupom}.png`; a.click(); };
-      img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg))));
-    }
-    if (c.claim_id) api.post(`/public/coupon/${encodeURIComponent(code)}/qr-downloaded`, { claim_id: c.claim_id }).catch(() => {});
-    toast.success("QR guardado — mostre-o no restaurante");
+  const downloadQr = async () => {
+    try {
+      const svg = document.querySelector('[data-testid="public-coupon-qr"] svg');
+      const result = await saveQr(svg, `qr-${c.cupom}.png`);
+      if (result === "cancelled") return;
+      if (c.claim_id) api.post(`/public/coupon/${encodeURIComponent(code)}/qr-downloaded`, { claim_id: c.claim_id }).catch(() => {});
+      toast.info(result === "shared" ? "QR partilhado." : "Imagem do QR preparada. Se abrir numa nova janela, use Partilhar → Guardar imagem.");
+    } catch (error) { toast.error(error.message); }
   };
+
   const active = c?.status === "Ativa";
 
   return (
@@ -167,9 +168,9 @@ export default function PublicCoupon() {
                   <div><p className="font-bold text-slate-900">{c.parceiro}</p><p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {c.categoria} · {c.cidade}</p></div>
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
-                  <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
+                  <div data-testid="public-coupon-qr" className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
                     {!p5Enabled ? <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" /> : <p className="text-[10px] font-bold text-purple-700 text-center w-[92px]">Use o QR P5 seguro abaixo</p>}
-                    <button data-testid="public-coupon-download-qr" disabled={p5Enabled} onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
+                    {!p5Enabled && <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">O seu código</p>

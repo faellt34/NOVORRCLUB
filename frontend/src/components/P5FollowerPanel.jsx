@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { api, apiError, moneyIn } from "../lib/api";
+import { saveQr } from "../lib/saveQr";
 
 /**
  * P5 follow-up: the QR contains only the scan reference, never the
@@ -17,6 +18,17 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
   const [pollVersion, setPollVersion] = useState(0);
   const [sessionVersion, setSessionVersion] = useState(0);
   const busyRef = useRef(false);
+  const qrRef = useRef(null);
+  const [savingQr, setSavingQr] = useState(false);
+  const saveSessionQr = async () => {
+    if (savingQr) return;
+    setSavingQr(true);
+    try {
+      const result = await saveQr(qrRef.current?.querySelector("svg"), `qr-p5-${code}.png`);
+      if (result !== "cancelled") toast.info(result === "shared" ? "QR partilhado." : "Imagem do QR preparada. Se abrir numa nova janela, use Partilhar → Guardar imagem.");
+    } catch (error) { toast.error(error.message); }
+    finally { setSavingQr(false); }
+  };
   const checkCurrency = currency === "brl" ? "brl" : "eur";
 
   useEffect(() => {
@@ -83,8 +95,8 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
         { headers: { "X-P5-Session": session.session_token } }
       );
       if (data.status === "awaiting_connect") {
-        setStatus((previous) => ({ ...previous, status: "awaiting_connect", charge_id: data.charge_id || previous?.charge_id }));
-        toast.info("Ligação confirmada. O parceiro ou influenciador está a concluir a ativação de recebimentos na Stripe.");
+        setStatus((previous) => ({ ...previous, ...data, charge_id: data.charge_id || previous?.charge_id }));
+        toast.info(data.message || "O valor está aprovado. O pagamento aguarda verificação financeira.");
         return;
       }
       if (!data.checkout_url) throw new Error("Checkout indisponível");
@@ -130,9 +142,13 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
           <p className="text-xs text-slate-600">
             Mostre este QR P5 ao parceiro. Só o estabelecimento pode definir o valor da conta.
           </p>
-          <div className="flex justify-center bg-white rounded-xl p-3">
+          <div ref={qrRef} className="flex justify-center bg-white rounded-xl p-3">
             <QRCodeSVG value={qrUrl} size={156} fgColor="#3B0764" />
           </div>
+          <button type="button" data-testid="p5-download-qr" onClick={saveSessionQr} disabled={savingQr}
+            className="text-xs font-semibold text-purple-700 underline disabled:opacity-50">
+            {savingQr ? "A preparar imagem..." : "Guardar / partilhar QR P5"}
+          </button>
           <p className="text-xs text-center text-purple-700">
             À espera que o parceiro leia o QR e confirme a conta.
           </p>
@@ -155,8 +171,8 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
           </div>
           {waitingForConnect && (
             <div data-testid="p5-awaiting-connect" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800" role="status">
-              <strong>Ligação P5 confirmada — recebimentos em ativação</strong>
-              <p className="mt-1">O parceiro e o seguidor podem concluir a demonstração. O pagamento aguarda os requisitos Stripe Connect e a configuração financeira; não houve cobrança.</p>
+              <strong>Ligação P5 confirmada — pagamento em verificação</strong>
+              <p className="mt-1">{status?.message || "O pagamento aguarda a verificação financeira desta operação; não houve cobrança."}</p>
               {checkoutEnabled && status?.charge_id && (
                 <button type="button" disabled={busy} onClick={checkout} className="mt-2 font-semibold underline disabled:opacity-50">
                   {busy ? "A verificar..." : "Verificar condições e continuar para pagamento"}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CreditCard, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
+import { CreditCard, CheckCircle2, XCircle, CircleDashed, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 
@@ -22,7 +22,7 @@ export const StripeStatusCard = () => {
         <ul className="divide-y divide-slate-100">
           {d.steps.map((s) => (
             <li key={s.id} data-testid={`stripe-step-${s.id}`} className="py-2.5 flex items-start gap-3">
-              {s.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" /> : <XCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />}
+              {s.ok === true ? <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" /> : s.ok === false ? <XCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" /> : <CircleDashed aria-label="Informação não confirmada" className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />}
               <div className="min-w-0"><p className="text-sm font-semibold text-slate-900">{s.label}</p>{!s.ok && s.action && <p className="text-xs text-purple-700 mt-0.5">→ {s.action}</p>}</div>
             </li>
           ))}

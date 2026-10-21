@@ -56,16 +56,26 @@ def checkout_globally_enabled(currency):
     return False
 
 
+def financial_wait_message(reason):
+    messages = {
+        "connect_brasil_associacao_pendente": "O valor está aprovado. A RRClub precisa confirmar a associação das contas de recebimento desta campanha; nenhum pagamento foi iniciado.",
+        "pix_plataforma_pendente": "O valor está aprovado. A configuração Pix da plataforma aguarda validação; nenhum pagamento foi iniciado.",
+        "pix_checkout_configuracao_pendente": "O valor está aprovado. A configuração do checkout Pix aguarda validação; nenhum pagamento foi iniciado.",
+        "stripe_verificacao_temporariamente_indisponivel": "O valor está aprovado. Não foi possível consultar a Stripe agora. Tente verificar novamente; nenhum pagamento foi iniciado.",
+    }
+    return messages.get(reason, "O valor está aprovado. O pagamento aguarda a verificação financeira desta operação; nenhum pagamento foi iniciado.")
+
+
 async def wait_for_connect(rec, reason="recebimentos_em_validacao"):
-    """Estado operacional, não falha. NÃO abre Stripe Checkout nem paga ninguém."""
+    """Estado operacional; never open checkout or transfer on a failed check."""
     await db.p5_charges.update_one(
         {"id": rec["id"], "status": {"$in": ["pending", "awaiting_connect"]}},
         {"$set": {"status": "awaiting_connect", "financial_state": reason,
                   "financial_checked_at": now_iso()}},
     )
     return {"status": "awaiting_connect", "charge_id": rec["id"],
-            "payment_status": "not_started",
-            "message": "A conta está aprovada. Os recebimentos Stripe ainda aguardam ativação; nenhum pagamento foi iniciado."}
+            "payment_status": "not_started", "financial_state": reason,
+            "message": financial_wait_message(reason)}
 
 
 def require_enabled(currency=None):
@@ -250,7 +260,9 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
             "gross_minor": rec["gross_minor"], "discount_minor": rec["discount_minor"],
             "net_minor": rec["net_minor"], "payment_status": paid,
             "checkout_url": rec.get("checkout_url") if state == "checkout" else None,
-            "partner_confirmed": True}
+            "partner_confirmed": True,
+            "financial_state": rec.get("financial_state") if state == "awaiting_connect" else None,
+            "message": financial_wait_message(rec.get("financial_state")) if state == "awaiting_connect" else None}
 
 
 def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
@@ -359,12 +371,15 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
             {"id": rec.get("influencer_id")}, NO_ID
         ) if rec.get("influencer_id") else None
         if not partner.get("pix_stripe_account_id") or not (creator or {}).get("pix_stripe_account_id"):
-            return await wait_for_connect(rec, "connect_brasil_onboarding_pendente")
+            return await wait_for_connect(rec, "connect_brasil_associacao_pendente")
         try:
             await verify_accounts(partner, creator)
         except HTTPException as exc:
             if exc.status_code in (409, 502, 503):
-                return await wait_for_connect(rec, "connect_brasil_recebimentos_pendentes")
+                reason = (exc.headers or {}).get("X-RRClub-Reason")
+                if not reason:
+                    reason = "stripe_verificacao_temporariamente_indisponivel" if exc.status_code in (502, 503) else "connect_brasil_recebimentos_pendentes"
+                return await wait_for_connect(rec, reason)
             raise
     # Live P5 only with BOTH frozen, KYC-verified Connect beneficiaries.
     pt_quote = None
