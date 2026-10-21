@@ -13,11 +13,12 @@ REASONS = {
     "stripe_payment_not_confirmed": "Pagamento Stripe ainda não conciliado",
     "stripe_payment_campaign_mismatch": "Pagamento corresponde a outra campanha, parceiro ou cupão",
     "payment_disputed_or_refunded": "Pagamento suspenso, reembolsado ou contestado",
+    "checkout_beneficiary_not_verified": "Checkout antigo sem beneficiário congelado; conciliação manual necessária",
 }
 
 
 def payout_evidence(rec, campaigns, influencers, transactions):
-    if rec.get("is_refund") or rec.get("dispute_hold"):
+    if rec.get("is_refund") or rec.get("dispute_hold") or rec.get("attribution_hold"):
         return "payment_disputed_or_refunded"
     influencer_id = rec.get("influencer_id")
     if not influencer_id:
@@ -40,6 +41,8 @@ def payout_evidence(rec, campaigns, influencers, transactions):
     if (tx.get("campaign_id") != campaign_id or tx.get("partner_id") != rec.get("partner_id")
             or tx.get("coupon") != rec.get("coupon")):
         return "stripe_payment_campaign_mismatch"
+    if tx.get("influencer_id") != influencer_id:
+        return "checkout_beneficiary_not_verified"
     return None
 
 
