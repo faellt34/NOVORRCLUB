@@ -1,5 +1,5 @@
 import unittest
-from finance_evidence import transfer_evidence, connect_account_evidence
+from finance_evidence import transfer_evidence, connect_account_evidence, charge_cost_evidence
 
 
 class FinanceEvidenceTest(unittest.TestCase):
@@ -24,6 +24,39 @@ class FinanceEvidenceTest(unittest.TestCase):
     def test_wrong_currency(self):
         self.assertEqual(transfer_evidence({**self.pi, "currency": "brl"}, self.charge, self.transfer, 90, "acct_partner")["state"],
                          "payment_currency_mismatch")
+
+    def test_actual_case_mbway_90c_fee_26c_net_64c_is_not_a_payout(self):
+        outcome = charge_cost_evidence(
+            {"amount": 90, "fee": 26, "net": 64, "currency": "eur", "status": "pending"},
+            90, 5,
+        )
+        self.assertTrue(outcome["fee_verified"])
+        self.assertEqual(outcome["stripe_fee_minor"], 26)
+        self.assertEqual(outcome["stripe_net_minor"], 64)
+        self.assertEqual(outcome["commission_minor"], 5)
+        self.assertTrue(outcome["fee_exceeds_commission"])
+        self.assertFalse(outcome["net_is_partner_payout"])
+        self.assertFalse(outcome["net_is_platform_profit"])
+
+    def test_balance_transaction_missing_cannot_imply_zero_fees(self):
+        x = charge_cost_evidence(None, 90, 5)
+        self.assertFalse(x["fee_verified"])
+        self.assertIsNone(x["stripe_fee_minor"])
+
+    def test_fee_balance_mismatch_never_claims_verified_net(self):
+        x = charge_cost_evidence(
+            {"amount": 90, "fee": 26, "net": 65, "currency": "eur"},
+            90, 5,
+        )
+        self.assertEqual(x["fee_state"], "balance_transaction_mismatch")
+        self.assertFalse(x["fee_verified"])
+
+    def test_brl_balance_never_validates_eur_audit(self):
+        x = charge_cost_evidence(
+            {"amount": 90, "fee": 26, "net": 64, "currency": "brl"},
+            90, 5,
+        )
+        self.assertFalse(x["fee_verified"])
 
     def test_refunded_charge_cannot_be_confirmed_as_transferred(self):
         refunded = {**self.charge, "refunded": True, "amount_refunded": 90}
