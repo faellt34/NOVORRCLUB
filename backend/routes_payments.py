@@ -271,6 +271,9 @@ async def stripe_webhook(request: Request):
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if obj.get("payment_status") == "paid":
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
+            # P5 Portugal: somente transações novas com dois beneficiários verificados.
+            from pt_split import settle_webhook_safely
+            await settle_webhook_safely(obj["id"])
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
         await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
