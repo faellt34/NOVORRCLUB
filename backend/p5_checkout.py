@@ -209,92 +209,192 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
             "partner_confirmed": True}
 
 
+def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
+    """Portugal: test-mode P5 only until verified recipient split is implemented.
+
+    Never treat a destination charge / platform receipt as proof of influencer transfer.
+    Do not use a live key for this P5 route before the distribution policy is approved.
+    """
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not key.startswith("sk_test_"):
+        raise HTTPException(
+            503,
+            "P5 Portugal em homologação. A divisão financeira e os destinatários devem ser certificados antes de cobrar em produção.",
+        )
+    metadata = {
+        "kind": "coupon_pay",
+        "p5_charge_id": rec["id"],
+        "campaign_id": rec["campaign_id"],
+        "partner_id": rec["partner_id"],
+        "influencer_id": rec.get("influencer_id") or "",
+        "coupon": rec["coupon"],
+        "commission_percent_snapshot": str(rec["commission_percent_snapshot"]),
+    }
+    base = dict(
+        api_key=key,
+        mode="payment",
+        line_items=[{
+            "price_data": {
+                "currency": "eur",
+                "unit_amount": rec["net_minor"],
+                "product_data": {
+                    "name": f"{partner.get('nome', 'Parceiro')} · {campaign['nome']}",
+                    "description": f"P5 {rec['coupon']} · desconto confirmado no estabelecimento",
+                },
+            },
+            "quantity": 1,
+        }],
+        success_url=f"{origin}/c/{rec['coupon']}?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{origin}/c/{rec['coupon']}?cancel=1",
+        metadata=metadata,
+        payment_intent_data={"metadata": metadata, "description": f"P5 {rec['coupon']}"},
+    )
+    if customer_email:
+        base["customer_email"] = customer_email
+    try:
+        return stripe.checkout.Session.create(
+            **base,
+            payment_method_types=["card", "mb_way"],
+            idempotency_key="p5-" + rec["id"] + "-mbway",
+        )
+    except stripe.error.InvalidRequestError:
+        return stripe.checkout.Session.create(
+            **base,
+            payment_method_types=["card"],
+            idempotency_key="p5-" + rec["id"] + "-card",
+        )
+
+
 @router.post("/public/p5/charges/checkout")
 async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Header(default=None)):
     require_enabled()
     rec = await db.p5_charges.find_one({"id": body.charge_id}, NO_ID)
     if not rec:
         raise HTTPException(404, "Cobrança não encontrada")
-    s = await owned_session(rec["coupon"], x_p5_session)
-    if s["scan_ref"] != rec["scan_ref"]:
-        raise HTTPException(403, "Esta cobrança pertence a outro seguidor")
+    require_enabled(rec["currency"])
+    follower_session = await owned_session(rec["coupon"], x_p5_session)
+    if follower_session["scan_ref"] != rec["scan_ref"]:
+        raise HTTPException(403, "Cobrança pertence a outra sessão de seguidor")
     if rec["expires_at"] <= now_iso():
         raise HTTPException(409, "Cobrança expirada. Peça ao parceiro para preparar outra.")
     if rec.get("checkout_url"):
-        return {"checkout_url": rec["checkout_url"], "session_id": rec.get("session_id"),
-                "pix_request_id": rec.get("pix_request_id")}
+        return {
+            "checkout_url": rec["checkout_url"],
+            "session_id": rec.get("session_id"),
+            "pix_request_id": rec.get("pix_request_id"),
+        }
     if rec["status"] != "pending":
-        raise HTTPException(409, "Esta cobrança já foi iniciada ou concluída")
+        raise HTTPException(409, "Cobrança em preparação. Aguarde e consulte a mesma referência.")
+
+    from routes_pix import trusted_origin, availability_configuration
+    origin = trusted_origin(body.origin_url)
     campaign = await db.campaigns.find_one({"id": rec["campaign_id"]}, NO_ID)
-    partner = await db.partners.find_one({"id": rec["partner_id"]}, NO_ID) or {}
-    if not campaign or campaign.get("status") != "Ativa":
-        raise HTTPException(409, "Campanha já não está ativa")
-    origin = os.environ.get("FRONTEND_URL", "").rstrip("/")
-    if not origin.startswith("https://"):
-        raise HTTPException(503, "Configure FRONTEND_URL HTTPS para os pagamentos P5")
-    if rec["currency"] == "brl":
-        # Preserva o ledger, webhook e repasses Pix existentes; ausência do
-        # fluxo brasileiro impede qualquer criação de pagamento.
-        try:
-            from routes_pix import PixCheckoutIn, _checkout
-        except ImportError:
-            raise HTTPException(503, "Módulo Pix brasileiro ainda não integrado nesta versão")
-        request_id = uuid.uuid5(uuid.NAMESPACE_URL, "rrclub:p5:" + rec["id"])
-        pix = await _checkout(PixCheckoutIn(code=rec["coupon"],
-                                           amount=rec["gross_minor"] / 100,
-                                           origin_url=origin, request_id=request_id),
-                              creating_partner=rec["partner_id"])
-        update = {"status": "checkout", "pix_request_id": str(request_id),
-                  "checkout_url": pix["checkout_url"]}
-        await db.p5_charges.update_one({"id": rec["id"], "status": "pending"}, {"$set": update})
-        return {"checkout_url": pix["checkout_url"], "pix_request_id": str(request_id)}
-    if rec["currency"] != "eur":
-        raise HTTPException(409, "Moeda não suportada")
-    # A origem e o valor vêm do servidor, nunca de um campo editável.
-    gross = rec["gross_minor"] / 100
-    net = rec["net_minor"] / 100
-    data = {
-        "mode": "payment",
-        "line_items": [{"price_data": {"currency": "eur", "unit_amount": rec["net_minor"],
-            "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {campaign['nome']}",
-            "description": f"Campanha {rec['coupon']} · {rec['discount_minor']/100:.2f}€ de desconto"}}, "quantity": 1}],
-        "success_url": f"{origin}/c/{rec['coupon']}?session_id={{CHECKOUT_SESSION_ID}}",
-        "cancel_url": f"{origin}/c/{rec['coupon']}?cancel=1",
-        "metadata": {"kind": "coupon_pay", "p5_charge_id": rec["id"],
-                     "campaign_id": rec["campaign_id"], "partner_id": rec["partner_id"], "coupon": rec["coupon"]},
-    }
-    if body.email and "@" in body.email and len(body.email) <= 254:
-        data["customer_email"] = body.email.strip().lower()
-    split = False
-    if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
-        fee = int((Decimal(rec["gross_minor"]) * Decimal(str(campaign.get("comissao", 0))) / Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        if fee > rec["net_minor"]:
-            raise HTTPException(409, "Comissão superior ao pagamento")
-        data["payment_intent_data"] = {"application_fee_amount": fee,
-                                       "transfer_data": {"destination": partner["stripe_account_id"]},
-                                       "description": f"P5 {rec['coupon']}"}
-        split = True
+    partner = await db.partners.find_one({"id": rec["partner_id"]}, NO_ID)
+    if not campaign or campaign.get("status") != "Ativa" or not partner:
+        raise HTTPException(409, "Campanha ou estabelecimento indisponível")
+    if campaign.get("validade") and campaign["validade"] < utc_now().date().isoformat():
+        raise HTTPException(409, "Campanha expirada")
+    if campaign.get("parceiro_id") != rec["partner_id"]:
+        raise HTTPException(409, "Associação de parceiro alterada; confirme com o administrador")
+    if rec["currency"] == "brl" and not availability_configuration()[0]["accepting_new_payments"]:
+        raise HTTPException(503, "Pix Brasil ainda não habilitado no servidor")
+    # Portugal P5 live is withheld until a verified two-beneficiary split is designed.
+    if rec["currency"] == "eur" and not os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_test_"):
+        raise HTTPException(503, "P5 Portugal ainda não homologado para pagamentos reais")
+
+    # Atomic claim protects against follower double-click; Stripe/Pix idempotency
+    # protects retry after a partial network/database failure.
+    claimed = await db.p5_charges.find_one_and_update(
+        {"id": rec["id"], "status": "pending"},
+        {"$set": {"status": "creating", "checkout_started_at": now_iso()}},
+        projection=NO_ID,
+    )
+    if not claimed:
+        latest = await db.p5_charges.find_one({"id": rec["id"]}, NO_ID)
+        if latest and latest.get("checkout_url"):
+            return {
+                "checkout_url": latest["checkout_url"],
+                "session_id": latest.get("session_id"),
+                "pix_request_id": latest.get("pix_request_id"),
+            }
+        raise HTTPException(409, "Cobrança em preparação. Não inicie uma segunda.")
+
     try:
-        stripe_session = stripe.checkout.Session.create(**data, idempotency_key="p5-" + rec["id"])
-    except stripe.error.StripeError as exc:
-        raise HTTPException(503, "Stripe indisponível para criar esta cobrança") from exc
-    tx = {
-        "id": new_id("tx"), "session_id": stripe_session.id,
-        "kind": "coupon_pay", "p5_charge_id": rec["id"],
-        "coupon": rec["coupon"], "campaign_id": rec["campaign_id"],
-        "partner_id": rec["partner_id"], "user_id": None,
-        "gross_amount": gross, "amount": net, "currency": "eur",
-        "status": "initiated", "payment_status": "pending",
-        "payment_method": "stripe_checkout", "split": split,
-        "created_at": now_iso(), "updated_at": now_iso(),
-    }
-    await db.payment_transactions.update_one({"session_id": stripe_session.id},
-                                              {"$setOnInsert": tx}, upsert=True)
-    await db.p5_charges.update_one({"id": rec["id"], "status": "pending"},
-                                   {"$set": {"status": "checkout",
-                                             "session_id": stripe_session.id,
-                                             "checkout_url": stripe_session.url}})
-    return {"checkout_url": stripe_session.url, "session_id": stripe_session.id}
+        if rec["currency"] == "brl":
+            # Existing Pix module alone owns Brazil Stripe key, ledger,
+            # signed webhook, cashback reversal and both idempotent transfers.
+            from routes_pix import PixCheckoutIn, _checkout
+            request_id = uuid.uuid5(uuid.NAMESPACE_URL, "rrclub:p5:" + rec["id"])
+            pix = await _checkout(
+                PixCheckoutIn(
+                    code=rec["coupon"],
+                    amount=rec["gross_minor"] / 100,
+                    origin_url=origin,
+                    request_id=request_id,
+                ),
+                creating_partner=rec["partner_id"],
+            )
+            update = {
+                "status": "checkout", "pix_request_id": str(request_id),
+                "checkout_url": pix["checkout_url"],
+            }
+            result = {"checkout_url": pix["checkout_url"], "pix_request_id": str(request_id)}
+        elif rec["currency"] == "eur":
+            email = body.email.strip().lower() if body.email and "@" in body.email and len(body.email) <= 254 else None
+            stripe_session = await asyncio.to_thread(
+                _pt_stripe_checkout, rec, campaign, partner, origin, email
+            )
+            tx = {
+                "id": new_id("tx"),
+                "session_id": stripe_session.id,
+                "kind": "coupon_pay",
+                "p5_charge_id": rec["id"],
+                "coupon": rec["coupon"],
+                "campaign_id": rec["campaign_id"],
+                "partner_id": rec["partner_id"],
+                "influencer_id": rec.get("influencer_id"),
+                "commission_percent_snapshot": float(rec["commission_percent_snapshot"]),
+                "user_id": None,
+                "gross_amount": rec["gross_minor"] / 100,
+                "amount": rec["net_minor"] / 100,
+                "currency": "eur",
+                "status": "initiated",
+                "payment_status": "pending",
+                "payment_method": "stripe_checkout_mbway_card",
+                "split": False,
+                "distribution_status": "manual_reconciliation_required",
+                "commission_settlement_status": "accrued_unpaid",
+                "created_at": now_iso(),
+                "updated_at": now_iso(),
+            }
+            await db.payment_transactions.update_one(
+                {"session_id": stripe_session.id}, {"$setOnInsert": tx}, upsert=True
+            )
+            update = {
+                "status": "checkout", "session_id": stripe_session.id,
+                "checkout_url": stripe_session.url,
+            }
+            result = {"checkout_url": stripe_session.url, "session_id": stripe_session.id}
+        else:
+            raise HTTPException(409, "Moeda P5 inválida")
+
+        await db.p5_charges.update_one(
+            {"id": rec["id"], "status": "creating"},
+            {"$set": {**update, "checkout_updated_at": now_iso()}},
+        )
+        return result
+    except (stripe.error.StripeError, HTTPException):
+        await db.p5_charges.update_one(
+            {"id": rec["id"], "status": "creating"},
+            {"$set": {"status": "pending", "checkout_error_at": now_iso()}},
+        )
+        raise
+    except Exception as exc:
+        await db.p5_charges.update_one(
+            {"id": rec["id"], "status": "creating"},
+            {"$set": {"status": "pending", "checkout_error_at": now_iso()}},
+        )
+        raise HTTPException(503, "Cobrança em verificação. Reabra a mesma sessão antes de tentar novamente.") from exc
 
 
 async def ensure_p5_indexes():
