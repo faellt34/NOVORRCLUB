@@ -199,6 +199,9 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
     c = await db.campaigns.find_one({"cupom": code, "parceiro_id": user.get("partner_id")}, NO_ID)
     if not c:
         raise HTTPException(status_code=404, detail="Cupom não encontrado para este parceiro.")
+    from p5_checkout import currency_enabled
+    if currency_enabled(str(c.get("currency") or linked.get("currency") or "eur").lower()):
+        raise HTTPException(status_code=409, detail="P5 ativo: a leitura do QR não comprova pagamento. Aguarde a confirmação do checkout.")
     if c["status"] != "Ativa":
         raise HTTPException(status_code=409, detail=f"Cupom {'expirado' if c['status'] == 'Expirada' else 'pausado'} — não pode ser redimido.")
     if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():

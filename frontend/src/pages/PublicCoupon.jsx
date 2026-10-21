@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { StripeModeBanner } from "../components/StripeModeBanner";
+import P5FollowerPanel from "../components/P5FollowerPanel";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -16,6 +17,7 @@ export default function PublicCoupon() {
   const sessionId = params.get("session_id");
   const [amount, setAmount] = useState("");
   const [paying, setPaying] = useState(false);
+  const [p5Enabled, setP5Enabled] = useState(false);
   const [paid, setPaid] = useState(null);
   const [email, setEmail] = useState("");
   const [checkVersion, setCheckVersion] = useState(0);
@@ -71,6 +73,16 @@ export default function PublicCoupon() {
     tick();
     return () => { cancelled = true; clearTimeout(timer); };
   }, [pixRequestId, sessionId, code, checkVersion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setP5Enabled(false);
+    if (!c || c.status !== "Ativa") return () => { cancelled = true; };
+    api.get("/public/p5/config").then(({ data }) => {
+      if (!cancelled) setP5Enabled(Boolean(data?.currencies?.[(c.currency || "eur").toLowerCase()]));
+    }).catch(() => { if (!cancelled) setP5Enabled(false); });
+    return () => { cancelled = true; };
+  }, [c?.cupom, c?.currency, c?.status]);
 
   const pay = async () => {
     if (payingRef.current || awaiting || currency === "brl") return;
@@ -149,8 +161,8 @@ export default function PublicCoupon() {
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
                   <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
-                    <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" />
-                    <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
+                    {!p5Enabled ? <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" /> : <p className="text-[10px] font-bold text-purple-700 text-center w-[92px]">Use o QR P5 seguro abaixo</p>}
+                    <button data-testid="public-coupon-download-qr" disabled={p5Enabled} onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">O seu código</p>
@@ -187,8 +199,11 @@ export default function PublicCoupon() {
                   {!paid?.blocked && !paid?.checkout_url && !attempt?.checkout_url && pixRequestId && <button disabled={paying} onClick={retryPixCheckout} className="block underline font-semibold">Retomar pedido de pagamento</button>}
                   {!paid?.blocked && (paid?.checkout_url || attempt?.checkout_url) && <a href={paid?.checkout_url || attempt.checkout_url} className="block underline font-semibold">Retomar a mesma cobrança</a>}
                 </div>}
-                {active && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
-                {active && currency !== "brl" && !awaiting && !terminal && !completed && (
+                {active && !p5Enabled && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
+                {active && p5Enabled && !awaiting && !terminal && !completed && (
+                  <P5FollowerPanel code={code} currency={currency} />
+                )}
+                {active && !p5Enabled && currency !== "brl" && !awaiting && !terminal && !completed && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
                     <StripeModeBanner compact />
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
