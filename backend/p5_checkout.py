@@ -27,7 +27,15 @@ def enabled():
 
 
 def currency_enabled(currency):
-    return enabled() and os.environ.get("P5_" + currency.upper() + "_ENABLED", "false").lower() == "true"
+    if not enabled() or os.environ.get("P5_" + currency.upper() + "_ENABLED", "false").lower() != "true":
+        return False
+    if currency == "eur":
+        # Do not offer checkout with live funds before a verified PT beneficiary policy.
+        return os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_test_")
+    if currency == "brl":
+        from routes_pix import availability_configuration
+        return availability_configuration()[0]["accepting_new_payments"]
+    return False
 
 
 def require_enabled(currency=None):
@@ -296,6 +304,18 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
         raise HTTPException(409, "Campanha expirada")
     if campaign.get("parceiro_id") != rec["partner_id"]:
         raise HTTPException(409, "Associação de parceiro alterada; confirme com o administrador")
+    # A campanha pode ter sido editada depois da leitura do QR.
+    # Nunca cobrar se os valores, a moeda ou o beneficiário foram modificados.
+    if (
+        str(campaign.get("influencer_id") or "") != str(rec.get("influencer_id") or "")
+        or str(Decimal(str(campaign.get("comissao", 0)))) != str(Decimal(str(rec["commission_percent_snapshot"])))
+        or (campaign.get("currency") or partner.get("currency") or "eur") != rec["currency"]
+    ):
+        raise HTTPException(409, "Campanha modificada após aprovação. Gere um novo QR.")
+    discount_rate = Decimal(str(campaign.get("desconto", 0)))
+    expected_discount = int((Decimal(rec["gross_minor"]) * discount_rate / Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    if expected_discount != rec["discount_minor"] or rec["gross_minor"] - expected_discount != rec["net_minor"]:
+        raise HTTPException(409, "Desconto alterado. Não é possível cobrar esta conta.")
     if rec["currency"] == "brl" and not availability_configuration()[0]["accepting_new_payments"]:
         raise HTTPException(503, "Pix Brasil ainda não habilitado no servidor")
     # Portugal P5 live is withheld until a verified two-beneficiary split is designed.
