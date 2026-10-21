@@ -1,0 +1,17 @@
+name: P5 BR PT Account Reconciliation (Read-only)
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  br-pt-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile read-only audit
+        run: python -m py_compile scripts/rrclub_p5_accounts_br_pt_readonly.py
+      - name: Test account separation and evidence
+        run: python -m unittest discover -s backend/tests -p 'test_p5_account_audit_readonly.py' -v
