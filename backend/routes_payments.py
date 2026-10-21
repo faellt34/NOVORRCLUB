@@ -1,5 +1,6 @@
 import os
 from partner_access import partner_record, normalized_iban
+from finance_evidence import connect_account_evidence
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -374,11 +375,8 @@ async def public_pay(body: PublicPayIn):
     if destination:
         try:
             account = stripe.Account.retrieve(destination)
-            capabilities = account.get("capabilities") or {}
-            capable = bool(
-                account.get("charges_enabled") and account.get("payouts_enabled")
-                and capabilities.get("transfers") == "active"
-            )
+            connected = connect_account_evidence(account, partner["id"])
+            capable = connected["ready_for_partner_transfer"]
         except stripe.error.StripeError:
             capable = False
         if capable:
