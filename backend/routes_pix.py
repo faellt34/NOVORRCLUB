@@ -441,12 +441,36 @@ async def connect_status(user: dict = Depends(require_role('partner','influencer
         raise HTTPException(409,'Parceiro não opera em reais')
     account=partner.get('pix_stripe_account_id')
     if not account:
-        return {'connected':False,'status_verified':True,'charges_enabled':False,'payouts_enabled':False,'transfers_enabled':False,'receiving_ready':False}
+        # A missing database link is not evidence that no Stripe account exists.
+        # Never invite an automatic duplicate while P5 Connect reconciliation is required.
+        from p5_checkout import currency_enabled
+        reconcile = (currency_enabled('brl') and
+                     os.environ.get('PIX_ALLOW_NEW_CONNECT_ACCOUNTS', 'false').lower() != 'true')
+        return {'connected':False,'status_verified':True,
+                'charges_enabled':False,'payouts_enabled':False,
+                'transfers_enabled':False,'receiving_ready':False,
+                'available':not reconcile,'requires_admin_link':reconcile,
+                'financial_state':'connect_brasil_associacao_pendente' if reconcile else 'account_not_configured',
+                'reason':('Existe a possibilidade de uma conta Stripe já criada. '
+                          'A administração deve conciliar o ID Connect com o parceiro antes de criar outra.'
+                          if reconcile else 'Conta de recebimento ainda não associada.')}
     try:
         info=await provider('accounts.retrieve',account)
     except stripe.error.StripeError:
         raise HTTPException(502,'Não foi possível verificar os recebimentos; tente novamente')
-    result=receiving_status(info, partner, 'influencer' if user.get('role') == 'influencer' else 'partner')
+    try:
+        result=receiving_status(info, partner, 'influencer' if user.get('role') == 'influencer' else 'partner')
+    except HTTPException as exc:
+        # This is a pending identity check, not a Cloudflare/origin failure.
+        # Return a non-payable status; do not update any payout flag or change metadata.
+        if exc.status_code == 409 and (exc.headers or {}).get('X-RRClub-Reason') == 'connect_brasil_associacao_pendente':
+            return {'connected':True,'status_verified':True,'available':False,
+                    'charges_enabled':False,'payouts_enabled':False,
+                    'transfers_enabled':False,'receiving_ready':False,
+                    'requires_admin_link':True,
+                    'financial_state':'connect_brasil_associacao_pendente',
+                    'reason':'Conta Stripe encontrada, mas a titularidade ainda não coincide com o cadastro. A administração deve confirmar a associação.'}
+        raise
     await collection.update_one({'id':partner['id'], 'pix_stripe_account_id':account},{'$set':{'pix_stripe_charges_enabled':result['charges_enabled'],'pix_stripe_payouts_enabled':result['payouts_enabled'],'pix_stripe_transfers_enabled':result['transfers_enabled'],'pix_stripe_status_synced_at':now_iso()}})
     return result
 
