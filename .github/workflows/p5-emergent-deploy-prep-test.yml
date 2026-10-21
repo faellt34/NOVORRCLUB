@@ -1,0 +1,75 @@
+name: P5 Emergent Deploy Prep End-to-End
+on:
+  push:
+    paths:
+      - scripts/rrclub_p5_ativar_sem_apagar_20261021.py
+      - .github/workflows/p5-emergent-deploy-prep-test.yml
+  workflow_dispatch:
+
+jobs:
+  test-emergent-deploy-prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify installer syntax
+        run: python -m py_compile scripts/rrclub_p5_ativar_sem_apagar_20261021.py
+      - name: Create simulated Emergent V3 workspace with customizations
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/rrclub-emergent-v3" e92a45597d978a6a8518f8efdff2c565b410ea23
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"rrclub-emergent-v3"
+          (root/"backend/.env").write_text(
+              "P5_ENABLED=false\nP5_EUR_ENABLED=false\nP5_BRL_ENABLED=false\n"
+              "PT_SPLIT_ENABLED=false\nPT_SPLIT_LIVE_ENABLED=false\nPT_SPLIT_AUTO_TRANSFER=false\n"
+          )
+          for path,marker in (
+            ("backend/server.py","# CUSTOM_EMERGENT_SERVER"),
+            ("backend/routes_payments.py","# CUSTOM_EMERGENT_PAYMENTS"),
+            ("backend/routes_data.py","# CUSTOM_EMERGENT_DATA"),
+            ("frontend/src/pages/PublicCoupon.jsx","// CUSTOM_EMERGENT_COUPON"),
+            ("frontend/src/pages/PartnerDashboard.jsx","// CUSTOM_EMERGENT_PARTNER"),
+          ):
+              p=root/path
+              p.write_text(p.read_text()+"\n"+marker+"\n")
+          PY
+      - name: Install JSX parser
+        working-directory: ${{ runner.temp }}/rrclub-emergent-v3/frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Run the exact user installer
+        working-directory: ${{ runner.temp }}/rrclub-emergent-v3
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/rrclub_p5_ativar_sem_apagar_20261021.py"
+          python "$GITHUB_WORKSPACE/scripts/rrclub_p5_ativar_sem_apagar_20261021.py"
+      - name: Assert P5 active while financial split remains inactive
+        working-directory: ${{ runner.temp }}/rrclub-emergent-v3
+        run: |
+          grep -Fx "P5_ENABLED=true" backend/.env
+          grep -Fx "P5_EUR_ENABLED=true" backend/.env
+          grep -Fx "P5_BRL_ENABLED=true" backend/.env
+          test "$(grep -c '^P5_ENABLED=' backend/.env)" -eq 1
+          grep -Fx "PT_SPLIT_AUTO_TRANSFER=false" backend/.env
+          grep -F "pt_split.router" backend/server.py
+          grep -F 'await settle_webhook_safely' backend/routes_payments.py
+          grep -F "p5_eligible" backend/routes_data.py
+          grep -F "p5EligibleCampaign" frontend/src/pages/PartnerDashboard.jsx
+          grep -F "c.p5_eligible" frontend/src/pages/PublicCoupon.jsx
+          grep -F "CUSTOM_EMERGENT_SERVER" backend/server.py
+          grep -F "CUSTOM_EMERGENT_PAYMENTS" backend/routes_payments.py
+          grep -F "CUSTOM_EMERGENT_DATA" backend/routes_data.py
+          grep -F "CUSTOM_EMERGENT_COUPON" frontend/src/pages/PublicCoupon.jsx
+          grep -F "CUSTOM_EMERGENT_PARTNER" frontend/src/pages/PartnerDashboard.jsx
+          grep -F "PIX_STRIPE_SECRET_KEY" backend/routes_pix.py
+          python -m compileall -q backend
