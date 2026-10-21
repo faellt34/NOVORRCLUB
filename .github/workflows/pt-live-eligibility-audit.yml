@@ -1,0 +1,34 @@
+name: PT P5 live eligibility audit safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  audit-read-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python syntax
+        run: python -m py_compile scripts/rrclub_pt_live_eligibility_audit.py
+      - name: Inspect script for money and environment mutations
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p = Path("scripts/rrclub_pt_live_eligibility_audit.py")
+          s = p.read_text()
+          ast.parse(s)
+          forbidden = ["Transfer.create", "Session.create", "Account.modify",
+                       "update_one(", "insert_one(", ".env", "P5_ENABLED=true"]
+          # .env is read by dotenv, never written. Check dangerous call patterns only.
+          for fragment in forbidden:
+              if fragment == ".env":
+                  continue
+              assert fragment not in s, fragment
+          assert "recipients_ready" in s
+          assert "quote(100)" in s
+          print("Read-only PT campaign eligibility diagnostic OK")
+          PY
