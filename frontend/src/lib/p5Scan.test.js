@@ -4,7 +4,7 @@ const origin = "https://rrclub.example";
 const scan = "safe_reference_abcdefghijklmnopqrstuvwxyz";
 
 test("P5 PT preserves the customer's individual QR reference on the first scan", () => {
-  expect(parseCustomerQr(origin + "/c/PT-5? p5_ref=wrong".replace("? ", "?"), origin).scanRef).toBe("");
+  expect(parseCustomerQr(origin + "/c/PT-5?p5_ref=wrong", origin).scanRef).toBe("");
   expect(parseCustomerQr(origin + "/c/PT-5?p5_ref=" + scan, origin)).toEqual({
     code: "PT-5", scanRef: scan, isP5Url: true,
   });
