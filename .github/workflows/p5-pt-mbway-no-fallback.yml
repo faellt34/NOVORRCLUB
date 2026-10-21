@@ -12,6 +12,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Syntax of Portugal P5 checkout
-        run: python -m py_compile backend/p5_checkout.py
+        run: python -m py_compile backend/p5_checkout.py scripts/rrclub_pt_mbway_safe_patch.py
       - name: No live calls — MB WAY unit contract
         run: python -m unittest discover -s backend/tests -p 'test_p5_pt_mbway_checkout_no_downgrade.py' -v
