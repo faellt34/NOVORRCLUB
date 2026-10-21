@@ -1,0 +1,70 @@
+name: PT Split Emergent Overlay Safety
+on:
+  push:
+    paths:
+      - scripts/rrclub_emergent_pt_split_overlay.py
+      - .github/workflows/pt-split-emergent-overlay-validation.yml
+  workflow_dispatch:
+jobs:
+  install-safely:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Installer syntax
+        run: python -m py_compile scripts/rrclub_emergent_pt_split_overlay.py
+      - name: Simulate post P5 Emergent code and custom edits
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/p5-emergent" e92a45597d978a6a8518f8efdff2c565b410ea23
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"p5-emergent"
+          p=root/"backend/server.py"
+          p.write_text(p.read_text().replace("p5_checkout.router,", "p5_checkout.router,  # LOCAL_CONFIGURED_ROUTER\\n"))
+          # Restore valid syntax while changing the router line locally, forcing a semantic merge.
+          t=p.read_text()
+          t=t.replace("p5_checkout.router,  # LOCAL_CONFIGURED_ROUTER\\n", "p5_checkout.router, # LOCAL_CONFIGURED_ROUTER\\n")
+          # The router tuple closes on the original next line; comments are invalid here.
+          # Replace the conflicting edit with a valid custom extra router call instead.
+          s=(root/"backend/server.py").read_text()
+          s=s.replace("p5_checkout.router,", "p5_checkout.router, ")
+          s=s.replace("realtime.router):", "realtime.router):  # LOCAL_ROUTER_NOTE")
+          p.write_text(s)
+          for fn,mark in (("backend/routes_payments.py","# LOCAL_PT_PAYMENTS"),
+                          ("frontend/src/pages/AdminPayouts.jsx","// LOCAL_ADMIN_VIEW")):
+            p=root/fn
+            p.write_text(p.read_text()+"\\n"+mark+"\\n")
+          PY
+      - name: Install JSX parser
+        working-directory: ${{ runner.temp }}/p5-emergent/frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Run overlay and confirm preserved customizations
+        working-directory: ${{ runner.temp }}/p5-emergent
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_pt_split_overlay.py"
+          grep -F "LOCAL_ROUTER_NOTE" backend/server.py
+          grep -F "LOCAL_PT_PAYMENTS" backend/routes_payments.py
+          grep -F "LOCAL_ADMIN_VIEW" frontend/src/pages/AdminPayouts.jsx
+          grep -F "pt_split.router" backend/server.py
+          grep -F "PT_SPLIT_AUTO_TRANSFER" backend/pt_split.py
+          grep -F "PortugalSplitPanel" frontend/src/pages/AdminPayouts.jsx
+          test -f backend/tests/test_pt_split.py
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_pt_split_overlay.py"
+          python -m compileall -q backend
+      - name: Assert no secrets and Pix code remain unchanged
+        working-directory: ${{ runner.temp }}/p5-emergent
+        run: |
+          test ! -f backend/.env
+          git diff --exit-code -- backend/routes_pix.py
+          git diff --exit-code -- backend/routes_auth.py
