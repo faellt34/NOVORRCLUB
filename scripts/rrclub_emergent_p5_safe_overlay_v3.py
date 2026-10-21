@@ -86,7 +86,7 @@ def semantic_merge(rel, ours, ancestor, theirs):
             else:
                 abort("server.py: P5 import placement unknown, no files changed.")
         route_match = re.search(
-            r"(?m)^for\s+r\s+in\s+\((.*?)\):\s*\n\s*api_router\.include_router\(r\)",
+            r"(?m)^for\s+r\s+in\s+\((.*?)\):[^\n]*\n\s*api_router\.include_router\(r\)",
             content, re.DOTALL,
         )
         if not route_match:
