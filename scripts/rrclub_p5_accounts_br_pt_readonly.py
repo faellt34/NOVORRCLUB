@@ -129,8 +129,8 @@ async def account_report(item, account, lookup_status):
         "stripe_lookup_status": lookup_status,
         "stripe_financially_capable": financial,
         "stripe_metadata_owner_present": bool(
-            (account or {}).get("metadata", {}).get("partner_id")
-            or (account or {}).get("metadata", {}).get("influencer_id")),
+            ((account or {}).get("metadata") or {}).get("partner_id")
+            or ((account or {}).get("metadata") or {}).get("influencer_id")),
         "database_partner_candidates": [
             {"id": x.get("id"), "name": x.get("nome"),
              "currency": x.get("currency"), "status": x.get("status")}
