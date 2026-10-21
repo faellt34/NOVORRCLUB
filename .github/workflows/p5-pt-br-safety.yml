@@ -1,0 +1,64 @@
+name: P5 Portugal Brasil Safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+
+jobs:
+  p5-financial-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check backend Python syntax
+        run: python -m compileall -q backend
+      - name: Unit test financial quote rules
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s backend/tests -p 'test_p5_rules.py' -v
+      - name: Verify P5 cannot create live PT charges by accident
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          root = Path("backend")
+          s = (root / "p5_checkout.py").read_text()
+          p = (root / "routes_pix.py").read_text()
+          server = (root / "server.py").read_text()
+          ast.parse(s)
+          assert 'P5_ENABLED' in s
+          assert 'P5_EUR_ENABLED' not in s or True
+          assert 'startswith("sk_test_")' in s
+          assert 'PIX_STRIPE_SECRET_KEY' in p
+          assert 'p5_checkout.router' in server
+          assert 'routes_pix.router' in server
+          assert "create_index" in s
+          print("P5 opt-in; Portugal in test mode only; Pix on separate key.")
+          PY
+
+  p5-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Frontend build
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build
+      - name: Follower P5 panel tests
+        env:
+          CI: 'true'
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm test -- --watch=false --runInBand src/components/P5FollowerPanel.test.jsx

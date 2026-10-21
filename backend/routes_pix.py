@@ -165,6 +165,10 @@ async def checkout(body: PixResumeIn):
 async def partner_checkout(body: PixCheckoutIn, user: dict = Depends(require_role('partner'))):
     await partner_record(user, db)
     existing=await db.payment_transactions.find_one({'id':'pix-'+str(body.request_id),'kind':'pix_coupon'},NO_ID)
+    if not existing:
+        from p5_checkout import currency_enabled
+        if currency_enabled('brl'):
+            raise HTTPException(409, 'P5 ativo: leia o QR individual do cliente antes de iniciar uma cobrança Pix.')
     if existing:
         owner=existing.get('partner_id')
     else:
@@ -411,6 +415,10 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role('partner
     try:
         account=partner.get('pix_stripe_account_id')
         if not account:
+            from p5_checkout import currency_enabled
+            if currency_enabled('brl') and os.environ.get('PIX_ALLOW_NEW_CONNECT_ACCOUNTS', 'false').lower() != 'true':
+                raise HTTPException(409,
+                    'P5 Brasil: concilie primeiro as contas Connect já existentes antes de criar outra.')
             created=await provider('accounts.create',idempotency_key='pix-connect-'+partner['id'],type='express',country='BR',email=user['email'],business_type=('individual' if user.get('role')=='influencer' else 'company'),capabilities={'card_payments':{'requested':True},'transfers':{'requested':True}},business_profile={'name':partner.get('nome',user['nome'])},metadata={'partner_id':partner['id']})
             account=created.id
             saved=await collection.update_one({'id':partner['id'],'pix_stripe_account_id':None},{'$set':{'pix_stripe_account_id':account,'pix_stripe_charges_enabled':False,'pix_stripe_payouts_enabled':False}})

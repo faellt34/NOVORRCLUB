@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
-import { QrScannerDialog } from "../components/QrScannerDialog";
+import { QrScannerDialog, extractCoupon } from "../components/QrScannerDialog";
 import { PartnerOnboarding } from "../components/PartnerOnboarding";
 import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
@@ -24,6 +24,9 @@ export default function PartnerDashboard() {
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [p5Currencies, setP5Currencies] = useState({});
+  const [p5ScanRef, setP5ScanRef] = useState("");
+  const [p5Bill, setP5Bill] = useState(null);
   const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [idemKey, setIdemKey] = useState(newKey);
@@ -103,6 +106,15 @@ export default function PartnerDashboard() {
     return () => clearTimeout(t);
   }, [code]);
 
+  useEffect(() => {
+    let active = true;
+    api.get("/public/p5/config")
+      .then(({ data }) => { if (active) setP5Currencies(data?.currencies || {}); })
+      .catch(() => { if (active) setP5Currencies({}); });
+    return () => { active = false; };
+  }, []);
+
+  const p5Mode = Boolean(p5Currencies[String(preview?.currency || data?.partner?.currency || "eur").toLowerCase()]);
   const parsedAmount = parseFloat(String(amount).replace(",", ".")) || 0;
 
   const handleValidate = async (e) => {
@@ -112,6 +124,18 @@ export default function PartnerDashboard() {
     if (!parsedAmount || parsedAmount <= 0) { toast.error("Informe um valor de compra válido."); return; }
     setSubmitting(true);
     try {
+      if (p5Mode) {
+        if (!p5ScanRef || p5ScanRef.length < 24) {
+          toast.error("Leia o QR P5 desta sessão do cliente. O QR genérico não autoriza uma cobrança.");
+          return;
+        }
+        const { data: bill } = await api.post("/partner/p5/charges", {
+          code, scan_ref: p5ScanRef, gross_amount: parsedAmount, idempotency_key: idemKey,
+        });
+        setP5Bill(bill);
+        toast.success("Conta confirmada! O cliente pode pagar no próprio telemóvel.");
+        return;
+      }
       if (preview?.currency === "brl") {
         if (!pixAvailable) { toast.info("Pix ainda não está liberado para cobranças nesta plataforma."); return; }
         const { data: bill } = await api.post("/partner/pix/checkout", { code, amount: parsedAmount, origin_url: window.location.origin, request_id: idemKey });
@@ -132,7 +156,20 @@ export default function PartnerDashboard() {
     }
   };
 
-  const onDetected = useCallback((c) => { setCode(c); toast.success(`QR detetado: ${c}`); }, []);
+  const onDetected = useCallback((value) => {
+    const raw = String(value || "").trim();
+    const coupon = extractCoupon(raw);
+    let scanRef = "";
+    try {
+      const url = new URL(raw);
+      scanRef = url.searchParams.get("p5_ref") || "";
+      if (url.origin !== window.location.origin || scanRef.length < 24) scanRef = "";
+    } catch { /* raw coupon code, not a P5 session */ }
+    setCode(coupon);
+    setP5ScanRef(scanRef);
+    setP5Bill(null);
+    toast.success(scanRef ? "QR P5 detetado: sessão a verificar no servidor." : "Cupão detetado: " + coupon);
+  }, []);
 
   const exportCsv = () => {
     downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor;desconto;comissao;taxa;data;staff;moeda",
@@ -194,11 +231,15 @@ export default function PartnerDashboard() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div data-testid="coupon-validation-card" className="card-soft p-5" id="validar">
-          <h3 className="text-lg font-semibold text-slate-900 mb-1">Validação de Cupom</h3>
-          <p className="text-xs text-slate-500 mb-4">Escaneie o QR do cliente ou digite o código</p>
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">{p5Mode ? "P5 · Aprovar conta do cliente" : "Validação de Cupom"}</h3>
+          <p className="text-xs text-slate-500 mb-4">{p5Mode ? "Leia o QR P5 do telemóvel do cliente; confirme o valor original da conta. O cliente paga depois." : "Escaneie o QR do cliente ou digite o código"}</p>
           <form onSubmit={handleValidate} className="space-y-3">
             <div className="flex gap-2">
-              <Input data-testid="coupon-code-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
+              <Input data-testid="coupon-code-input" value={code} onChange={(e) => {
+                const raw = e.target.value;
+                if (raw.startsWith("https://")) onDetected(raw);
+                else { setCode(raw); setP5ScanRef(""); setP5Bill(null); }
+              }} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
               <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
                 <ScanLine className="w-[18px] h-[18px]" />
               </button>
@@ -209,6 +250,12 @@ export default function PartnerDashboard() {
                   : preview.status === "Ativa" ? <>✓ {preview.nome} · {preview.influencer} · {preview.desconto}% desconto · comissão {preview.comissao}% · {(preview.currency || "eur").toUpperCase()}</>
                   : <>Cupom {preview.status.toLowerCase()} — não redimível</>}
               </div>
+            )}
+            {p5Mode && (
+              <p data-testid="p5-qr-state" className={p5ScanRef ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
+                {p5ScanRef ? "QR P5 capturado. Valor e desconto serão bloqueados no servidor." :
+                  "Aguardando QR P5: o cupão público isoladamente não identifica o cliente."}
+              </p>
             )}
             <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta na moeda da campanha" inputMode="decimal" className="rounded-xl bg-slate-50" />
             {preview?.status === "Ativa" && parsedAmount > 0 && (
@@ -224,9 +271,21 @@ export default function PartnerDashboard() {
               </div>
             )}
             <button type="submit" disabled={submitting || (preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
+              {submitting ? "A processar..." : p5Mode ? "Aprovar conta P5 (sem cobrar)" : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
             </button>
           </form>
+          {p5Bill && (
+            <div data-testid="partner-p5-bill" className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-900">
+              <strong>Conta P5 aprovada pelo estabelecimento</strong>
+              <p>Referência: {p5Bill.charge_id}</p>
+              {p5Bill.net_minor != null && (
+                <p>Total que o cliente verá: <b>{moneyIn(p5Bill.net_minor / 100, p5Bill.currency || preview?.currency || "eur")}</b></p>
+              )}
+              <p className="text-xs mt-1">
+                Aguarde o pagamento do cliente. Ler o QR não regista uma venda nem distribui comissões.
+              </p>
+            </div>
+          )}
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
             <PixBillStatus bill={pixBill} onPaid={() => { load(); refreshUnread(); }} />
             <button type="button" className="text-xs text-purple-700 underline mt-3" onClick={() => { setPixBill(null); setIdemKey(newKey()); }}>Preparar outra conta</button>
@@ -286,7 +345,7 @@ export default function PartnerDashboard() {
         </div>
       </div>
 
-      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} />
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} preserveRaw={p5Mode} />
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
 
       <div data-testid="partner-campaigns-card" className="card-soft p-5">
