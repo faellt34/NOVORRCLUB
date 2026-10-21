@@ -3,6 +3,7 @@
 Nenhuma leitura de QR é registada como pagamento. O P5 é opt-in via P5_ENABLED.
 Pix reutiliza o fluxo brasileiro existente quando instalado; nunca troca de conta Stripe.
 """
+import asyncio
 import hashlib
 import os
 import secrets
@@ -16,17 +17,22 @@ from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
 from core import db, NO_ID, new_id, now_iso, require_role
+from finance_evidence import connect_account_evidence
 
 router = APIRouter()
 
 
 def enabled():
-    return os.environ.get("P5_ENABLED", "false").lower() in ("true", "1", "yes")
+    return os.environ.get("P5_ENABLED", "false").lower() == "true"
 
 
-def require_enabled():
-    if not enabled():
-        raise HTTPException(503, "P5 ainda não ativado nesta instalação")
+def currency_enabled(currency):
+    return enabled() and os.environ.get("P5_" + currency.upper() + "_ENABLED", "false").lower() == "true"
+
+
+def require_enabled(currency=None):
+    if not enabled() or (currency and not currency_enabled(currency)):
+        raise HTTPException(503, "P5 indisponível para esta moeda. Homologação pendente.")
 
 
 def digest(value):
@@ -34,7 +40,10 @@ def digest(value):
 
 
 def minor(value):
-    return int((Decimal(str(value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    amount = Decimal(str(value))
+    if not amount.is_finite() or amount <= 0 or amount > Decimal("10000"):
+        raise HTTPException(400, "Valor inválido")
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def utc_now():
@@ -58,12 +67,19 @@ class PrepareCharge(BaseModel):
 
 class CheckoutCharge(BaseModel):
     charge_id: str = Field(min_length=8, max_length=90)
+    origin_url: str
     email: str | None = None
 
 
 @router.get("/public/p5/config")
 async def p5_config():
-    return {"enabled": enabled(), "requires_partner_approval": True}
+    return {
+        "enabled": enabled(),
+        "currencies": {"eur": currency_enabled("eur"), "brl": currency_enabled("brl")},
+        "requires_partner_approval": True,
+        "live_pt_checkout_ready": False,
+        "financial_settlement_verified": False,
+    }
 
 
 @router.post("/public/p5/sessions")
@@ -75,6 +91,9 @@ async def start_session(body: StartSession):
         raise HTTPException(404, "Cupom inválido ou inativo")
     if campaign.get("validade") and campaign["validade"] < utc_now().date().isoformat():
         raise HTTPException(409, "Cupom expirado")
+    partner = await db.partners.find_one({"id": campaign.get("parceiro_id")}, NO_ID) or {}
+    currency = str(campaign.get("currency") or partner.get("currency") or "eur").lower()
+    require_enabled(currency)
     token = secrets.token_urlsafe(40)
     scan_ref = secrets.token_urlsafe(26)
     await db.p5_sessions.insert_one({
@@ -116,6 +135,7 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
     if not session or session["expires_at"] <= now_iso():
         raise HTTPException(409, "QR P5 inexistente ou sessão expirada. Peça ao seguidor para reabrir o cupom.")
     currency = str(campaign.get("currency") or partner.get("currency") or "eur").lower()
+    require_enabled(currency)
     if currency not in ("eur", "brl") or currency != str(partner.get("currency") or currency).lower():
         raise HTTPException(409, "Moeda da campanha e do parceiro incompatíveis")
     gross = minor(body.gross_amount)
@@ -126,6 +146,11 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
     net = gross - discount
     if net < 50:
         raise HTTPException(409, "Valor após desconto abaixo do mínimo")
+    commission_rate = Decimal(str(campaign.get("comissao", 0)))
+    if not commission_rate.is_finite() or not 0 <= commission_rate < 100:
+        raise HTTPException(409, "Comissão da campanha inválida")
+    if currency == "brl" and (rate != 5 or commission_rate != 5):
+        raise HTTPException(409, "Pix Brasil P5 exige a campanha 5% desconto / 5% comissão")
     existing = await db.p5_charges.find_one(
         {"partner_id": partner["id"], "idempotency_key": body.idempotency_key}, NO_ID
     )
@@ -133,16 +158,15 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
         if (existing["scan_ref"], existing["coupon"], existing["gross_minor"]) != (body.scan_ref, code, gross):
             raise HTTPException(409, "Referência reutilizada com outra cobrança")
         return {"charge_id": existing["id"], "status": existing["status"], "duplicate": True}
-    active = await db.p5_charges.find_one({
-        "scan_ref": body.scan_ref, "status": {"$in": ["pending", "checkout", "paid"]},
-        "expires_at": {"$gt": now_iso()}
-    }, NO_ID)
+    active = await db.p5_charges.find_one({"scan_ref": body.scan_ref}, NO_ID)
     if active:
         raise HTTPException(409, "Já existe cobrança válida para este QR. Consulte-a antes de criar outra.")
     rec = {
         "id": new_id("p5"), "scan_ref": body.scan_ref,
         "coupon": code, "campaign_id": campaign["id"], "partner_id": partner["id"],
         "gross_minor": gross, "discount_minor": discount, "net_minor": net,
+        "influencer_id": campaign.get("influencer_id"),
+        "commission_percent_snapshot": str(commission_rate),
         "currency": currency, "status": "pending", "idempotency_key": body.idempotency_key,
         "created_at": now_iso(), "expires_at": expiration(20),
         "session_id": None, "pix_request_id": None, "checkout_url": None,
@@ -151,9 +175,9 @@ async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role(
         await db.p5_charges.insert_one(rec)
     except DuplicateKeyError:
         existing = await db.p5_charges.find_one({"partner_id": partner["id"], "idempotency_key": body.idempotency_key}, NO_ID)
-        if not existing or (existing["scan_ref"], existing["coupon"], existing["gross_minor"]) != (body.scan_ref, code, gross):
-            raise HTTPException(409, "Cobrança duplicada com dados divergentes")
-        return {"charge_id": existing["id"], "status": existing["status"], "duplicate": True}
+        if existing and (existing["scan_ref"], existing["coupon"], existing["gross_minor"]) == (body.scan_ref, code, gross):
+            return {"charge_id": existing["id"], "status": existing["status"], "duplicate": True}
+        raise HTTPException(409, "Este QR já tem uma cobrança associada. Peça um novo QR ao seguidor.")
     return {"charge_id": rec["id"], "status": "pending", "currency": currency,
             "gross_minor": gross, "discount_minor": discount, "net_minor": net}
 
@@ -165,7 +189,8 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
     rec = await db.p5_charges.find_one({"scan_ref": s["scan_ref"]}, NO_ID, sort=[("created_at", -1)])
     if not rec:
         return {"status": "none"}
-    if rec["status"] == "pending" and rec["expires_at"] <= now_iso():
+    require_enabled(rec["currency"])
+    if rec["status"] in ("pending", "creating") and rec["expires_at"] <= now_iso():
         return {"status": "expired"}
     state = rec["status"]
     paid = None
@@ -180,7 +205,8 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
     return {"status": state, "charge_id": rec["id"], "currency": rec["currency"],
             "gross_minor": rec["gross_minor"], "discount_minor": rec["discount_minor"],
             "net_minor": rec["net_minor"], "payment_status": paid,
-            "checkout_url": rec.get("checkout_url") if state == "checkout" else None}
+            "checkout_url": rec.get("checkout_url") if state == "checkout" else None,
+            "partner_confirmed": True}
 
 
 @router.post("/public/p5/charges/checkout")
@@ -276,3 +302,4 @@ async def ensure_p5_indexes():
     await db.p5_sessions.create_index("secret_hash", unique=True)
     await db.p5_charges.create_index("id", unique=True)
     await db.p5_charges.create_index([("partner_id", 1), ("idempotency_key", 1)], unique=True)
+    await db.p5_charges.create_index("scan_ref", unique=True)
