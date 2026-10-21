@@ -6,7 +6,8 @@ import { useApp } from "../context/AppContext";
 import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
-import { QrScannerDialog, extractCoupon } from "../components/QrScannerDialog";
+import { QrScannerDialog } from "../components/QrScannerDialog";
+import { parseCustomerQr } from "../lib/p5Scan";
 import { PartnerOnboarding } from "../components/PartnerOnboarding";
 import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
@@ -26,6 +27,7 @@ export default function PartnerDashboard() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [p5Currencies, setP5Currencies] = useState({});
   const [p5ScanRef, setP5ScanRef] = useState("");
+  const [p5ScanRejected, setP5ScanRejected] = useState(false);
   const [p5Bill, setP5Bill] = useState(null);
   const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
@@ -123,6 +125,10 @@ export default function PartnerDashboard() {
     if (submitting) return;
     if (!code.trim()) { toast.error("Introduza o código do cupom."); return; }
     if (!parsedAmount || parsedAmount <= 0) { toast.error("Informe um valor de compra válido."); return; }
+    if (p5ScanRejected || (p5ScanRef && !p5Mode)) {
+      toast.error("QR P5 não validado para esta campanha. Confirme a ativação do P5 e volte a ler o QR da sessão; não registe como venda manual.");
+      return;
+    }
     setSubmitting(true);
     try {
       if (p5Mode) {
@@ -134,7 +140,8 @@ export default function PartnerDashboard() {
           code, scan_ref: p5ScanRef, gross_amount: parsedAmount, idempotency_key: idemKey,
         });
         setP5Bill(bill);
-        toast.success("Conta confirmada! O cliente pode pagar no próprio telemóvel.");
+        setIdemKey(newKey()); // Each new follower/session must have its own idempotency key.
+        toast.success("Conta confirmada! O cliente verá o valor e poderá pagar quando o MB WAY estiver apto.");
         return;
       }
       if (preview?.currency === "brl") {
@@ -158,18 +165,17 @@ export default function PartnerDashboard() {
   };
 
   const onDetected = useCallback((value) => {
-    const raw = String(value || "").trim();
-    const coupon = extractCoupon(raw);
-    let scanRef = "";
-    try {
-      const url = new URL(raw);
-      scanRef = url.searchParams.get("p5_ref") || "";
-      if (url.origin !== window.location.origin || scanRef.length < 24) scanRef = "";
-    } catch { /* raw coupon code, not a P5 session */ }
+    const { code: coupon, scanRef, isP5Url } = parseCustomerQr(value, window.location.origin);
     setCode(coupon);
     setP5ScanRef(scanRef);
+    setP5ScanRejected(isP5Url && !scanRef);
     setP5Bill(null);
-    toast.success(scanRef ? "QR P5 detetado: sessão a verificar no servidor." : "Cupão detetado: " + coupon);
+    setIdemKey(newKey());
+    if (isP5Url && !scanRef) {
+      toast.error("QR P5 inválido ou de outro endereço. Peça ao cliente para abrir a sessão RRClub neste site.");
+    } else {
+      toast.success(scanRef ? "QR P5 detetado: sessão a verificar no servidor." : "Cupão detetado: " + coupon);
+    }
   }, []);
 
   const exportCsv = () => {
@@ -239,7 +245,7 @@ export default function PartnerDashboard() {
               <Input data-testid="coupon-code-input" value={code} onChange={(e) => {
                 const raw = e.target.value;
                 if (raw.startsWith("https://")) onDetected(raw);
-                else { setCode(raw); setP5ScanRef(""); setP5Bill(null); }
+                else { setCode(raw); setP5ScanRef(""); setP5ScanRejected(false); setP5Bill(null); setIdemKey(newKey()); }
               }} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
               <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
                 <ScanLine className="w-[18px] h-[18px]" />
@@ -252,12 +258,18 @@ export default function PartnerDashboard() {
                   : <>Cupom {preview.status.toLowerCase()} — não redimível</>}
               </div>
             )}
+            {preview?.status === "Ativa" && p5EligibleCampaign && preview.currency === "eur" && !p5Currencies.eur && (
+              <p data-testid="p5-pt-off" className="text-xs text-amber-700">
+                Campanha P5 Portugal elegível, mas o fluxo QR ainda não está ativado nesta instalação. Ative P5_ENABLED e P5_EUR_ENABLED no backend.
+              </p>
+            )}
             {p5Mode && (
               <p data-testid="p5-qr-state" className={p5ScanRef ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
                 {p5ScanRef ? "QR P5 capturado. Valor e desconto serão bloqueados no servidor." :
                   "Aguardando QR P5: o cupão público isoladamente não identifica o cliente."}
               </p>
             )}
+            {p5ScanRejected && <p role="alert" className="text-xs text-red-700">O QR desta sessão não foi reconhecido; nenhuma venda será registada.</p>}
             <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta na moeda da campanha" inputMode="decimal" className="rounded-xl bg-slate-50" />
             {preview?.status === "Ativa" && parsedAmount > 0 && (
               <div data-testid="live-calculation" className="grid grid-cols-2 gap-2 text-xs">
@@ -346,7 +358,7 @@ export default function PartnerDashboard() {
         </div>
       </div>
 
-      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} preserveRaw={p5Mode} />
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} preserveRaw />
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
 
       <div data-testid="partner-campaigns-card" className="card-soft p-5">
