@@ -10,7 +10,7 @@ import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core import db, NO_ID, require_role
-from finance_evidence import transfer_evidence, connect_account_evidence
+from finance_evidence import transfer_evidence, connect_account_evidence, charge_cost_evidence
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ PT_COUPON_QUERY = {
 }
 
 
-def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, expected):
+def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, expected, commission_minor=None):
     secret = os.environ.get("STRIPE_SECRET_KEY")
     if not secret or not secret.startswith(("sk_live_", "sk_test_", "rk_live_", "rk_test_")):
         raise RuntimeError("Stripe Portugal indisponível")
@@ -47,6 +47,18 @@ def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, 
     if hasattr(cid, "get"):
         cid = cid.get("id")
     charge = stripe.Charge.retrieve(cid, api_key=secret) if cid else None
+    balance = None
+    if charge and charge.get("balance_transaction"):
+        balance_id = charge.get("balance_transaction")
+        if hasattr(balance_id, "get"):
+            balance_id = balance_id.get("id")
+        try:
+            balance = stripe.BalanceTransaction.retrieve(balance_id, api_key=secret)
+        except stripe.error.StripeError:
+            # Falta de detalhe de taxas não pode impedir a prova do pagamento;
+            # apresentar taxa como indisponível, nunca como zero.
+            balance = None
+    fee_evidence = charge_cost_evidence(balance, expected_amount_minor, commission_minor)
     transfer = None
     if charge:
         tid = charge.get("transfer")
@@ -67,7 +79,9 @@ def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, 
         result.pop("transfer_amount_minor", None)
     return {
         **result,
+        **fee_evidence,
         "stripe_session_paid": True,
+        "payment_method_actual": ((charge or {}).get("payment_method_details") or {}).get("type"),
         "payment_status": intent.get("status"),
         "payment_intent_id": remote_intent_id,
         "stripe_currency": intent.get("currency"),
@@ -137,6 +151,17 @@ async def reconciliation_detail(
     if tx.get("amount") is None or not tx.get("campaign_id") or not tx.get("partner_id"):
         return {"state": "missing_transaction_evidence", "bank_payout": "not_verified"}
     partner = await db.partners.find_one({"id": tx["partner_id"]}, NO_ID) or {}
+    # A comissão de um pagamento antigo só é apresentada quando o registo
+    # financeiro está associado por session_id, cupão, campanha e parceiro.
+    redemption = await db.redemptions.find_one({
+        "idempotency_key": session_id,
+        "$or": [{"currency": "eur"}, {"currency": {"$exists": False}}],
+    }, NO_ID)
+    commission_minor = None
+    if redemption and all(redemption.get(k) == tx.get(k) for k in ("coupon", "campaign_id", "partner_id")):
+        raw_commission = redemption.get("commission")
+        if isinstance(raw_commission, (int, float)) and raw_commission >= 0:
+            commission_minor = int(round(raw_commission * 100))
     expected = {
         "kind": "coupon_pay",
         "campaign_id": tx["campaign_id"],
@@ -151,6 +176,7 @@ async def reconciliation_detail(
             int(round(float(tx["amount"]) * 100)),
             partner.get("stripe_account_id"),
             expected,
+            commission_minor,
         )
         local_state = tx.get("payment_status", "unknown")
         return {
