@@ -116,6 +116,9 @@ export default function FinanceReconciliationPanel() {
                         <p>Bruto Stripe: <b>{moneyIn(proof.stripe_gross_minor / 100, "eur")}</b></p>
                         <p>Taxa de processamento: <b>{moneyIn(proof.stripe_fee_minor / 100, "eur")}</b></p>
                         <p>Líquido desse movimento: <b>{moneyIn(proof.stripe_net_minor / 100, "eur")}</b></p>
+                        {proof.balance_transaction_status === "pending" && (
+                          <p className="text-amber-700">Saldo deste movimento ainda pendente na Stripe</p>
+                        )}
                         {proof.commission_minor !== null && (
                           <p>Comissão registada no cupão: <b>{moneyIn(proof.commission_minor / 100, "eur")}</b></p>
                         )}
