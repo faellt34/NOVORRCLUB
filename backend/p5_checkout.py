@@ -44,7 +44,10 @@ def checkout_globally_enabled(currency):
         if key.startswith("sk_test_"):
             return True
         if key.startswith("sk_live_"):
-            from pt_split import automatic
+            try:
+                from pt_split import automatic
+            except ImportError:
+                return False  # P5 QR stays active; financial module not installed yet.
             return bool(automatic())
         return False
     if currency == "brl":
@@ -362,12 +365,15 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
                 return await wait_for_connect(rec, "connect_brasil_recebimentos_pendentes")
             raise
     # Live P5 only with BOTH frozen, KYC-verified Connect beneficiaries.
-    from pt_split import automatic, recipients_ready, quote, VERSION
     pt_quote = None
     pt_destinations = None
     if rec["currency"] == "eur":
         live_key = os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_live_")
         if live_key:
+            try:
+                from pt_split import automatic, recipients_ready, quote, VERSION
+            except ImportError:
+                return await wait_for_connect(rec, "split_portugal_ainda_nao_integrado")
             if not automatic():
                 return await wait_for_connect(rec, "split_portugal_aguarda_ativacao")
             pt_quote = quote(int(rec["gross_minor"]))
