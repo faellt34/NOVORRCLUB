@@ -34,3 +34,40 @@ def transfer_evidence(intent, charge=None, transfer=None, expected_amount=None,
         "transfer_amount_minor": transfer.get("amount"),
         "transfer_currency": transfer.get("currency"),
     }
+
+
+def connect_account_evidence(account, expected_partner_id):
+    """Prova de associação e aptidão Connect, por IDs. Nunca por nome comercial.
+
+    Sem associação explícita por metadata.partner_id, não se pode aprovar
+    automaticamente uma transferência, mesmo que o nome pareça correto.
+    """
+    if not account:
+        return {
+            "account_link_verified": "unverified",
+            "charges_enabled": False,
+            "payouts_enabled": False,
+            "transfers_active": False,
+            "requirements_pending": False,
+            "disabled_reason": None,
+            "ready_for_partner_transfer": False,
+        }
+    partner_id = (account.get("metadata") or {}).get("partner_id")
+    linked_status = (
+        "verified" if partner_id and partner_id == expected_partner_id
+        else "mismatch" if partner_id
+        else "unverified"
+    )
+    charges = bool(account.get("charges_enabled"))
+    payouts = bool(account.get("payouts_enabled"))
+    transfers = (account.get("capabilities") or {}).get("transfers") == "active"
+    due = bool((account.get("requirements") or {}).get("currently_due"))
+    return {
+        "account_link_verified": linked_status,
+        "charges_enabled": charges,
+        "payouts_enabled": payouts,
+        "transfers_active": transfers,
+        "requirements_pending": due,
+        "disabled_reason": (account.get("requirements") or {}).get("disabled_reason"),
+        "ready_for_partner_transfer": bool(linked_status == "verified" and charges and payouts and transfers and not due),
+    }
