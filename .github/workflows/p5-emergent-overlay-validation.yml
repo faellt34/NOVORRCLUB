@@ -1,0 +1,49 @@
+name: P5 Emergent Local Overlay Validation
+on:
+  push:
+    paths:
+      - scripts/rrclub_emergent_p5_safe_overlay.py
+      - .github/workflows/p5-emergent-overlay-validation.yml
+  workflow_dispatch:
+
+jobs:
+  validate-overlay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python source syntax
+        run: python -m py_compile scripts/rrclub_emergent_p5_safe_overlay.py
+      - name: Create an untouched historic Emergent-like workspace
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/rrclub-p5-legacy" 65122258cfe9d95e03af9c390182a42a432c8748
+          printf '\n# LOCAL_CUSTOMIZATION_PRESERVED\n' >> "$RUNNER_TEMP/rrclub-p5-legacy/backend/routes_payments.py"
+          printf '\n// LOCAL_CUSTOMIZATION_PRESERVED\n' >> "$RUNNER_TEMP/rrclub-p5-legacy/frontend/src/pages/PublicCoupon.jsx"
+      - name: Install parser dependencies in historic workspace
+        working-directory: ${{ runner.temp }}/rrclub-p5-legacy/frontend
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Apply selective P5 overlay and preserve local modifications
+        working-directory: ${{ runner.temp }}/rrclub-p5-legacy
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_p5_safe_overlay.py"
+          grep -F "LOCAL_CUSTOMIZATION_PRESERVED" backend/routes_payments.py
+          grep -F "LOCAL_CUSTOMIZATION_PRESERVED" frontend/src/pages/PublicCoupon.jsx
+          python "$GITHUB_WORKSPACE/scripts/rrclub_emergent_p5_safe_overlay.py"
+      - name: Check no editing of environment or unrelated authentication files
+        working-directory: ${{ runner.temp }}/rrclub-p5-legacy
+        run: |
+          git diff --exit-code -- backend/routes_auth.py
+          test ! -e backend/.env
+          test -f backend/p5_checkout.py
+          grep -F "PIX_STRIPE_SECRET_KEY" backend/routes_pix.py
+          git diff --name-only | grep -F backend/routes_payments.py
