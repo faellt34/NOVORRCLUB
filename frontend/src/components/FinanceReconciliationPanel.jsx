@@ -40,7 +40,7 @@ export default function FinanceReconciliationPanel() {
   }, []);
 
   const verify = async (row) => {
-    if (!row.session_id || row.payment_status !== "paid") return;
+    if (!row.session_id) return;
     setBusy(row.session_id);
     try {
       const { data } = await api.get(
@@ -104,8 +104,13 @@ export default function FinanceReconciliationPanel() {
                   <td className="py-3 pr-3">
                     {moneyIn(row.amount || 0, "eur")}
                     <p className="text-xs text-slate-500">
-                      {row.payment_status === "paid" ? "Recebido" : "Ainda não confirmado"}
+                      {row.payment_status === "paid" ? "Registado como recebido" : "Não confirmado no registo local"}
                     </p>
+                    {proof?.ledger_discrepancy && (
+                      <p className="text-xs font-semibold text-amber-700">
+                        Stripe confirmou; registo da RRClub está pendente de reconciliação
+                      </p>
+                    )}
                   </td>
                   <td className="py-3 pr-3">
                     <span className={transferFound ? "text-emerald-700" : "text-amber-700"}>
@@ -145,7 +150,7 @@ export default function FinanceReconciliationPanel() {
                   <td className="py-3">
                     <button
                       type="button"
-                      disabled={busy === id || !id || row.payment_status !== "paid"}
+                      disabled={busy === id || !id}
                       onClick={() => verify(row)}
                       className="rounded-lg border border-purple-200 px-3 py-2 text-xs font-semibold text-purple-700 disabled:opacity-50"
                     >
