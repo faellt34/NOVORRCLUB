@@ -129,6 +129,68 @@ async def recipients_ready(partner_id, influencer_id):
     }
 
 
+# These are display aliases, NEVER financial beneficiary bindings.
+PT_ACCOUNT_ALIASES = {
+    "acct_1UIajlE123roTruk": "Conta PT-01",
+    "acct_1UIacdCy6KhbVjNX": "Conta PT-02",
+}
+PT_PLATFORM_ACCOUNT = "acct_1UIZ90CZnwrqCuCt"
+
+
+@router.get("/admin/finance/pt-split/accounts")
+async def pt_accounts_inventory(user: dict = Depends(require_role("admin"))):
+    """Read-only inventory: explain labels, Stripe environment and real DB associations."""
+    labels = [{"label": label, "account_id": aid} for aid, label in PT_ACCOUNT_ALIASES.items()]
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not key.startswith("sk_live_"):
+        return {"platform_status": "not_live_portugal_key",
+                "accounts": [{**r, "status": "not_checked"} for r in labels]}
+    try:
+        platform = await asyncio.to_thread(stripe.Account.retrieve, api_key=key)
+    except stripe.error.StripeError:
+        return {"platform_status": "stripe_unavailable",
+                "accounts": [{**r, "status": "not_checked"} for r in labels]}
+    if platform.get("id") != PT_PLATFORM_ACCOUNT:
+        return {"platform_status": "wrong_stripe_account",
+                "accounts": [{**r, "status": "not_checked"} for r in labels]}
+    result = []
+    for aid, label in PT_ACCOUNT_ALIASES.items():
+        item = {"account_id": aid, "label": label, "role": "unassigned",
+                "binding_verified": False, "status": "stripe_unavailable"}
+        try:
+            acc = await asyncio.to_thread(stripe.Account.retrieve, aid, api_key=key)
+            required = acc.get("requirements") or {}
+            item["financially_capable"] = bool(
+                acc.get("country") == "PT"
+                and acc.get("payouts_enabled") is True
+                and (acc.get("capabilities") or {}).get("transfers") == "active"
+                and not (required.get("currently_due") or required.get("past_due")
+                         or required.get("disabled_reason"))
+            )
+            item["status"] = "stripe_ready" if item["financially_capable"] else "stripe_requirements_pending"
+            partner = await db.partners.find_one({"stripe_account_id": aid}, NO_ID)
+            influencer = await db.influencers.find_one({"stripe_account_id": aid}, NO_ID)
+            matched = acc.get("metadata") or {}
+            if partner:
+                item["partner_record"] = {"id": partner.get("id"), "name": partner.get("nome")}
+            if influencer:
+                item["influencer_record"] = {"id": influencer.get("id"), "name": influencer.get("nome")}
+            if (partner and not influencer and matched.get("partner_id") == partner.get("id")):
+                item["binding_verified"] = True
+                item["role"] = "partner"
+            elif (influencer and not partner
+                  and matched.get("influencer_id") == influencer.get("id")):
+                item["binding_verified"] = True
+                item["role"] = "influencer"
+            # The display alias never permits a charge, commission or transfer.
+        except stripe.error.StripeError:
+            pass
+        result.append(item)
+    return {"platform_status": "verified_live_portugal", "accounts": result,
+            "aliases_are_not_beneficiary_ids": True,
+            "note": "Os nomes PT-01/PT-02 sao etiquetas; so um vinculo Stripe metadata + cadastro permite repasses."}
+
+
 @router.get("/admin/finance/pt-split/health")
 async def pt_health(user: dict = Depends(require_role("admin"))):
     """Read-only; no payments/transfers. Avoid exposing KYC documents."""
