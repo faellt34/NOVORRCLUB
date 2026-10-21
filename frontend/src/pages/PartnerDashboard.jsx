@@ -40,7 +40,7 @@ export default function PartnerDashboard() {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
-    if (ev.tipo === "split_executado" && ev.record) {
+    if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
         if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
