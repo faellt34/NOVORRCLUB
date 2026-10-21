@@ -17,7 +17,6 @@ const proofLabels = {
   amount_mismatch: "Valores da transação não correspondem",
   partner_connect_binding_mismatch: "Conta Stripe pertence a outro parceiro",
   partner_connect_binding_unverified: "Associação Stripe ainda sem verificação por ID",
-  partner_connect_unlinked: "Parceiro sem conta Connect associada",
   payment_currency_mismatch: "Moeda de pagamento diferente de EUR",
   charge_refunded_or_partially_refunded: "Pagamento reembolsado total ou parcialmente",
   charge_disputed: "Cobrança contestada",
@@ -106,6 +105,23 @@ export default function FinanceReconciliationPanel() {
                     <p className="text-xs text-slate-500">
                       {row.payment_status === "paid" ? "Registado como recebido" : "Não confirmado no registo local"}
                     </p>
+                    {proof?.fee_verified && (
+                      <div className="mt-2 text-xs text-slate-600" data-testid="stripe-fees">
+                        <p>Meio utilizado: <b>{proof.payment_method_actual === "mb_way" ? "MB WAY" : proof.payment_method_actual || "Por verificar"}</b></p>
+                        <p>Bruto Stripe: <b>{moneyIn(proof.stripe_gross_minor / 100, "eur")}</b></p>
+                        <p>Taxa de processamento: <b>{moneyIn(proof.stripe_fee_minor / 100, "eur")}</b></p>
+                        <p>Líquido desse movimento: <b>{moneyIn(proof.stripe_net_minor / 100, "eur")}</b></p>
+                        {proof.commission_minor !== null && (
+                          <p>Comissão registada no cupão: <b>{moneyIn(proof.commission_minor / 100, "eur")}</b></p>
+                        )}
+                        {proof.fee_exceeds_commission && (
+                          <p className="mt-1 font-semibold text-amber-700" role="status">
+                            Atenção: a taxa Stripe é superior à comissão contabilizada.
+                          </p>
+                        )}
+                        <p className="italic">Líquido após taxa não significa lucro ou repasse ao parceiro.</p>
+                      </div>
+                    )}
                     {proof?.ledger_discrepancy && (
                       <p className="text-xs font-semibold text-amber-700">
                         Stripe confirmou; registo da RRClub está pendente de reconciliação
