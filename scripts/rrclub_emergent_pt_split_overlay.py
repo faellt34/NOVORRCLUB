@@ -19,7 +19,7 @@ REPO = "faellt34/NOVORRCLUB"
 BASE = "e92a45597d978a6a8518f8efdff2c565b410ea23"
 TARGET = "8282d202e5cf89103959d746a9c4a65ac4e32249"
 MANIFEST = json.loads(r'''[["backend/server.py","12138cd8cb889189f84e9eb83b9f8292ec83d212","263093c58431017fc90c163cc378086f0a873366"],["backend/p5_checkout.py","a7a71629306d6dfb5ea2c59eb4ba2f4ac9958532","f9220f79c502cb8f0399f2c7dbb7314d2b110ec8"],["backend/p5_rules.py","6ac3bff3db6a1c3fcc4a340462d81643f1c729da","123899834f279d90ea1fa20cafe063b6ffb106e3"],["backend/routes_payments.py","befa224447004dac1be313b4fb7afbc2079e6225","395e0e21a0b935eb986547b5c8bdc894cdeac30c"],["backend/tests/test_p5_rules.py","3037fcf439720814c0c952a7a94260d35e408fd9","7ab15f14e9d03c4e2d25d2fef2fcfb6878caac63"],["frontend/src/pages/AdminPayouts.jsx","2846363d5d8869deb247b044b54003e09f0afb87","8c163651ecf831a616eb67229e4fa80a9a4c3d42"],["backend/pt_split.py",null,"dc88657f8fa96206f6ea1e540de3a68812685f6a"],["backend/tests/test_pt_split.py",null,"d018137a5736a432f8c464902eade4b616327108"],["frontend/src/components/PortugalSplitPanel.jsx",null,"79e8d3adbb57cdb33cafd1ffcb197a734399cf90"]]''')
-ROOT = Path("/app")
+ROOT = Path("/app") if (Path("/app/backend/server.py")).is_file() else Path.cwd()
 
 
 def fail(message):
