@@ -17,7 +17,7 @@ class PTAccountAliasesTests(unittest.TestCase):
     def test_endpoint_read_only_and_admin_guard(self):
         tree = ast.parse(SOURCE)
         node = next(x for x in tree.body if isinstance(x, ast.AsyncFunctionDef) and x.name == "pt_accounts_inventory")
-        self.assertIn('require_role("admin")', ast.unparse(node.args))
+        self.assertIn("require_role('admin')", ast.unparse(node.args))
         calls = [ast.unparse(x.func) for x in ast.walk(node) if isinstance(x, ast.Call)]
         self.assertNotIn('stripe.Transfer.create', calls)
         self.assertFalse(any(x.startswith('stripe.Account.modify') for x in calls))
