@@ -164,14 +164,15 @@ async def fulfil(session_id: str, extra: dict):
         gross = float(res["gross_amount"])
         rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
                "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
-               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
+               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method"),
+               "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "accrued_unpaid"}
         try:
             await db.redemptions.insert_one(dict(rec))
         except Exception:
             return
         await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
         from realtime import emit
-        emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
+        emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
              influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
         from routes_data import mark_converted
         await mark_converted(rec["campaign_id"], rec)
@@ -250,7 +251,7 @@ async def stripe_webhook(request: Request):
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
-        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
@@ -336,29 +337,60 @@ async def public_pay(body: PublicPayIn):
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+        raise HTTPException(status_code=409, detail="Cupom expirado")
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    if not 0 <= float(c["desconto"]) < 100:
+        raise HTTPException(status_code=409, detail="Desconto inválido")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    if to_pay < 0.50:
+        raise HTTPException(status_code=409, detail="Valor a pagar inferior ao mínimo")
     base = dict(
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
         mode="payment",
         success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
-        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id", "")},
+        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"],
+                  "partner_id": c.get("parceiro_id", ""),
+                  "influencer_id": c.get("influencer_id") or ""},
     )
     if body.email:
         base["customer_email"] = body.email.strip().lower()
+    # Não confiar numa flag antiga. Ler as capacidades atuais da conta Connect.
+    # Sem aptidão comprovada, o pagamento fica na plataforma aguardando conciliação.
     split = False
-    if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
-        fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
-        base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
-        split = True
+    destination = partner.get("stripe_account_id")
+    if destination:
+        try:
+            account = stripe.Account.retrieve(destination)
+            capabilities = account.get("capabilities") or {}
+            capable = bool(
+                account.get("charges_enabled") and account.get("payouts_enabled")
+                and capabilities.get("transfers") == "active"
+            )
+        except stripe.error.StripeError:
+            capable = False
+        if capable:
+            fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
+            charge_cents = int(round(to_pay * 100))
+            if not 0 <= fee <= charge_cents:
+                raise HTTPException(status_code=409, detail="Comissão incompatível com o total")
+            base["payment_intent_data"] = {
+                "application_fee_amount": fee,
+                "transfer_data": {"destination": destination},
+                "metadata": base["metadata"],
+                "description": f"{code} · {partner.get('nome')}",
+            }
+            split = True
     session = None
+    selected_methods = "card"
     try:
         for pm in (["card", "mb_way"], ["card"]):
             try:
                 session = stripe.checkout.Session.create(**base, payment_method_types=pm)
+                selected_methods = "card/mb_way" if len(pm) == 2 else "card"
                 break
             except stripe.error.InvalidRequestError as e:
                 if pm == ["card"]:
@@ -368,7 +400,11 @@ async def public_pay(body: PublicPayIn):
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending",
+                                              "payment_method": selected_methods, "split": split,
+                                              "distribution_status": "stripe_transfer_unverified" if split else "manual_reconciliation_required",
+                                              "commission_settlement_status": "accrued_unpaid",
+                                              "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
 
 
