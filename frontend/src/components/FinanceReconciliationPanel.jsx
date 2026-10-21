@@ -19,6 +19,8 @@ const proofLabels = {
   partner_connect_binding_unverified: "Associação Stripe ainda sem verificação por ID",
   partner_connect_unlinked: "Parceiro sem conta Connect associada",
   payment_currency_mismatch: "Moeda de pagamento diferente de EUR",
+  charge_refunded_or_partially_refunded: "Pagamento reembolsado total ou parcialmente",
+  charge_disputed: "Cobrança contestada",
 };
 
 export default function FinanceReconciliationPanel() {
