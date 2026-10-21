@@ -1,0 +1,36 @@
+name: Paulo Pix Connect account diagnostics
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax
+        run: |
+          python -m py_compile backend/routes_pix.py scripts/rrclub_diagnose_partner_pix.py
+      - name: Safe Pix pending state
+        run: python -m unittest discover -s backend/tests -p 'test_pix_connect_pending_ui.py' -v
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - run: npm run build
+        env:
+          CI: 'false'
+          REACT_APP_BACKEND_URL: https://example.invalid
