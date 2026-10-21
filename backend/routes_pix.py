@@ -100,21 +100,21 @@ async def provider_readiness(user: dict = Depends(require_role('admin'))):
 async def verify_accounts(partner, influencer):
     platform=await provider('accounts.retrieve_current')
     if not all(platform_checks(platform).values()):
-        raise HTTPException(409,'Configure a plataforma brasileira com BRL, Pix, cobranças e depósitos bancários automáticos habilitados')
+        raise HTTPException(409,'Configure a plataforma brasileira com BRL, Pix, cobranças e depósitos bancários automáticos habilitados', headers={'X-RRClub-Reason': 'pix_plataforma_pendente'})
     config=await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
     if not all(configuration_checks(config).values()):
-        raise HTTPException(409,'Configure um checkout ativo exclusivamente para Pix antes de cobrar')
+        raise HTTPException(409,'Configure um checkout ativo exclusivamente para Pix antes de cobrar', headers={'X-RRClub-Reason': 'pix_checkout_configuracao_pendente'})
     if config.get('livemode') is not pix_key().startswith(('sk_live_', 'rk_live_')):
-        raise HTTPException(409,'A configuração Pix e a chave Stripe devem pertencer ao mesmo modo')
+        raise HTTPException(409,'A configuração Pix e a chave Stripe devem pertencer ao mesmo modo', headers={'X-RRClub-Reason': 'pix_checkout_configuracao_pendente'})
     destinations = [(entity or {}).get('pix_stripe_account_id') for entity in (partner, influencer)]
     if destinations[0] and destinations[0] == destinations[1]:
         raise HTTPException(409,'Parceiro e influencer precisam de contas de recebimento distintas')
-    for entity in (partner,influencer):
+    for entity, role in ((partner, 'partner'), (influencer, 'influencer')):
         account=(entity or {}).get('pix_stripe_account_id')
         if not account:
             raise HTTPException(409,'Parceiro e influencer devem concluir recebimentos Stripe Connect Brasil')
         info=await provider('accounts.retrieve',account)
-        if not receiving_status(info, entity)['receiving_ready']:
+        if not receiving_status(info, entity, role)['receiving_ready']:
             raise HTTPException(409,'Destinatário brasileiro precisa de transferências e depósitos bancários automáticos habilitados')
 
 
@@ -419,13 +419,13 @@ async def connect_onboard(body: dict, user: dict = Depends(require_role('partner
             if currency_enabled('brl') and os.environ.get('PIX_ALLOW_NEW_CONNECT_ACCOUNTS', 'false').lower() != 'true':
                 raise HTTPException(409,
                     'P5 Brasil: concilie primeiro as contas Connect já existentes antes de criar outra.')
-            created=await provider('accounts.create',idempotency_key='pix-connect-'+partner['id'],type='express',country='BR',email=user['email'],business_type=('individual' if user.get('role')=='influencer' else 'company'),capabilities={'card_payments':{'requested':True},'transfers':{'requested':True}},business_profile={'name':partner.get('nome',user['nome'])},metadata={'partner_id':partner['id']})
+            created=await provider('accounts.create',idempotency_key='pix-connect-'+partner['id'],type='express',country='BR',email=user['email'],business_type=('individual' if user.get('role')=='influencer' else 'company'),capabilities={'card_payments':{'requested':True},'transfers':{'requested':True}},business_profile={'name':partner.get('nome',user['nome'])},metadata={('influencer_id' if user.get('role') == 'influencer' else 'partner_id'):partner['id']})
             account=created.id
             saved=await collection.update_one({'id':partner['id'],'pix_stripe_account_id':None},{'$set':{'pix_stripe_account_id':account,'pix_stripe_charges_enabled':False,'pix_stripe_payouts_enabled':False}})
             if saved is not None and not saved.matched_count:
                 raise HTTPException(409,'A conta de recebimento mudou durante a configuração; atualize antes de continuar')
         info=await provider('accounts.retrieve',account)
-        receiving_status(info, partner)
+        receiving_status(info, partner, 'influencer' if user.get('role') == 'influencer' else 'partner')
         link=await provider('account_links.create',account=account,refresh_url=origin+('/influencer/extrato' if user.get('role')=='influencer' else '/parceiro')+'?connect=refresh',return_url=origin+('/influencer/extrato' if user.get('role')=='influencer' else '/parceiro')+'?connect=return',type='account_onboarding')
     except stripe.error.StripeError:
         raise HTTPException(502,'Stripe Connect indisponível; confirme a habilitação de recebimentos no Brasil')
@@ -446,7 +446,7 @@ async def connect_status(user: dict = Depends(require_role('partner','influencer
         info=await provider('accounts.retrieve',account)
     except stripe.error.StripeError:
         raise HTTPException(502,'Não foi possível verificar os recebimentos; tente novamente')
-    result=receiving_status(info, partner)
+    result=receiving_status(info, partner, 'influencer' if user.get('role') == 'influencer' else 'partner')
     await collection.update_one({'id':partner['id'], 'pix_stripe_account_id':account},{'$set':{'pix_stripe_charges_enabled':result['charges_enabled'],'pix_stripe_payouts_enabled':result['payouts_enabled'],'pix_stripe_transfers_enabled':result['transfers_enabled'],'pix_stripe_status_synced_at':now_iso()}})
     return result
 

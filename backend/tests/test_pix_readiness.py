@@ -48,6 +48,29 @@ def test_transfer_readiness_does_not_require_merchant_card_capability():
     assert status['receiving_ready'] and not status['charges_enabled']
 
 
+@pytest.mark.parametrize('metadata', [{'influencer_id': 'i'}, {'partner_id': 'i'}])
+def test_influencer_accepts_role_binding_and_exact_legacy_binding(metadata):
+    account = {'id': 'acct_creator', 'country': 'BR', 'payouts_enabled': True,
+               'capabilities': {'transfers': 'active'}, 'metadata': metadata,
+               'settings': {'payouts': {'schedule': {'interval': 'daily'}}}}
+    assert receiving_status(account, {'id': 'i', 'pix_stripe_account_id': 'acct_creator'},
+                            'influencer')['receiving_ready']
+
+
+@pytest.mark.parametrize('metadata', [{}, {'influencer_id': 'other'},
+                                    {'influencer_id': 'other', 'partner_id': 'i'}])
+def test_influencer_rejects_missing_or_conflicting_ownership(metadata):
+    with pytest.raises(HTTPException) as error:
+        receiving_status({'metadata': metadata}, {'id': 'i'}, 'influencer')
+    assert error.value.headers['X-RRClub-Reason'] == 'connect_brasil_associacao_pendente'
+
+
+def test_associated_stripe_account_id_must_match_provider_response():
+    with pytest.raises(HTTPException):
+        receiving_status({'id': 'acct_other', 'metadata': {'partner_id': 'p'}},
+                         {'id': 'p', 'pix_stripe_account_id': 'acct_expected'})
+
+
 def test_wrong_recipient_metadata_is_rejected(env):
     original = pix.stripe_client().v1.accounts.retrieve.side_effect
     pix.stripe_client().v1.accounts.retrieve.side_effect = lambda account_id, **kw: {**original(account_id), 'metadata': {'partner_id':'someone_else'}}

@@ -82,7 +82,7 @@ test("P5 displays awaiting Stripe onboarding, not a platform error", async () =>
     root.render(<P5FollowerPanel code="PT-PENDING" currency="eur" checkoutEnabled={false} />);
   });
   expect(div.querySelector('[data-testid="p5-awaiting-connect"]')).not.toBeNull();
-  expect(div.textContent).toContain("recebimentos em ativação");
+  expect(div.textContent).toContain("pagamento em verificação");
   expect(div.querySelector('[data-testid="p5-pay-button"]')).toBeNull();
   expect(api.post).toHaveBeenCalledTimes(1);
 });

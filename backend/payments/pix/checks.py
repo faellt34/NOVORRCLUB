@@ -43,12 +43,25 @@ def configuration_checks(configuration):
     }
 
 
-def receiving_status(account, entity):
+def receiving_status(account, entity, role='partner'):
     metadata = account.get('metadata') or {}
     # A blank metadata dict is NOT proof of ownership. Never route funds to an
     # unverified account, even if the bank/email seems to belong to the owner.
-    if not metadata.get('partner_id') or metadata['partner_id'] != entity['id']:
-        raise HTTPException(409, 'Titularidade Connect não comprovada para este cadastro; conclua ou reconcilie o onboarding.')
+    if role not in ('partner', 'influencer'):
+        raise ValueError('Tipo de destinatário inválido')
+    key = 'influencer_id' if role == 'influencer' else 'partner_id'
+    owner = metadata.get(key)
+    # Earlier BR onboarding stored influencer IDs under partner_id. Retain only
+    # that exact legacy binding; never infer ownership from names or emails.
+    if role == 'influencer' and not owner:
+        owner = metadata.get('partner_id')
+    conflicting = role == 'partner' and bool(metadata.get('influencer_id'))
+    if not owner or owner != entity['id'] or conflicting:
+        raise HTTPException(409, 'Titularidade Connect não comprovada para este cadastro; concilie a conta existente.',
+                            headers={'X-RRClub-Reason': 'connect_brasil_associacao_pendente'})
+    if entity.get('pix_stripe_account_id') and account.get('id') != entity['pix_stripe_account_id']:
+        raise HTTPException(409, 'A conta Stripe não corresponde à associação registada.',
+                            headers={'X-RRClub-Reason': 'connect_brasil_associacao_pendente'})
     if account.get('country') != 'BR':
         raise HTTPException(409, 'A conta de recebimento deste fluxo deve estar domiciliada no Brasil.')
     transfers = (account.get('capabilities') or {}).get('transfers') == 'active'
