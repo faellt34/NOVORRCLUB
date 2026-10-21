@@ -75,3 +75,41 @@ def connect_account_evidence(account, expected_partner_id):
         "disabled_reason": (account.get("requirements") or {}).get("disabled_reason"),
         "ready_for_partner_transfer": bool(linked_status == "verified" and charges and payouts and transfers and not due),
     }
+
+
+def charge_cost_evidence(balance_transaction, expected_amount_minor, commission_minor=None):
+    """Números verificados de UMA balance transaction, sem presumir lucro/payout.
+
+    A comissão da plataforma é separada das taxas de processamento da Stripe.
+    O saldo liquidável e a repartição final não se deduzem desta transação.
+    """
+    missing = {
+        "fee_verified": False,
+        "stripe_fee_minor": None,
+        "stripe_net_minor": None,
+        "fee_exceeds_commission": None,
+    }
+    if not balance_transaction:
+        return {**missing, "fee_state": "balance_transaction_unavailable"}
+    tx = balance_transaction
+    amount = tx.get("amount")
+    fee = tx.get("fee")
+    net = tx.get("net")
+    if (str(tx.get("currency") or "").lower() != "eur"
+            or not all(type(value) is int for value in (amount, fee, net))
+            or amount < 0 or fee < 0 or amount - fee != net
+            or amount != expected_amount_minor):
+        return {**missing, "fee_state": "balance_transaction_mismatch"}
+    commission_known = type(commission_minor) is int and commission_minor >= 0
+    return {
+        "fee_verified": True,
+        "fee_state": "verified",
+        "stripe_gross_minor": amount,
+        "stripe_fee_minor": fee,
+        "stripe_net_minor": net,
+        "balance_transaction_status": tx.get("status", "unknown"),
+        "commission_minor": commission_minor if commission_known else None,
+        "fee_exceeds_commission": (fee > commission_minor) if commission_known else None,
+        "net_is_partner_payout": False,
+        "net_is_platform_profit": False,
+    }
