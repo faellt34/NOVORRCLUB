@@ -63,6 +63,10 @@ async def prepare(kind: str, data: dict, creating: bool) -> dict:
             raise HTTPException(400, "Moeda inválida")
     if kind == "campanhas":
         data = await resolve_campaign(data)
+        # Historical clients can submit "Ativo" (masculine); normalize only
+        # the current write, never bulk-update stored campaigns or payments.
+        if data.get("status") == "Ativo":
+            data["status"] = "Ativa"
     if kind == "ebooks":
         data["premium"] = str(data.get("premium", "")).lower() in ("true", "sim", "1", "premium")
         for k in ("paginas",):
@@ -109,7 +113,9 @@ async def create_item(kind: str, data: dict, user: dict = Depends(require_role("
         raise HTTPException(status_code=409, detail="Já existe uma campanha com este código de cupom")
     prefix = {"usuarios": "usr", "influencers": "if", "parceiros": "p", "campanhas": "c", "ebooks": "e"}[kind]
     doc = {"id": new_id(prefix), **data}
-    doc.setdefault("status", "Ativo")
+    # Campaigns use the feminine "Ativa"; partner/user records use "Ativo".
+    # P5 and public coupon routes require campaigns.status == "Ativa".
+    doc.setdefault("status", "Ativa" if kind == "campanhas" else "Ativo")
     await c.insert_one(dict(doc))
     label = doc.get("nome") or doc.get("titulo") or doc["id"]
     await audit("CRIAÇÃO", f"{kind} · {label}" + (f" · comissão {doc['comissao']:g}%" if kind == "campanhas" else ""), user, doc["id"])
