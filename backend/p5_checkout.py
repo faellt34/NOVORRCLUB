@@ -12,11 +12,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 import stripe
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
-from core import db, NO_ID, new_id, now_iso, require_role
+from core import db, NO_ID, new_id, now_iso, require_role, rate_limit, client_ip
 from p5_rules import quote_minor, P5QuoteError
 
 router = APIRouter()
@@ -91,8 +91,11 @@ async def p5_config():
 
 
 @router.post("/public/p5/sessions")
-async def start_session(body: StartSession):
+async def start_session(body: StartSession, request: Request):
     require_enabled()
+    # Only a bounded number of anonymous QR sessions can be opened per IP.
+    hashed_ip = hashlib.sha256(client_ip(request).encode()).hexdigest()[:24]
+    await rate_limit("p5-start-" + hashed_ip, 30, 3600)
     code = body.code.strip().upper()
     campaign = await db.campaigns.find_one({"cupom": code, "status": "Ativa"}, NO_ID)
     if not campaign:
