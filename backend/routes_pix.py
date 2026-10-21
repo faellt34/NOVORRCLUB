@@ -165,6 +165,10 @@ async def checkout(body: PixResumeIn):
 async def partner_checkout(body: PixCheckoutIn, user: dict = Depends(require_role('partner'))):
     await partner_record(user, db)
     existing=await db.payment_transactions.find_one({'id':'pix-'+str(body.request_id),'kind':'pix_coupon'},NO_ID)
+    if not existing:
+        from p5_checkout import currency_enabled
+        if currency_enabled('brl'):
+            raise HTTPException(409, 'P5 ativo: leia o QR individual do cliente antes de iniciar uma cobrança Pix.')
     if existing:
         owner=existing.get('partner_id')
     else:
