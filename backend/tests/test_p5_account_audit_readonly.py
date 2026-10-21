@@ -23,6 +23,7 @@ class P5AccountAuditTests(unittest.TestCase):
         self.account = {
             "id": "acct_test_brl", "country": "BR", "payouts_enabled": True,
             "capabilities": {"transfers": "active"},
+            "settings": {"payouts": {"schedule": {"interval": "daily"}}},
             "requirements": {"currently_due": [], "past_due": [], "disabled_reason": None},
             "metadata": {"partner_id": "part_123"},
         }
