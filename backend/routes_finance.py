@@ -26,7 +26,11 @@ def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, 
         raise RuntimeError("Stripe Portugal indisponível")
     session = stripe.checkout.Session.retrieve(session_id, api_key=secret)
     if session.get("payment_status") != "paid":
-        return {"state": "stripe_session_not_paid", "bank_payout": "not_verified"}
+        return {
+            "state": "stripe_session_not_paid",
+            "stripe_session_paid": False,
+            "bank_payout": "not_verified",
+        }
     remote_intent_id = session.get("payment_intent")
     if hasattr(remote_intent_id, "get"):
         remote_intent_id = remote_intent_id.get("id")
@@ -63,6 +67,7 @@ def _stripe_evidence(session_id, intent_id, expected_amount_minor, destination, 
         result.pop("transfer_amount_minor", None)
     return {
         **result,
+        "stripe_session_paid": True,
         "payment_status": intent.get("status"),
         "payment_intent_id": remote_intent_id,
         "stripe_currency": intent.get("currency"),
@@ -127,8 +132,8 @@ async def reconciliation_detail(
     )
     if not tx:
         raise HTTPException(status_code=404, detail="Transação Portugal não encontrada")
-    if tx.get("payment_status") != "paid":
-        return {"state": "local_payment_not_confirmed", "bank_payout": "not_verified"}
+    # Não confiar no ledger local para validar o pagamento real:
+    # se o webhook falhou, a verificação admin continua na Stripe (somente leitura).
     if tx.get("amount") is None or not tx.get("campaign_id") or not tx.get("partner_id"):
         return {"state": "missing_transaction_evidence", "bank_payout": "not_verified"}
     partner = await db.partners.find_one({"id": tx["partner_id"]}, NO_ID) or {}
@@ -139,7 +144,7 @@ async def reconciliation_detail(
         "coupon": tx.get("coupon"),
     }
     try:
-        return await asyncio.to_thread(
+        evidence = await asyncio.to_thread(
             _stripe_evidence,
             session_id,
             tx.get("stripe_payment_intent_id"),
@@ -147,6 +152,12 @@ async def reconciliation_detail(
             partner.get("stripe_account_id"),
             expected,
         )
+        local_state = tx.get("payment_status", "unknown")
+        return {
+            **evidence,
+            "local_payment_status": local_state,
+            "ledger_discrepancy": bool(evidence.get("stripe_session_paid") and local_state != "paid"),
+        }
     except (stripe.error.StripeError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=502, detail="Não foi possível verificar a transação Stripe") from exc
     except RuntimeError as exc:
