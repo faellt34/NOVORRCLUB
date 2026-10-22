@@ -1,0 +1,17 @@
+name: P5 audit zero counts safety
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  zero-counts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate script
+        run: python -m py_compile scripts/rrclub_p5_accounts_br_pt_readonly.py
+      - name: Explain P5 zeros safely
+        run: python -m unittest discover -s backend/tests -p 'test_p5_audit_zero_counts.py' -v
