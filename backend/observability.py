@@ -14,7 +14,19 @@ log = logging.getLogger("rrclub")
 
 
 def _level(status: int) -> str:
-    return "error" if status >= 500 else "warn" if status >= 400 else "info"
+    # Validation/onboarding 4xx are normal client/business states, not outages.
+    return "error" if status >= 500 else "info"
+
+
+def _expected_user_state(status: int, path: str) -> bool:
+    """Routine P5/Connect validation is not a platform incident.
+
+    Keep request_metrics intact, and keep 5xx plus slow requests visible.
+    """
+    return status in (400, 401, 403, 404, 409, 422, 429) and (
+        path.startswith(("/api/p5/", "/api/partner/", "/api/stripe/"))
+        or "/pix/" in path or "/pt-split/" in path
+    )
 
 
 async def record(level: str, origem: str, mensagem: str, **extra):
@@ -40,10 +52,12 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             return JSONResponse({"detail": "Erro interno"}, status_code=500)
         ms = round((time.perf_counter() - t0) * 1000)
         lvl = _level(resp.status_code)
-        if lvl != "info" or ms > 1500:
-            ip = (request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?"))
-            await record(lvl if lvl != "info" else "warn", "http", f"{request.method} {path} → {resp.status_code}" + (f" · lento {ms}ms" if ms > 1500 else ""), metodo=request.method, caminho=path, status=resp.status_code, duracao_ms=ms,
-                         ip=ip, user_agent=request.headers.get("user-agent", "")[:160], com_token=bool(request.headers.get("authorization") or request.cookies.get("access_token")))
+        if (lvl != "info" and not _expected_user_state(resp.status_code, path)) or ms > 1500:
+            # Preserve 5xx and slow requests; do not fill the incident log with
+            # expected KYC, expired QR or invalid user input states.
+            await record(lvl if lvl != "info" else "warn", "http",
+                         f"{request.method} {path} → {resp.status_code}" + (f" · lento {ms}ms" if ms > 1500 else ""),
+                         metodo=request.method, caminho=path, status=resp.status_code, duracao_ms=ms)
         try:
             await db.request_metrics.insert_one({"id": new_id("rm"), "metodo": request.method, "caminho": path, "status": resp.status_code, "duracao_ms": ms, "timestamp": now_iso(), "ts": datetime.now(timezone.utc)})
         except Exception:
