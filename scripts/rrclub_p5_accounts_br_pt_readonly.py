@@ -183,39 +183,90 @@ async def paulo_report():
     return results
 
 
-async def campaign_summary(accounts):
-    """Only evaluate campaigns touching one of the three named accounts.
+def campaign_exclusion_reasons(c, today):
+    """P5 eligibility blockers; reporting does not change old campaigns."""
+    reasons = []
+    if c.get("status") != "Ativa":
+        reasons.append("status_not_Ativa")
+    if not c.get("parceiro_id"):
+        reasons.append("missing_partner_id")
+    if not c.get("influencer_id"):
+        reasons.append("missing_influencer_id")
+    try:
+        if float(c.get("desconto", -1)) != 5:
+            reasons.append("discount_not_5")
+    except (TypeError, ValueError):
+        reasons.append("discount_not_5")
+    try:
+        if float(c.get("comissao", -1)) != 5:
+            reasons.append("commission_not_5")
+    except (TypeError, ValueError):
+        reasons.append("commission_not_5")
+    if c.get("validade") and str(c["validade"])[:10] < today:
+        reasons.append("expired")
+    return reasons
 
-    Other campaigns are not classified or blocked by this report.
+
+async def campaign_summary(accounts):
+    """Explain zero P5 counts, then check only campaigns with known Connect IDs.
+
+    Existing/legacy campaigns remain untouched. Campaign currency is inferred
+    from its partner if the campaign has no stored currency, just like P5.
     """
+    from collections import Counter
+    from datetime import datetime, timezone
     region_accounts = {
         "brl": {a["account_id"]: a for a in accounts if a["region"] == "BR"},
         "eur": {a["account_id"]: a for a in accounts if a["region"] == "PT"},
     }
+    total = await db.campaigns.count_documents({})
+    active = await db.campaigns.count_documents({"status": "Ativa"})
+    legacy_active = await db.campaigns.count_documents({"status": "Ativo"})
     records = await db.campaigns.find(
-        {"status": "Ativa"},
-        {"_id": 0, "id": 1, "cupom": 1, "nome": 1, "currency": 1,
-         "parceiro_id": 1, "influencer_id": 1, "desconto": 1, "comissao": 1}
+        {},
+        {"_id": 0, "id": 1, "cupom": 1, "nome": 1, "status": 1,
+         "currency": 1, "parceiro_id": 1, "influencer_id": 1,
+         "desconto": 1, "comissao": 1, "validade": 1}
     ).limit(1001).to_list(1001)
-    counts = {"active_campaigns_scanned": min(len(records), 1000),
-              "truncated": len(records) > 1000,
-              "p5_campaigns_by_currency": {"eur": 0, "brl": 0},
-              "matching_known_account_campaigns": [],
-              "unrelated_campaigns_not_decided": True}
+    counts = {
+        "total_campaigns_in_database": total,
+        "active_canonical_Ativa": active,
+        "legacy_active_Ativo": legacy_active,
+        "campaigns_scanned": min(len(records), 1000),
+        "truncated": len(records) > 1000,
+        "exclusion_reasons_sample": {},
+        "p5_campaigns_by_currency": {"eur": 0, "brl": 0},
+        "p5_candidates_missing_partner": 0,
+        "p5_candidates_currency_unknown": 0,
+        "matching_known_account_campaigns": [],
+        "unrelated_campaigns_not_decided": True,
+        "warning": "P5 counts are code-eligible campaigns, NOT Stripe-ready recipients.",
+    }
+    reasons = Counter()
+    today = datetime.now(timezone.utc).date().isoformat()
     for campaign in records[:1000]:
-        if not p5_policy_campaign(campaign):
+        blockers = campaign_exclusion_reasons(campaign, today)
+        reasons.update(blockers)
+        if blockers:
             continue
-        currency = str(campaign.get("currency") or "eur").lower()
-        if currency not in ("eur", "brl"):
-            continue
-        counts["p5_campaigns_by_currency"][currency] += 1
         pid, iid = campaign["parceiro_id"], campaign["influencer_id"]
         partner, influencer = await asyncio.gather(
             db.partners.find_one({"id": pid}, NO_ID),
             db.influencers.find_one({"id": iid}, NO_ID),
         )
+        if not partner:
+            counts["p5_candidates_missing_partner"] += 1
+            continue
+        currency = str(campaign.get("currency") or partner.get("currency") or "eur").lower()
+        if currency not in ("eur", "brl"):
+            counts["p5_candidates_currency_unknown"] += 1
+            continue
+        if str(partner.get("currency") or currency).lower() != currency:
+            reasons.update(["campaign_partner_currency_mismatch"])
+            continue
+        counts["p5_campaigns_by_currency"][currency] += 1
         field = "pix_stripe_account_id" if currency == "brl" else "stripe_account_id"
-        p_acct = (partner or {}).get(field)
+        p_acct = partner.get(field)
         i_acct = (influencer or {}).get(field)
         relevant = p_acct in region_accounts[currency] or i_acct in region_accounts[currency]
         if not relevant:
@@ -227,7 +278,6 @@ async def campaign_summary(accounts):
             and pstate["eligible_for_transfer"] and pstate["candidate_role"] == "partner"
             and istate["eligible_for_transfer"] and istate["candidate_role"] == "influencer"
             and p_acct != i_acct
-            and str((partner or {}).get("currency") or currency).lower() == currency
             and str((influencer or {}).get("currency") or currency).lower() == currency
         )
         counts["matching_known_account_campaigns"].append({
@@ -237,8 +287,8 @@ async def campaign_summary(accounts):
             "ready_by_known_account_evidence": ready,
             "needs_additional_recipient_checks": True,
         })
+    counts["exclusion_reasons_sample"] = dict(sorted(reasons.items()))
     return counts
-
 
 async def main():
     report = {
