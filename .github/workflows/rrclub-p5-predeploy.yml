@@ -1,0 +1,23 @@
+name: RRClub P5 deploy gate syntax
+on:
+  pull_request:
+    branches: [integracao-google-rrclub-20261019]
+  workflow_dispatch:
+jobs:
+  safe-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/rrclub_predeploy_p5_once.py
+      - run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path("scripts/rrclub_predeploy_p5_once.py").read_text()
+          for banned in ["Transfer.create(", "Session.create(", "update_one(", "insert_one(", "Account.modify("]:
+              assert banned not in s
+          assert "P5_EUR_ENABLED" in s and "P5_BRL_ENABLED" in s
+          print("Safe deploy gate")
+          PY
