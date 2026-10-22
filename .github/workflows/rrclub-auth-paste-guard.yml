@@ -1,0 +1,24 @@
+name: Emergent auth repair safety
+on:
+  push:
+    paths:
+      - 'scripts/rrclub_auth_terminal_paste_guard_20261022.py'
+      - 'scripts/rrclub_auth_terminal_paste_guard_test.py'
+      - '.github/workflows/rrclub-auth-paste-guard.yml'
+  workflow_dispatch:
+
+jobs:
+  repair-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate Python syntax
+        run: python -m py_compile scripts/rrclub_auth_terminal_paste_guard_20261022.py scripts/rrclub_auth_terminal_paste_guard_test.py
+      - name: Safe paste guard regression, including line 258
+        run: python -m unittest discover -s scripts -p rrclub_auth_terminal_paste_guard_test.py -v
+      - name: Check auth source unaffected
+        run: git diff --exit-code -- backend/routes_auth.py
