@@ -54,3 +54,16 @@ Este diretório é a **fonte única de verdade** para saber o que já foi tratad
 - Após APROVADO no Terminal, atualizar a Prévia, fazer Deploy no Emergent e validar `/api/public/p5/config` no domínio publicado.
 - Se o instalador parar por conflito, preservar o código e o backup e analisar o motivo antes de tentar outro comando.
 - Compatibilidade: P5 apenas para campanhas com desconto e comissão de 5% e influenciador associado; cupões legados mantêm fluxo original.
+
+
+## Atualização de execução — 22/10/2026
+
+- A PR #11, que separa **P5 QR/aprovação** de **Stripe Connect pronto para receber**, já foi **integrada** no GitHub. Os testes P5, regras financeiras e build frontend passaram no CI.
+- Existe instalador único **verificado em GitHub Actions**: `scripts/rrclub_p5_ativar_sem_apagar_20261021.py`, CI `39648968772` (success). Ele compara código local, cria backup e ativa `P5_ENABLED`, `P5_EUR_ENABLED`, `P5_BRL_ENABLED` em `backend/.env` sem ligar `PT_SPLIT_*` ou fazer deploy.
+- Se `backend/routes_auth.py` apresentar JSON de API colado no cabeçalho, o reparador de escopo restrito `scripts/rrclub_auth_prefix_guard.py --repair` restaura **apenas** esse padrão conhecido; não altera outros erros arbitrariamente.
+- **Estado do Emergent ainda não demonstrado depois deste último instalador**. O sucesso do GitHub **não** prova flags P5 presentes no servidor público ou publicação concluída.
+- Autorizada apresentação de QR, leitura pelo parceiro, conta confirmada e estado `awaiting_connect` a comércio local enquanto os recebedores concluem Stripe; não simular dinheiro ou comprovativos.
+- **Portugal:** MB WAY e split 5/80/5/10 codificados, mas PT LIVE transfer automático exige par de destinatários Connect comprovado por IDs internos e Stripe; sem confirmação da base de produção, considerar **não verificado**. Não ligar `PT_SPLIT_AUTO_TRANSFER` às cegas.
+- **Brasil:** Pix isolado de EUR; QR P5 pode funcionar com Connect pendente, cobrança e transferências exigem capacidade da plataforma e ambos os destinatários, com conta/ID reconciliados.
+- Após instalar: confirmar sintaxe `backend/routes_auth.py`, carregar `/api/public/p5/config` e `/api/public/pix/availability` no servidor de **prévia**; deploy controlado pelo utilizador; confirmar o mesmo no domínio público e executar sessão P5 QR/conta aprovada sem pagamentos antes de usar dinheiro real.
+- Apresentação comercial: `docs/CORRECOES_E_MEMORIA/TREM_FODD_DEMONSTRACAO.md`. Não prometer vendas, repasses ou resultados não verificados.
