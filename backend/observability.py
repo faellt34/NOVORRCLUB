@@ -23,9 +23,9 @@ def _expected_user_state(status: int, path: str) -> bool:
 
     Keep request_metrics intact, and keep 5xx plus slow requests visible.
     """
-    return status in (400, 401, 403, 404, 409, 422, 429) and (
-        path.startswith(("/api/p5/", "/api/partner/", "/api/stripe/"))
-        or "/pix/" in path or "/pt-split/" in path
+    return status in (409, 422) and (
+        path.startswith(("/api/p5/", "/api/partner/"))
+        or path.startswith("/api/admin/finance/pt-split/")
     )
 
 
