@@ -127,27 +127,70 @@ async def partner_dashboard(user: dict = Depends(require_role("partner")), curre
             "leaderboard": leaderboard, "redemptions": reds[:100], "campaigns": camps}
 
 
+def _pilot_record_visible(item: dict, start: datetime) -> bool:
+    """Read-only operational view: never alter the underlying financial record."""
+    if (item.get("is_test") or item.get("test_run_id")
+            or str(item.get("origem", "")).lower() in ("teste", "test")
+            or "simulação" in str(item.get("staff", "")).lower()
+            or str(item.get("idempotency_key", "")).startswith("test-")):
+        return False
+    timestamp = item.get("date") or item.get("created_at") or item.get("timestamp")
+    if not timestamp:
+        return False  # Legacy record without a date is visible in history, not in pilot.
+    try:
+        value = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value >= start
+    except (ValueError, TypeError):
+        return False
+
+
 @router.get("/dashboard/admin")
-async def admin_dashboard(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+async def admin_dashboard(pilot_since: Optional[str] = None, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+    # pilot_since affects presentation ONLY. Historical records, Stripe and audits remain untouched.
+    pilot_start = None
+    if pilot_since:
+        try:
+            pilot_start = datetime.fromisoformat(pilot_since.replace("Z", "+00:00"))
+            if pilot_start.tzinfo is None:
+                raise ValueError("timezone required")
+            pilot_start = pilot_start.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Data de início do piloto inválida; use ISO 8601 com fuso horário.")
     reds = await db.redemptions.find(currency_query({}, currency), NO_ID).to_list(50000)
+    if pilot_start:
+        reds = [r for r in reds if _pilot_record_visible(r, pilot_start)]
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
-    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(50))
+    campaign_limit = 2000 if pilot_start else 50
+    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(campaign_limit))
     camps = [c for c in camps if c.get("currency", "eur") == currency]
-    claims = await db.coupon_claims.find(currency_query({}, currency), {"_id": 0, "origem": 1}).to_list(100000)
+    if pilot_start:
+        camps = [c for c in camps if _pilot_record_visible(c, pilot_start)]
+    claims = await db.coupon_claims.find(currency_query({}, currency),
+        {"_id": 0, "origem": 1, "date": 1, "created_at": 1, "timestamp": 1, "is_test": 1, "test_run_id": 1}
+    ).to_list(100000)
+    if pilot_start:
+        claims = [c for c in claims if _pilot_record_visible(c, pilot_start)]
     clicks = len(claims)
     uses = t["count"]
     origins = defaultdict(int)
     for cl in claims:
         origins[cl.get("origem") or "QR / direto"] += 1
     return {
+        "mode": "pilot" if pilot_start else "history",
+        "pilot_since": pilot_start.isoformat() if pilot_start else None,
+        "currency": currency,
         "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"]), "count": trend(tc["count"], tp["count"])},
         "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo"}), "partners": await db.partners.count_documents({"status": "Ativo"}),
-                   "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
+                   "campaigns": (sum(c.get("status") == "Ativa" for c in camps) if pilot_start else await db.campaigns.count_documents({"status": "Ativa"})),
+                   "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
-        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30),
+        "campaigns": camps[:8], "chart": daily_series(cur, 30),
+        "chart_rc": [] if pilot_start else await revenue_clicks_series(30),
     }
 
 
