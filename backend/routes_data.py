@@ -146,6 +146,31 @@ def _pilot_record_visible(item: dict, start: datetime) -> bool:
         return False
 
 
+@router.get("/partner/qr/activity")
+async def partner_qr_activity(user: dict = Depends(require_role("partner")), currency: str = Depends(reporting_currency)):
+    """Read-only, partner-scoped QR activity. A scan/open is not a paid sale."""
+    partner = await partner_record(user, db)
+    pid = partner["id"]
+    cutoff = since(1)
+    claims = await db.coupon_claims.find(
+        currency_query({"partner_id": pid, "date": {"$gte": cutoff}}, currency),
+        {"_id": 0, "id": 1, "date": 1, "coupon": 1}
+    ).sort("date", -1).to_list(30)
+    sessions = await db.p5_sessions.find(
+        {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}},
+        {"_id": 0, "id": 1, "created_at": 1, "code": 1}
+    ).sort("created_at", -1).to_list(30)
+    events = [
+        {"id": c["id"], "kind": "coupon_opened", "coupon": c.get("coupon"), "at": c["date"]}
+        for c in claims
+    ] + [
+        {"id": s["id"], "kind": "p5_session_opened", "coupon": s.get("code"), "at": s["created_at"]}
+        for s in sessions
+    ]
+    events.sort(key=lambda e: e["at"], reverse=True)
+    return {"events": events[:20], "window_hours": 24, "financial_confirmation": False}
+
+
 @router.get("/dashboard/admin")
 async def admin_dashboard(pilot_since: Optional[str] = None, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
     # pilot_since affects presentation ONLY. Historical records, Stripe and audits remain untouched.
