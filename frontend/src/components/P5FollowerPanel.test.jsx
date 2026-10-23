@@ -26,6 +26,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   div.remove();
+  jest.useRealTimers();
 });
 
 test("P5 QR exposes scan reference but never the private session secret", async () => {
@@ -89,4 +90,38 @@ test("P5 displays awaiting Stripe onboarding, not a platform error", async () =>
   expect(disabledMbway.disabled).toBe(true);
   expect(div.textContent).toContain("MB WAY / cartão");
   expect(api.post).toHaveBeenCalledTimes(1);
+});
+
+test("P5 keeps follower polling after five minutes while QR session remains valid", async () => {
+  jest.useFakeTimers();
+  const started = new Date("2026-10-23T08:00:00.000Z");
+  jest.setSystemTime(started);
+  api.post.mockResolvedValueOnce({
+    data: {
+      scan_ref: "scan_ref_123456789012345678901234",
+      session_token: "private_session_12345678901234567890",
+      expires_at: new Date(started.getTime() + 120 * 60_000).toISOString(),
+    },
+  });
+  api.get.mockResolvedValue({ data: { status: "none" } });
+
+  await act(async () => {
+    root.render(<P5FollowerPanel code="P5-LONG-BILL" currency="eur" />);
+  });
+  expect(api.get).toHaveBeenCalledTimes(1);
+
+  // Past the previous five-minute cutoff, the follower must still see updates.
+  jest.setSystemTime(new Date(started.getTime() + 6 * 60_000));
+  await act(async () => {
+    jest.advanceTimersByTime(2500);
+    await Promise.resolve();
+  });
+  expect(api.get).toHaveBeenCalledTimes(2);
+
+  // After five minutes the UI polls at a lower frequency (15 seconds).
+  await act(async () => {
+    jest.advanceTimersByTime(15000);
+    await Promise.resolve();
+  });
+  expect(api.get).toHaveBeenCalledTimes(3);
 });
