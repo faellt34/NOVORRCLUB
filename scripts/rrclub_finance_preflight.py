@@ -74,6 +74,14 @@ async def main():
             aid = account.get("id", "")
             owners = links.get(aid, [])
             metadata = account.get("metadata") or {}
+            # Consultar o objeto individual quando existe um vínculo no banco;
+            # a listagem isolada nunca é prova suficiente de titularidade.
+            if owners:
+                try:
+                    detail = await asyncio.to_thread(stripe.Account.retrieve, aid, api_key=key)
+                    metadata = detail.get("metadata") or {}
+                except Exception:
+                    metadata = {}
             transfer = (account.get("capabilities") or {}).get("transfers") == "active"
             receiving = transfer and account.get("payouts_enabled") is True
             ready += int(receiving)
