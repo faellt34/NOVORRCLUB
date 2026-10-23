@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
@@ -28,6 +28,8 @@ export default function PartnerDashboard() {
   const [p5Currencies, setP5Currencies] = useState({});
   const [p5ScanRef, setP5ScanRef] = useState("");
   const [p5ScanRejected, setP5ScanRejected] = useState(false);
+  const [p5ScanState, setP5ScanState] = useState("idle");
+  const scanSequence = useRef(0);
   const [p5Bill, setP5Bill] = useState(null);
   const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
@@ -39,12 +41,21 @@ export default function PartnerDashboard() {
   const [pixAvailable, setPixAvailable] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [qrActivity, setQrActivity] = useState([]);
+  const [qrActivityState, setQrActivityState] = useState("loading");
   const [flash, triggerFlash] = useFlash();
   const [live, setLive] = useState(false);
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
+    if (ev.tipo === "novo_clique" || ev.tipo === "p5_session_aberta" || ev.tipo === "p5_qr_lido") {
+      api.get("/partner/qr/activity").then(({ data }) => {
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      }).catch(() => setQrActivityState("unavailable"));
+      return;
+    }
     if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
@@ -100,6 +111,20 @@ export default function PartnerDashboard() {
 
   const load = useCallback(() => { setLoadError(""); return api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => { setLoadError(apiError(e)); }); }, []);
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => api.get("/partner/qr/activity")
+      .then(({ data }) => {
+        if (!active) return;
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      })
+      .catch(() => { if (active) setQrActivityState("unavailable"); });
+    refresh();
+    const interval = setInterval(refresh, 15000);
+    return () => { active = false; clearInterval(interval); };
+  }, [data?.partner?.id, data?.partner?.currency]);
 
   useEffect(() => {
     const c = code.trim().toUpperCase();
@@ -166,15 +191,31 @@ export default function PartnerDashboard() {
 
   const onDetected = useCallback((value) => {
     const { code: coupon, scanRef, isP5Url } = parseCustomerQr(value, window.location.origin);
+    const requestNo = ++scanSequence.current;
     setCode(coupon);
-    setP5ScanRef(scanRef);
+    setP5ScanRef("");
+    setP5ScanState(scanRef ? "checking" : "idle");
     setP5ScanRejected(isP5Url && !scanRef);
     setP5Bill(null);
     setIdemKey(newKey());
     if (isP5Url && !scanRef) {
       toast.error("QR P5 inválido ou de outro endereço. Peça ao cliente para abrir a sessão RRClub neste site.");
+    } else if (scanRef) {
+      api.post("/partner/p5/scans", { code: coupon, scan_ref: scanRef })
+        .then(() => {
+          if (requestNo !== scanSequence.current) return;
+          setP5ScanRef(scanRef);
+          setP5ScanState("verified");
+          toast.success("QR P5 confirmado pelo servidor. Pode aprovar o valor da conta.");
+        })
+        .catch((err) => {
+          if (requestNo !== scanSequence.current) return;
+          setP5ScanState("invalid");
+          setP5ScanRejected(true);
+          toast.error(apiError(err));
+        });
     } else {
-      toast.success(scanRef ? "QR P5 detetado: sessão a verificar no servidor." : "Cupão detetado: " + coupon);
+      toast.success("Cupão detetado: " + coupon);
     }
   }, []);
 
@@ -196,6 +237,31 @@ export default function PartnerDashboard() {
       </div>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
+
+      <section data-testid="partner-qr-activity" className="card-soft p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <ScanLine className="w-4 h-4 text-purple-600" />
+          <h2 className="text-sm font-bold text-slate-900">Atividade QR · últimas 24 horas</h2>
+        </div>
+        <p className="text-xs text-slate-500">Abrir um cupão ou iniciar uma sessão P5 não confirma uma venda nem um pagamento.</p>
+        {qrActivityState === "unavailable" && (
+          <p role="status" className="text-xs text-amber-700">Não foi possível atualizar as leituras agora. Os registos permanecem preservados.</p>
+        )}
+        {qrActivityState === "loading" && <p className="text-xs text-slate-500">A verificar as interações...</p>}
+        {qrActivityState === "ready" && qrActivity.length === 0 && (
+          <p className="text-xs text-slate-500">Nenhuma abertura ou sessão P5 registada neste período.</p>
+        )}
+        {qrActivity.slice(0, 5).map((entry) => (
+          <div key={entry.id} className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+            <p className="text-xs text-slate-700">
+              {entry.kind === "p5_qr_scanned" ? "QR P5 lido pelo parceiro" : entry.kind === "p5_session_opened" ? "Sessão P5 iniciada" : "Cupão aberto"} · <span className="font-semibold">{entry.coupon}</span>
+            </p>
+            <time className="text-[11px] text-slate-500" dateTime={entry.at}>
+              {new Date(entry.at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </time>
+          </div>
+        ))}
+      </section>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
@@ -245,7 +311,7 @@ export default function PartnerDashboard() {
               <Input data-testid="coupon-code-input" value={code} onChange={(e) => {
                 const raw = e.target.value;
                 if (raw.startsWith("https://")) onDetected(raw);
-                else { setCode(raw); setP5ScanRef(""); setP5ScanRejected(false); setP5Bill(null); setIdemKey(newKey()); }
+                else { scanSequence.current += 1; setCode(raw); setP5ScanRef(""); setP5ScanState("idle"); setP5ScanRejected(false); setP5Bill(null); setIdemKey(newKey()); }
               }} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
               <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
                 <ScanLine className="w-[18px] h-[18px]" />
@@ -265,7 +331,8 @@ export default function PartnerDashboard() {
             )}
             {p5Mode && (
               <p data-testid="p5-qr-state" className={p5ScanRef ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
-                {p5ScanRef ? "QR P5 capturado. Valor e desconto serão bloqueados no servidor." :
+                {p5ScanState === "checking" ? "QR P5 lido. A confirmar o vínculo com o servidor..." :
+                  p5ScanRef ? "QR P5 verificado pelo servidor. Pode aprovar a conta sem cobrar." :
                   "Aguardando QR P5: o cupão público isoladamente não identifica o cliente."}
               </p>
             )}

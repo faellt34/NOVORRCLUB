@@ -134,10 +134,10 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
       className="rounded-2xl border border-purple-200 bg-purple-50 p-4 space-y-3 text-slate-800"
     >
       <p className="text-sm font-bold text-purple-800">
-        P5 · Conta confirmada pelo estabelecimento
+        P5 · Acompanhamento da conta
       </p>
       {!session && <p className="text-xs text-slate-600">A preparar o QR seguro...</p>}
-      {qrUrl && state === "none" && (
+      {qrUrl && (state === "none" || state === "scanned") && (
         <>
           <p className="text-xs text-slate-600">
             Mostre este QR P5 ao parceiro. Só o estabelecimento pode definir o valor da conta.
@@ -150,7 +150,9 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
             {savingQr ? "A preparar imagem..." : "Guardar / partilhar QR P5"}
           </button>
           <p className="text-xs text-center text-purple-700">
-            À espera que o parceiro leia o QR e confirme a conta.
+            {state === "scanned"
+              ? "O parceiro leu o QR P5. Aguarde a confirmação do valor da conta."
+              : "À espera que o parceiro leia o QR e confirme a conta."}
           </p>
         </>
       )}
