@@ -39,12 +39,21 @@ export default function PartnerDashboard() {
   const [pixAvailable, setPixAvailable] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [qrActivity, setQrActivity] = useState([]);
+  const [qrActivityState, setQrActivityState] = useState("loading");
   const [flash, triggerFlash] = useFlash();
   const [live, setLive] = useState(false);
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
+    if (ev.tipo === "novo_clique" || ev.tipo === "p5_session_aberta") {
+      api.get("/partner/qr/activity").then(({ data }) => {
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      }).catch(() => setQrActivityState("unavailable"));
+      return;
+    }
     if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
@@ -100,6 +109,20 @@ export default function PartnerDashboard() {
 
   const load = useCallback(() => { setLoadError(""); return api.get("/dashboard/partner").then((r) => setData(r.data)).catch((e) => { setLoadError(apiError(e)); }); }, []);
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => api.get("/partner/qr/activity")
+      .then(({ data }) => {
+        if (!active) return;
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      })
+      .catch(() => { if (active) setQrActivityState("unavailable"); });
+    refresh();
+    const interval = setInterval(refresh, 15000);
+    return () => { active = false; clearInterval(interval); };
+  }, [data?.partner?.id, data?.partner?.currency]);
 
   useEffect(() => {
     const c = code.trim().toUpperCase();
@@ -196,6 +219,31 @@ export default function PartnerDashboard() {
       </div>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
+
+      <section data-testid="partner-qr-activity" className="card-soft p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <ScanLine className="w-4 h-4 text-purple-600" />
+          <h2 className="text-sm font-bold text-slate-900">Atividade QR · últimas 24 horas</h2>
+        </div>
+        <p className="text-xs text-slate-500">Abrir um cupão ou iniciar uma sessão P5 não confirma uma venda nem um pagamento.</p>
+        {qrActivityState === "unavailable" && (
+          <p role="status" className="text-xs text-amber-700">Não foi possível atualizar as leituras agora. Os registos permanecem preservados.</p>
+        )}
+        {qrActivityState === "loading" && <p className="text-xs text-slate-500">A verificar as interações...</p>}
+        {qrActivityState === "ready" && qrActivity.length === 0 && (
+          <p className="text-xs text-slate-500">Nenhuma abertura ou sessão P5 registada neste período.</p>
+        )}
+        {qrActivity.slice(0, 5).map((entry) => (
+          <div key={entry.id} className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+            <p className="text-xs text-slate-700">
+              {entry.kind === "p5_session_opened" ? "Sessão P5 iniciada" : "Cupão aberto"} · <span className="font-semibold">{entry.coupon}</span>
+            </p>
+            <time className="text-[11px] text-slate-500" dateTime={entry.at}>
+              {new Date(entry.at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </time>
+          </div>
+        ))}
+      </section>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
