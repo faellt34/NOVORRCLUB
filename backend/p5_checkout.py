@@ -106,6 +106,11 @@ class StartSession(BaseModel):
     code: str
 
 
+class ScanSession(BaseModel):
+    code: str
+    scan_ref: str = Field(min_length=24, max_length=100)
+
+
 class PrepareCharge(BaseModel):
     code: str
     scan_ref: str = Field(min_length=24, max_length=100)
@@ -180,6 +185,42 @@ async def owned_session(code, token):
     return session
 
 
+@router.post("/partner/p5/scans")
+async def partner_scan(body: ScanSession, user: dict = Depends(require_role("partner"))):
+    """Confirm an actual partner scan without creating a bill or payment."""
+    require_enabled()
+    from partner_access import partner_record
+    partner = await partner_record(user, db)
+    code = body.code.strip().upper()
+    campaign = await db.campaigns.find_one(
+        {"cupom": code, "parceiro_id": partner["id"], "status": "Ativa"}, NO_ID
+    )
+    if not campaign:
+        raise HTTPException(404, "Esta campanha não pertence ao parceiro ou está inativa")
+    currency = str(campaign.get("currency") or partner.get("currency") or "eur").lower()
+    require_enabled(currency)
+    session = await db.p5_sessions.find_one(
+        {"scan_ref": body.scan_ref, "code": code, "campaign_id": campaign["id"]}, NO_ID
+    )
+    if not session or session["expires_at"] <= now_iso():
+        raise HTTPException(409, "QR P5 inválido ou expirado. Peça ao seguidor para renovar.")
+    # Idempotent: rescanning the same QR never creates a second interaction.
+    updated = await db.p5_sessions.find_one_and_update(
+        {"id": session["id"], "scanned_at": {"$exists": False}},
+        {"$set": {
+            "scanned_at": now_iso(), "partner_id": partner["id"],
+            "influencer_id": campaign.get("influencer_id"), "currency": currency,
+        }},
+        projection=NO_ID,
+    )
+    if updated:
+        from realtime import emit
+        emit("p5_qr_lido", partner_id=partner["id"],
+             influencer_id=campaign.get("influencer_id"), currency=currency,
+             cupom=code)
+    return {"ok": True, "status": "scanned", "coupon": code}
+
+
 @router.post("/partner/p5/charges")
 async def partner_charge(body: PrepareCharge, user: dict = Depends(require_role("partner"))):
     require_enabled()
@@ -247,7 +288,8 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
     s = await owned_session(code, x_p5_session)
     rec = await db.p5_charges.find_one({"scan_ref": s["scan_ref"]}, NO_ID, sort=[("created_at", -1)])
     if not rec:
-        return {"status": "none"}
+        return {"status": "scanned" if s.get("scanned_at") else "none",
+                "partner_confirmed": False}
     require_enabled(rec["currency"])
     if rec["status"] in ("pending", "awaiting_connect", "creating") and rec["expires_at"] <= now_iso():
         return {"status": "expired"}
