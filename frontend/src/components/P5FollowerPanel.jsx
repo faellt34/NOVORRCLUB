@@ -58,6 +58,10 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
     let cancelled = false;
     let timer;
     const started = Date.now();
+    // O QR mantém-se válido até expires_at (normalmente 120 minutos).
+    // Após 5 minutos, reduzir a frequência sem parar as atualizações.
+    const expiry = Date.parse(session.expires_at);
+    const pollingDeadline = Number.isFinite(expiry) ? expiry : started + 300000;
     async function check() {
       try {
         const { data } = await api.get(
@@ -72,8 +76,8 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
         if (cancelled) return;
         setError(apiError(e));
       }
-      if (!cancelled && Date.now() - started < 300000) {
-        timer = setTimeout(check, 2500);
+      if (!cancelled && Date.now() < pollingDeadline) {
+        timer = setTimeout(check, Date.now() - started < 300000 ? 2500 : 15000);
       }
     }
     check();
