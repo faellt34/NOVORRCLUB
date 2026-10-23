@@ -154,9 +154,16 @@ async def start_session(body: StartSession, request: Request):
     scan_ref = secrets.token_urlsafe(26)
     await db.p5_sessions.insert_one({
         "id": new_id("p5s"), "code": code, "campaign_id": campaign["id"],
+        "partner_id": campaign.get("parceiro_id"), "influencer_id": campaign.get("influencer_id"),
+        "currency": currency,
         "scan_ref": scan_ref, "secret_hash": digest(token),
         "created_at": now_iso(), "expires_at": expiration(120),
     })
+    # Notify only the campaign's authorized partner; do not broadcast any QR secret.
+    from realtime import emit
+    emit("p5_session_aberta", partner_id=campaign.get("parceiro_id"),
+         influencer_id=campaign.get("influencer_id"), currency=currency,
+         cupom=code)
     # O QR partilha apenas scan_ref; a credencial para consultar/pagar
     # permanece no sessionStorage da aba do seguidor.
     return {"scan_ref": scan_ref, "session_token": token, "expires_at": expiration(120)}
