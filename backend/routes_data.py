@@ -158,7 +158,7 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
     ).sort("date", -1).to_list(30)
     sessions = await db.p5_sessions.find(
         {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}},
-        {"_id": 0, "id": 1, "created_at": 1, "code": 1}
+        {"_id": 0, "id": 1, "created_at": 1, "code": 1, "scanned_at": 1}
     ).sort("created_at", -1).to_list(30)
     events = [
         {"id": c["id"], "kind": "coupon_opened", "coupon": c.get("coupon"), "at": c["date"]}
@@ -166,6 +166,10 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
     ] + [
         {"id": s["id"], "kind": "p5_session_opened", "coupon": s.get("code"), "at": s["created_at"]}
         for s in sessions
+    ] + [
+        {"id": s["id"] + "-scan", "kind": "p5_qr_scanned",
+         "coupon": s.get("code"), "at": s["scanned_at"]}
+        for s in sessions if s.get("scanned_at")
     ]
     events.sort(key=lambda e: e["at"], reverse=True)
     return {"events": events[:20], "window_hours": 24, "financial_confirmation": False}
