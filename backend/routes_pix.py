@@ -125,7 +125,11 @@ def totals(amount, discount, commission):
             raise ValueError()
         cents = lambda x: int(x.quantize(Decimal('1'), rounding=ROUND_HALF_UP))
         gross = cents(a * 100)
-        net, fee = cents(gross * (100-d)/100), cents(gross*c/100)
+        # A mesma regra P5: arredondar o desconto e subtrair do bruto.
+        # Arredondar 95% diretamente pode cobrar 1 centavo a mais em contas
+        # como R$ 1,10 (P5 aprova 104 centavos; o cálculo antigo cobrava 105).
+        discount_cents = cents(Decimal(gross) * d / 100)
+        net, fee = gross - discount_cents, cents(Decimal(gross) * c / 100)
         if net < 50 or fee > net:
             raise ValueError()
         return gross, net, fee
