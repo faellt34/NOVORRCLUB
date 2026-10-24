@@ -45,10 +45,10 @@ def checkout_globally_enabled(currency):
             return True
         if key.startswith("sk_live_"):
             try:
-                from pt_split import automatic
+                from pt_split import live_enabled
             except ImportError:
                 return False  # P5 QR stays active; financial module not installed yet.
-            return bool(automatic())
+            return bool(live_enabled())
         return False
     if currency == "brl":
         from routes_pix import availability_configuration
@@ -133,9 +133,18 @@ async def p5_config():
                                 "brl": checkout_globally_enabled("brl")},
         "requires_partner_approval": True,
         "partner_onboarding_can_continue_without_connect": True,
-        "live_pt_checkout_ready": False,
+        "live_pt_checkout_ready": checkout_globally_enabled("eur") and os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_live_"),
+        "pt_automatic_transfers": _pt_auto(),
         "financial_settlement_verified": False,
     }
+
+
+def _pt_auto():
+    try:
+        from pt_split import automatic
+        return bool(automatic())
+    except ImportError:
+        return False
 
 
 @router.post("/public/p5/sessions")
@@ -321,8 +330,8 @@ def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
     Do not use a live key for this P5 route before the distribution policy is approved.
     """
     key = os.environ.get("STRIPE_SECRET_KEY", "")
-    from pt_split import automatic
-    if not (key.startswith("sk_test_") or (key.startswith("sk_live_") and automatic())):
+    from pt_split import live_enabled
+    if not (key.startswith("sk_test_") or (key.startswith("sk_live_") and live_enabled())):
         raise HTTPException(503, "Split Portugal ainda não homologado e ativado")
     metadata = {
         "kind": "coupon_pay",
@@ -437,21 +446,26 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
     # Live P5 only with BOTH frozen, KYC-verified Connect beneficiaries.
     pt_quote = None
     pt_destinations = None
+    pt_split_status = "awaiting_paid_webhook"
     if rec["currency"] == "eur":
         live_key = os.environ.get("STRIPE_SECRET_KEY", "").startswith("sk_live_")
         if live_key:
             try:
-                from pt_split import automatic, recipients_ready, quote, VERSION
+                from pt_split import automatic, live_enabled, recipients_ready, quote, VERSION
             except ImportError:
                 return await wait_for_connect(rec, "split_portugal_ainda_nao_integrado")
-            if not automatic():
+            if not live_enabled():
                 return await wait_for_connect(rec, "split_portugal_aguarda_ativacao")
             pt_quote = quote(int(rec["gross_minor"]))
             if pt_quote["payment_minor"] != int(rec["net_minor"]):
                 raise HTTPException(409, "A repartição Portugal não corresponde ao valor cobrado")
+            # Checkout stays open; transfers only run automatically when both flag and recipients are ready.
+            # Otherwise the payment lands on the platform and the split is preserved for manual settlement.
             pt_destinations = await recipients_ready(rec["partner_id"], rec.get("influencer_id"))
-            if not pt_destinations.get("ok"):
-                return await wait_for_connect(rec, "connect_portugal_onboarding_pendente")
+            if not automatic():
+                pt_split_status = "awaiting_manual_transfer_auto_disabled"
+            elif not pt_destinations.get("ok"):
+                pt_split_status = "awaiting_recipient_onboarding"
 
 
     # Atomic claim protects against follower double-click; Stripe/Pix idempotency
@@ -518,11 +532,11 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
                     "partner_minor": pt_quote["partner_minor"],
                     "influencer_minor": pt_quote["influencer_minor"],
                     "platform_minor": pt_quote["platform_minor"],
-                    "partner_destination": pt_destinations["partner"]["account_id"],
-                    "influencer_destination": pt_destinations["influencer"]["account_id"],
-                    "pt_split_status": "awaiting_paid_webhook",
+                    "partner_destination": ((pt_destinations or {}).get("partner") or {}).get("account_id"),
+                    "influencer_destination": ((pt_destinations or {}).get("influencer") or {}).get("account_id"),
+                    "pt_split_status": pt_split_status,
                     "manual_payout_blocked": True,
-                } if pt_quote and pt_destinations else {}),
+                } if pt_quote else {}),
                 "payment_method": "stripe_checkout_mbway_card",
                 "split": False,
                 "distribution_status": "manual_reconciliation_required",
