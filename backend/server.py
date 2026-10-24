@@ -13,6 +13,7 @@ from starlette.middleware.cors import CORSMiddleware
 from core import client, db
 from seed import seed
 import routes_pix
+from pix_config import configuration_status
 import routes_finance
 import p5_checkout
 import pt_split
@@ -50,6 +51,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 
 @app.on_event("startup")
 async def on_startup():
+    pix_state, pix_checks = configuration_status()
+    if not pix_state["configured"]:
+        logging.getLogger(__name__).warning(
+            "PIX Brasil indisponível neste ambiente; configurações inválidas ou ausentes: %s",
+            ", ".join(k for k, valid in pix_checks.items() if not valid)
+        )
+    elif not pix_state["enabled"]:
+        logging.getLogger(__name__).info("PIX Brasil configurado mas desativado")
     await db.users.create_index("google_sub", unique=True, partialFilterExpression={"google_sub": {"$type": "string"}})
     await db.google_challenges.create_index("expires_at", expireAfterSeconds=0)
     await seed()
