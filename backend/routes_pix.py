@@ -15,7 +15,7 @@ from pymongo.errors import DuplicateKeyError
 from core import db, NO_ID, now_iso, require_role
 from partner_access import partner_record
 from payments.pix.checks import platform_checks, configuration_checks, receiving_status, webhook_checks
-from pix_config import configuration_status
+from pix_config import configuration_status, pix_payment_method_configuration
 
 router = APIRouter()
 
@@ -75,7 +75,7 @@ async def provider_readiness(user: dict = Depends(require_role('admin'))):
         return {**state, 'provider_verified': False, 'checks': {}, 'missing_configuration':
                 [key for key, value in configuration.items() if not value]}
     platform = await provider('accounts.retrieve_current')
-    payment_config = await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
+    payment_config = await provider('payment_method_configurations.retrieve', pix_payment_method_configuration())
     checks = {**platform_checks(platform), **configuration_checks(payment_config)}
     endpoints = await provider('webhook_endpoints.list', limit=100)
     origins = [v.strip() for v in os.getenv('PAYMENT_ALLOWED_ORIGINS', os.getenv('FRONTEND_URL', '')).split(',') if v.strip()]
@@ -93,7 +93,7 @@ async def verify_accounts(partner, influencer):
     platform=await provider('accounts.retrieve_current')
     if not all(platform_checks(platform).values()):
         raise HTTPException(409,'Configure a plataforma brasileira com BRL, Pix, cobranças e depósitos bancários automáticos habilitados', headers={'X-RRClub-Reason': 'pix_plataforma_pendente'})
-    config=await provider('payment_method_configurations.retrieve', os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'])
+    config=await provider('payment_method_configurations.retrieve', pix_payment_method_configuration())
     if not all(configuration_checks(config).values()):
         raise HTTPException(409,'Configure um checkout ativo exclusivamente para Pix antes de cobrar', headers={'X-RRClub-Reason': 'pix_checkout_configuracao_pendente'})
     if config.get('livemode') is not pix_key().startswith(('sk_live_', 'rk_live_')):
@@ -213,7 +213,7 @@ async def _checkout(body: PixCheckoutIn, creating_partner=None):
               'partner_cents':partner_cents,'influencer_cents':fee,'platform_cents':platform_cents,'partner_amount':partner_cents/100,'platform_amount':platform_cents/100,'influencer_destination':inf['pix_stripe_account_id'],'split_status':'pending','gross_amount':gross/100,'amount':net/100,'discount':(gross-net)/100,'commission':fee/100,'rate':0.05,'split_version':'br-fixed-5-80-5-10-v1','manual_payout_blocked':True,
               'campaign_id':campaign['id'],'campaign':campaign['nome'],'partner_id':partner['id'],'partner':partner.get('nome',''),
               'influencer_id':campaign.get('influencer_id'),'influencer':(inf or {}).get('nome','—'),'destination':partner['pix_stripe_account_id'],
-              'payment_method_configuration':os.environ['PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION'],'status':'initiated','payment_status':'pending','created_at':now_iso(),'updated_at':now_iso()}
+              'payment_method_configuration':pix_payment_method_configuration(),'status':'initiated','payment_status':'pending','created_at':now_iso(),'updated_at':now_iso()}
         try:
             await db.payment_transactions.insert_one(dict(tx))
         except DuplicateKeyError:
