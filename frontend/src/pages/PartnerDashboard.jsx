@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, CheckCircle2, Landmark, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
@@ -7,6 +7,7 @@ import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, dow
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { QrScannerDialog } from "../components/QrScannerDialog";
+import { parseCustomerQr } from "../lib/p5Scan";
 import { PartnerOnboarding } from "../components/PartnerOnboarding";
 import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
@@ -24,6 +25,12 @@ export default function PartnerDashboard() {
   const [amount, setAmount] = useState("");
   const [preview, setPreview] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [p5Currencies, setP5Currencies] = useState({});
+  const [p5ScanRef, setP5ScanRef] = useState("");
+  const [p5ScanRejected, setP5ScanRejected] = useState(false);
+  const [p5ScanState, setP5ScanState] = useState("idle");
+  const scanSequence = useRef(0);
+  const [p5Bill, setP5Bill] = useState(null);
   const [pixBill, setPixBill] = useState(null);
   const [lastReceipt, setLastReceipt] = useState(null);
   const [idemKey, setIdemKey] = useState(newKey);
@@ -34,13 +41,22 @@ export default function PartnerDashboard() {
   const [pixAvailable, setPixAvailable] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [qrActivity, setQrActivity] = useState([]);
+  const [qrActivityState, setQrActivityState] = useState("loading");
   const [flash, triggerFlash] = useFlash();
   const [live, setLive] = useState(false);
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
-    if (ev.tipo === "split_executado" && ev.record) {
+    if (ev.tipo === "novo_clique" || ev.tipo === "p5_session_aberta" || ev.tipo === "p5_qr_lido") {
+      api.get("/partner/qr/activity").then(({ data }) => {
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      }).catch(() => setQrActivityState("unavailable"));
+      return;
+    }
+    if (ev.tipo === "redencao_registada" && ev.record) {
       const r = ev.record;
       setData((d) => {
         if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
@@ -97,12 +113,36 @@ export default function PartnerDashboard() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    let active = true;
+    const refresh = () => api.get("/partner/qr/activity")
+      .then(({ data }) => {
+        if (!active) return;
+        setQrActivity(data.events || []);
+        setQrActivityState("ready");
+      })
+      .catch(() => { if (active) setQrActivityState("unavailable"); });
+    refresh();
+    const interval = setInterval(refresh, 15000);
+    return () => { active = false; clearInterval(interval); };
+  }, [data?.partner?.id, data?.partner?.currency]);
+
+  useEffect(() => {
     const c = code.trim().toUpperCase();
     if (c.length < 4) { setPreview(null); return; }
     const t = setTimeout(() => api.get(`/coupons/preview/${encodeURIComponent(c)}`).then((r) => setPreview(r.data)).catch(() => setPreview(null)), 250);
     return () => clearTimeout(t);
   }, [code]);
 
+  useEffect(() => {
+    let active = true;
+    api.get("/public/p5/config")
+      .then(({ data }) => { if (active) setP5Currencies(data?.currencies || {}); })
+      .catch(() => { if (active) setP5Currencies({}); });
+    return () => { active = false; };
+  }, []);
+
+  const p5EligibleCampaign = preview && Number(preview.desconto) === 5 && Number(preview.comissao) === 5 && Boolean(preview.influencer_id);
+  const p5Mode = Boolean(p5EligibleCampaign && p5Currencies[String(preview.currency || data?.partner?.currency || "eur").toLowerCase()]);
   const parsedAmount = parseFloat(String(amount).replace(",", ".")) || 0;
 
   const handleValidate = async (e) => {
@@ -110,8 +150,25 @@ export default function PartnerDashboard() {
     if (submitting) return;
     if (!code.trim()) { toast.error("Introduza o código do cupom."); return; }
     if (!parsedAmount || parsedAmount <= 0) { toast.error("Informe um valor de compra válido."); return; }
+    if (p5ScanRejected || (p5ScanRef && !p5Mode)) {
+      toast.error("QR P5 não validado para esta campanha. Confirme a ativação do P5 e volte a ler o QR da sessão; não registe como venda manual.");
+      return;
+    }
     setSubmitting(true);
     try {
+      if (p5Mode) {
+        if (!p5ScanRef || p5ScanRef.length < 24) {
+          toast.error("Leia o QR P5 desta sessão do cliente. O QR genérico não autoriza uma cobrança.");
+          return;
+        }
+        const { data: bill } = await api.post("/partner/p5/charges", {
+          code, scan_ref: p5ScanRef, gross_amount: parsedAmount, idempotency_key: idemKey,
+        });
+        setP5Bill(bill);
+        setIdemKey(newKey()); // Each new follower/session must have its own idempotency key.
+        toast.success("Conta confirmada! O cliente verá o valor e poderá pagar quando o MB WAY estiver apto.");
+        return;
+      }
       if (preview?.currency === "brl") {
         if (!pixAvailable) { toast.info("Pix ainda não está liberado para cobranças nesta plataforma."); return; }
         const { data: bill } = await api.post("/partner/pix/checkout", { code, amount: parsedAmount, origin_url: window.location.origin, request_id: idemKey });
@@ -132,7 +189,35 @@ export default function PartnerDashboard() {
     }
   };
 
-  const onDetected = useCallback((c) => { setCode(c); toast.success(`QR detetado: ${c}`); }, []);
+  const onDetected = useCallback((value) => {
+    const { code: coupon, scanRef, isP5Url } = parseCustomerQr(value, window.location.origin);
+    const requestNo = ++scanSequence.current;
+    setCode(coupon);
+    setP5ScanRef("");
+    setP5ScanState(scanRef ? "checking" : "idle");
+    setP5ScanRejected(isP5Url && !scanRef);
+    setP5Bill(null);
+    setIdemKey(newKey());
+    if (isP5Url && !scanRef) {
+      toast.error("QR P5 inválido ou de outro endereço. Peça ao cliente para abrir a sessão RRClub neste site.");
+    } else if (scanRef) {
+      api.post("/partner/p5/scans", { code: coupon, scan_ref: scanRef })
+        .then(() => {
+          if (requestNo !== scanSequence.current) return;
+          setP5ScanRef(scanRef);
+          setP5ScanState("verified");
+          toast.success("QR P5 confirmado pelo servidor. Pode aprovar o valor da conta.");
+        })
+        .catch((err) => {
+          if (requestNo !== scanSequence.current) return;
+          setP5ScanState("invalid");
+          setP5ScanRejected(true);
+          toast.error(apiError(err));
+        });
+    } else {
+      toast.success("Cupão detetado: " + coupon);
+    }
+  }, []);
 
   const exportCsv = () => {
     downloadCsv(`redencoes-${(data.partner?.nome || "parceiro").toLowerCase().replace(/\s+/g, "-")}.csv`, "id;cupom;influencer;valor;desconto;comissao;taxa;data;staff;moeda",
@@ -152,6 +237,31 @@ export default function PartnerDashboard() {
       </div>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
+
+      <section data-testid="partner-qr-activity" className="card-soft p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <ScanLine className="w-4 h-4 text-purple-600" />
+          <h2 className="text-sm font-bold text-slate-900">Atividade QR · últimas 24 horas</h2>
+        </div>
+        <p className="text-xs text-slate-500">Abrir um cupão ou iniciar uma sessão P5 não confirma uma venda nem um pagamento.</p>
+        {qrActivityState === "unavailable" && (
+          <p role="status" className="text-xs text-amber-700">Não foi possível atualizar as leituras agora. Os registos permanecem preservados.</p>
+        )}
+        {qrActivityState === "loading" && <p className="text-xs text-slate-500">A verificar as interações...</p>}
+        {qrActivityState === "ready" && qrActivity.length === 0 && (
+          <p className="text-xs text-slate-500">Nenhuma abertura ou sessão P5 registada neste período.</p>
+        )}
+        {qrActivity.slice(0, 5).map((entry) => (
+          <div key={entry.id} className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2">
+            <p className="text-xs text-slate-700">
+              {entry.kind === "p5_qr_scanned" ? "QR P5 lido pelo parceiro" : entry.kind === "p5_session_opened" ? "Sessão P5 iniciada" : "Cupão aberto"} · <span className="font-semibold">{entry.coupon}</span>
+            </p>
+            <time className="text-[11px] text-slate-500" dateTime={entry.at}>
+              {new Date(entry.at).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </time>
+          </div>
+        ))}
+      </section>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
@@ -181,24 +291,28 @@ export default function PartnerDashboard() {
 
       <div data-testid="partner-connect-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${connect?.charges_enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
+          <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${(data.partner?.currency === "brl" ? connect?.receiving_ready : (connect?.charges_enabled && connect?.payouts_enabled)) ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}><CheckCircle2 className="w-5 h-5" /></span>
           <div>
             <p className="text-sm font-semibold text-slate-900">Split automático dos pagamentos por QR (Stripe Connect)</p>
             <p className="text-xs text-slate-500" data-testid="partner-connect-status">
-              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (data.partner?.currency === "brl" ? connect.receiving_ready : connect.charges_enabled) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; {data.partner?.currency === "brl" ? "o influencer recebe a sua parte numa transferência separada." : "a comissão fica na plataforma."}</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
+              {connect === null ? "A verificar..." : connect.status_verified === false ? (connect.reason || "Estado Stripe por verificar; os dados guardados foram preservados.") : data.partner?.currency === "brl" && connect.available === false ? "Cadastro disponível. Os recebimentos Pix aguardam a configuração brasileira da plataforma; poderá associar a sua conta depois." : (data.partner?.currency === "brl" ? connect.receiving_ready : (connect.charges_enabled && connect.payouts_enabled)) ? <>Ativo — a sua parte é encaminhada ao saldo da conta Stripe; o depósito bancário segue os prazos da Stripe{connect.bank_last4 ? ` (••••${connect.bank_last4})` : ""}; {data.partner?.currency === "brl" ? "o influencer recebe a sua parte numa transferência separada." : "a comissão fica na plataforma."}</> : connect.connected ? "Onboarding iniciado — conclua os dados no Stripe para ativar as transferências automáticas." : "Ligue a sua conta bancária ao Stripe para receber automaticamente a sua parte de cada pagamento, sem transferências manuais."}
             </p>
           </div>
         </div>
-        {(data.partner?.currency === "brl" ? !connect?.receiving_ready : !connect?.charges_enabled) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
+        {(data.partner?.currency === "brl" ? !connect?.receiving_ready : !(connect?.charges_enabled && connect?.payouts_enabled)) && <button data-testid="partner-connect-button" disabled={connecting || connect === null || connect.status_verified === false || (data.partner?.currency === "brl" && connect.available === false)} onClick={startConnect} className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press shrink-0">{connecting ? "A abrir Stripe..." : connect?.connected ? "Continuar onboarding" : "Ativar split automático"}</button>}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div data-testid="coupon-validation-card" className="card-soft p-5" id="validar">
-          <h3 className="text-lg font-semibold text-slate-900 mb-1">Validação de Cupom</h3>
-          <p className="text-xs text-slate-500 mb-4">Escaneie o QR do cliente ou digite o código</p>
+          <h3 className="text-lg font-semibold text-slate-900 mb-1">{p5Mode ? "P5 · Aprovar conta do cliente" : "Validação de Cupom"}</h3>
+          <p className="text-xs text-slate-500 mb-4">{p5Mode ? "Leia o QR P5 do telemóvel do cliente; confirme o valor original da conta. O cliente paga depois." : "Escaneie o QR do cliente ou digite o código"}</p>
           <form onSubmit={handleValidate} className="space-y-3">
             <div className="flex gap-2">
-              <Input data-testid="coupon-code-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
+              <Input data-testid="coupon-code-input" value={code} onChange={(e) => {
+                const raw = e.target.value;
+                if (raw.startsWith("https://")) onDetected(raw);
+                else { scanSequence.current += 1; setCode(raw); setP5ScanRef(""); setP5ScanState("idle"); setP5ScanRejected(false); setP5Bill(null); setIdemKey(newKey()); }
+              }} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
               <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
                 <ScanLine className="w-[18px] h-[18px]" />
               </button>
@@ -210,6 +324,19 @@ export default function PartnerDashboard() {
                   : <>Cupom {preview.status.toLowerCase()} — não redimível</>}
               </div>
             )}
+            {preview?.status === "Ativa" && p5EligibleCampaign && preview.currency === "eur" && !p5Currencies.eur && (
+              <p data-testid="p5-pt-off" className="text-xs text-amber-700">
+                Campanha P5 Portugal elegível, mas o fluxo QR ainda não está ativado nesta instalação. Ative P5_ENABLED e P5_EUR_ENABLED no backend.
+              </p>
+            )}
+            {p5Mode && (
+              <p data-testid="p5-qr-state" className={p5ScanRef ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>
+                {p5ScanState === "checking" ? "QR P5 lido. A confirmar o vínculo com o servidor..." :
+                  p5ScanRef ? "QR P5 verificado pelo servidor. Pode aprovar a conta sem cobrar." :
+                  "Aguardando QR P5: o cupão público isoladamente não identifica o cliente."}
+              </p>
+            )}
+            {p5ScanRejected && <p role="alert" className="text-xs text-red-700">O QR desta sessão não foi reconhecido; nenhuma venda será registada.</p>}
             <Input data-testid="purchase-amount-input" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor da conta na moeda da campanha" inputMode="decimal" className="rounded-xl bg-slate-50" />
             {preview?.status === "Ativa" && parsedAmount > 0 && (
               <div data-testid="live-calculation" className="grid grid-cols-2 gap-2 text-xs">
@@ -223,10 +350,22 @@ export default function PartnerDashboard() {
                 </div>
               </div>
             )}
-            <button type="submit" disabled={submitting || (preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
-              {submitting ? "A processar..." : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
+            <button type="submit" disabled={submitting || (!p5Mode && preview?.currency === "brl" && !pixAvailable)} data-testid="validate-coupon-button" className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold btn-press">
+              {submitting ? "A processar..." : p5Mode ? "Aprovar conta P5 (sem cobrar)" : preview?.currency === "brl" ? pixAvailable ? "Gerar cobrança Pix" : "Pix aguarda ativação" : "Validar Venda"}
             </button>
           </form>
+          {p5Bill && (
+            <div data-testid="partner-p5-bill" className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-900">
+              <strong>Conta P5 aprovada pelo estabelecimento</strong>
+              <p>Referência: {p5Bill.charge_id}</p>
+              {p5Bill.net_minor != null && (
+                <p>Total que o cliente verá: <b>{moneyIn(p5Bill.net_minor / 100, p5Bill.currency || preview?.currency || "eur")}</b></p>
+              )}
+              <p className="text-xs mt-1">
+                Aguarde o pagamento do cliente. Ler o QR não regista uma venda nem distribui comissões.
+              </p>
+            </div>
+          )}
           {pixBill && <div className="mt-4 p-4 rounded-xl bg-purple-50 border border-purple-100 text-center" data-testid="partner-pix-bill">
             <PixBillStatus bill={pixBill} onPaid={() => { load(); refreshUnread(); }} />
             <button type="button" className="text-xs text-purple-700 underline mt-3" onClick={() => { setPixBill(null); setIdemKey(newKey()); }}>Preparar outra conta</button>
@@ -286,7 +425,7 @@ export default function PartnerDashboard() {
         </div>
       </div>
 
-      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} />
+      <QrScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onDetected={onDetected} preserveRaw />
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
 
       <div data-testid="partner-campaigns-card" className="card-soft p-5">
