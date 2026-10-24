@@ -1,6 +1,6 @@
 """Run: PYTHONPATH=backend python3 -m unittest backend.tests.test_pix_config"""
 import unittest
-from pix_config import configuration_status
+from pix_config import configuration_status, pix_payment_method_configuration, BRAZIL_LIVE_PIX_CONFIGURATION_ID
 
 
 class PixConfigTests(unittest.TestCase):
@@ -21,8 +21,7 @@ class PixConfigTests(unittest.TestCase):
         self.assertTrue(all(checks.values()))
 
     def test_missing_key_fails_closed(self):
-        for k in ("PIX_STRIPE_SECRET_KEY", "PIX_STRIPE_WEBHOOK_SECRET",
-                  "PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION"):
+        for k in ("PIX_STRIPE_SECRET_KEY", "PIX_STRIPE_WEBHOOK_SECRET"):
             with self.subTest(k=k):
                 env = dict(self.env, **{k: ""})
                 self.assertFalse(configuration_status(env)[0]["accepting_new_payments"])
@@ -44,6 +43,18 @@ class PixConfigTests(unittest.TestCase):
         state, _ = configuration_status(env)
         self.assertTrue(state["configured"])
         self.assertFalse(state["accepting_new_payments"])
+
+    def test_brazil_live_fallback_when_configuration_missing(self):
+        env = dict(self.env, PIX_STRIPE_SECRET_KEY="sk_live_brazil-example",
+                   PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION="")
+        self.assertEqual(pix_payment_method_configuration(env), BRAZIL_LIVE_PIX_CONFIGURATION_ID)
+        self.assertTrue(configuration_status(env)[0]["configured"])
+
+    def test_no_fallback_for_testmode_or_missing_key(self):
+        for key in ("sk_test_brazil-example", ""):
+            env = dict(self.env, PIX_STRIPE_SECRET_KEY=key,
+                       PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION="")
+            self.assertEqual(pix_payment_method_configuration(env), "")
 
     def test_bad_key_prefix(self):
         env = dict(self.env, PIX_STRIPE_SECRET_KEY="pk_live_public")
