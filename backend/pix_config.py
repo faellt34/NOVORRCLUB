@@ -6,6 +6,24 @@ This module never contacts Stripe and cannot prove a payment has settled.
 import os
 from urllib.parse import urlsplit
 
+# Public ID confirmed active and Pix-only on RRCLUBRASIL (livemode).
+# Not a secret. Never use this fallback for testmode or another country.
+BRAZIL_LIVE_PIX_CONFIGURATION_ID = "pmc_1URqMREKAxcuX59L1ExKvQ7V"
+
+
+def pix_payment_method_configuration(env=None):
+    env = os.environ if env is None else env
+    explicit = env.get("PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION", "")
+    if explicit:
+        return explicit
+    key = env.get("PIX_STRIPE_SECRET_KEY", "")
+    if (_is_key(key) and key.startswith(("sk_live_", "rk_live_"))
+            and env.get("PIX_STRIPE_PLATFORM_COUNTRY") == "BR"
+            and key != env.get("STRIPE_SECRET_KEY", "")):
+        return BRAZIL_LIVE_PIX_CONFIGURATION_ID
+    return ""
+
+
 
 def _is_key(value):
     return isinstance(value, str) and value.startswith((
@@ -32,7 +50,7 @@ def configuration_status(env=None):
     env = os.environ if env is None else env
     pix_key = env.get("PIX_STRIPE_SECRET_KEY", "")
     pt_key = env.get("STRIPE_SECRET_KEY", "")
-    method = env.get("PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION", "")
+    method = pix_payment_method_configuration(env)
     webhook_secret = env.get("PIX_STRIPE_WEBHOOK_SECRET", "")
     origins = env.get("PAYMENT_ALLOWED_ORIGINS", "") or env.get("FRONTEND_URL", "")
     origin_list = [origin.strip() for origin in origins.split(",") if origin.strip()]
