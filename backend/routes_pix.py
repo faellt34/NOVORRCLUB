@@ -15,6 +15,7 @@ from pymongo.errors import DuplicateKeyError
 from core import db, NO_ID, now_iso, require_role
 from partner_access import partner_record
 from payments.pix.checks import platform_checks, configuration_checks, receiving_status, webhook_checks
+from pix_config import configuration_status
 
 router = APIRouter()
 
@@ -28,8 +29,9 @@ class PixCheckoutIn(BaseModel):
 
 def pix_key():
     key=os.getenv('PIX_STRIPE_SECRET_KEY','')
-    if not key or os.getenv('PIX_STRIPE_PLATFORM_COUNTRY')!='BR':
-        raise HTTPException(503,'Configure a conta Stripe brasileira exclusiva do Pix')
+    _, checks = configuration_status()
+    if not all(checks[k] for k in ('api_key', 'platform_country_br', 'separate_brazil_key')):
+        raise HTTPException(503,'Configure uma chave Stripe exclusiva da plataforma Brasil')
     return key
 
 
@@ -52,17 +54,7 @@ async def provider(operation,*args,**kwargs):
 
 
 def availability_configuration():
-    configuration={
-        'api_key':bool(os.getenv('PIX_STRIPE_SECRET_KEY')),
-        'platform_country_br':os.getenv('PIX_STRIPE_PLATFORM_COUNTRY')=='BR',
-        'webhook':bool(os.getenv('PIX_STRIPE_WEBHOOK_SECRET')),
-        'payment_method_configuration':os.getenv('PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION','').startswith('pmc_'),
-        'allowed_origins':bool(os.getenv('PAYMENT_ALLOWED_ORIGINS',os.getenv('FRONTEND_URL',''))),
-    }
-    configured=all(configuration.values())
-    enabled=os.getenv('PIX_ENABLED','false').lower()=='true'
-    return {'configured':configured,'enabled':enabled,'accepting_new_payments':configured and enabled},configuration
-
+    return configuration_status()
 
 @router.get('/public/pix/availability')
 async def availability():
