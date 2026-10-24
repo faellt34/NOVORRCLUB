@@ -15,7 +15,7 @@ publicado podem ter variáveis diferentes.
 | `PIX_ENABLED=true` | Habilita Pix quando as outras verificações passarem |
 | `PIX_STRIPE_PLATFORM_COUNTRY=BR` | Exige plataforma Brasil |
 | `PIX_STRIPE_SECRET_KEY` | Chave secreta/restrita da **conta brasileira**, nunca igual à portuguesa |
-| `PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION` | ID `pmc_...` da configuração de pagamento com Pix |
+| `PIX_STRIPE_PAYMENT_METHOD_CONFIGURATION` | ID `pmc_...` da configuração de pagamento; existe fallback **apenas para Brasil em modo real** |
 | `PIX_STRIPE_WEBHOOK_SECRET` | Signing secret `whsec_...` do endpoint Pix Brasil |
 | `PAYMENT_ALLOWED_ORIGINS` | Origens HTTPS autorizadas; sem caminhos ou query strings |
 
@@ -23,7 +23,7 @@ publicado podem ter variáveis diferentes.
 substituída pela chave brasileira.
 
 **Importante:** o código não cria nem recupera credenciais secretas.
-`pmc_...` identifica a configuração Pix; `whsec_...` verifica assinaturas
+O ID público `pmc_1URqMREKAxcuX59L1ExKvQ7V` já foi verificado na Stripe RRCLUBRASIL como ativo e exclusivo Pix, e é usado apenas quando o ID não está definido e a chave local é brasileira em modo **live**. Em testmode o ID deve ser fornecido explicitamente. O prefixo `whsec_...` é do segredo que verifica assinaturas
 dos eventos Stripe no endpoint `/api/stripe/pix/webhook`.
 
 ## Diagnóstico seguro
