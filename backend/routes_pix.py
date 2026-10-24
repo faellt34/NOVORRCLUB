@@ -28,7 +28,7 @@ class PixCheckoutIn(BaseModel):
 
 
 def pix_key():
-    key=os.getenv('PIX_STRIPE_SECRET_KEY','')
+    key=os.getenv('PIX_STRIPE_SECRET_KEY','').strip().strip('"\'').strip()
     _, checks = configuration_status()
     if not all(checks[k] for k in ('api_key', 'platform_country_br', 'separate_brazil_key')):
         raise HTTPException(503,'Configure uma chave Stripe exclusiva da plataforma Brasil')
@@ -492,7 +492,7 @@ async def reverse_split(tx, cumulative):
 
 @router.post('/stripe/pix/webhook')
 async def pix_webhook(request: Request):
-    secret=os.getenv('PIX_STRIPE_WEBHOOK_SECRET','')
+    secret=os.getenv('PIX_STRIPE_WEBHOOK_SECRET','').strip().strip('"\'').strip()
     if not secret:
         raise HTTPException(503,'Webhook Pix não configurado')
     try:
