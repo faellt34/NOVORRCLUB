@@ -127,27 +127,99 @@ async def partner_dashboard(user: dict = Depends(require_role("partner")), curre
             "leaderboard": leaderboard, "redemptions": reds[:100], "campaigns": camps}
 
 
+def _pilot_record_visible(item: dict, start: datetime) -> bool:
+    """Read-only operational view: never alter the underlying financial record."""
+    if (item.get("is_test") or item.get("test_run_id")
+            or str(item.get("origem", "")).lower() in ("teste", "test")
+            or "simulação" in str(item.get("staff", "")).lower()
+            or str(item.get("idempotency_key", "")).startswith("test-")):
+        return False
+    timestamp = item.get("date") or item.get("created_at") or item.get("timestamp")
+    if not timestamp:
+        return False  # Legacy record without a date is visible in history, not in pilot.
+    try:
+        value = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value >= start
+    except (ValueError, TypeError):
+        return False
+
+
+@router.get("/partner/qr/activity")
+async def partner_qr_activity(user: dict = Depends(require_role("partner")), currency: str = Depends(reporting_currency)):
+    """Read-only, partner-scoped QR activity. A scan/open is not a paid sale."""
+    partner = await partner_record(user, db)
+    pid = partner["id"]
+    cutoff = since(1)
+    claims = await db.coupon_claims.find(
+        currency_query({"partner_id": pid, "date": {"$gte": cutoff}}, currency),
+        {"_id": 0, "id": 1, "date": 1, "coupon": 1}
+    ).sort("date", -1).to_list(30)
+    sessions = await db.p5_sessions.find(
+        {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}},
+        {"_id": 0, "id": 1, "created_at": 1, "code": 1, "scanned_at": 1}
+    ).sort("created_at", -1).to_list(30)
+    events = [
+        {"id": c["id"], "kind": "coupon_opened", "coupon": c.get("coupon"), "at": c["date"]}
+        for c in claims
+    ] + [
+        {"id": s["id"], "kind": "p5_session_opened", "coupon": s.get("code"), "at": s["created_at"]}
+        for s in sessions
+    ] + [
+        {"id": s["id"] + "-scan", "kind": "p5_qr_scanned",
+         "coupon": s.get("code"), "at": s["scanned_at"]}
+        for s in sessions if s.get("scanned_at")
+    ]
+    events.sort(key=lambda e: e["at"], reverse=True)
+    return {"events": events[:20], "window_hours": 24, "financial_confirmation": False}
+
+
 @router.get("/dashboard/admin")
-async def admin_dashboard(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+async def admin_dashboard(pilot_since: Optional[str] = None, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+    # pilot_since affects presentation ONLY. Historical records, Stripe and audits remain untouched.
+    pilot_start = None
+    if pilot_since:
+        try:
+            pilot_start = datetime.fromisoformat(pilot_since.replace("Z", "+00:00"))
+            if pilot_start.tzinfo is None:
+                raise ValueError("timezone required")
+            pilot_start = pilot_start.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Data de início do piloto inválida; use ISO 8601 com fuso horário.")
     reds = await db.redemptions.find(currency_query({}, currency), NO_ID).to_list(50000)
+    if pilot_start:
+        reds = [r for r in reds if _pilot_record_visible(r, pilot_start)]
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
-    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(50))
+    campaign_limit = 2000 if pilot_start else 50
+    camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(campaign_limit))
     camps = [c for c in camps if c.get("currency", "eur") == currency]
-    claims = await db.coupon_claims.find(currency_query({}, currency), {"_id": 0, "origem": 1}).to_list(100000)
+    if pilot_start:
+        camps = [c for c in camps if _pilot_record_visible(c, pilot_start)]
+    claims = await db.coupon_claims.find(currency_query({}, currency),
+        {"_id": 0, "origem": 1, "date": 1, "created_at": 1, "timestamp": 1, "is_test": 1, "test_run_id": 1}
+    ).to_list(100000)
+    if pilot_start:
+        claims = [c for c in claims if _pilot_record_visible(c, pilot_start)]
     clicks = len(claims)
     uses = t["count"]
     origins = defaultdict(int)
     for cl in claims:
         origins[cl.get("origem") or "QR / direto"] += 1
     return {
+        "mode": "pilot" if pilot_start else "history",
+        "pilot_since": pilot_start.isoformat() if pilot_start else None,
+        "currency": currency,
         "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"]), "count": trend(tc["count"], tp["count"])},
         "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo"}), "partners": await db.partners.count_documents({"status": "Ativo"}),
-                   "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
+                   "campaigns": (sum(c.get("status") == "Ativa" for c in camps) if pilot_start else await db.campaigns.count_documents({"status": "Ativa"})),
+                   "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
-        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30),
+        "campaigns": camps[:8], "chart": daily_series(cur, 30),
+        "chart_rc": [] if pilot_start else await revenue_clicks_series(30),
     }
 
 
@@ -222,7 +294,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         return {"record": existing, "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
     from realtime import emit
-    emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
+    emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
          influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
     await mark_converted(c["id"], rec)
     inf_user = await db.users.find_one({"influencer_id": c.get("influencer_id")}, {"id": 1}) if inf else None
@@ -351,7 +423,8 @@ async def public_coupon(code: str, request: Request):
         emit("clique_cupao", currency=cl.get("currency", "eur"), cupom=c["cupom"], campanha=c["nome"], origem=origem, influencer=inf.get("nome", "—"), influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"), ref=cl["id"])
         emit("novo_clique", currency=cl.get("currency", "eur"), dados=dados, influencer_id=c.get("influencer_id"), partner_id=c.get("parceiro_id"))
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
-    return {"cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
+    p5_eligible = bool(c.get("influencer_id")) and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5
+    return {"p5_eligible": p5_eligible, "cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
             "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id, "currency": c.get("currency", partner.get("currency", "eur"))}
 

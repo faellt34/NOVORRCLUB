@@ -1,3 +1,4 @@
+import FinanceReconciliationPanel from "../components/FinanceReconciliationPanel";
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, CheckCircle2, Clock, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +21,10 @@ export default function AdminPayouts() {
   useEffect(() => { load(); }, [load]);
 
   const markPaid = async (r) => {
+    if (reportCurrency() === "eur" && (r.status !== "Pendente" || !r.attribution_verified)) {
+      toast.error("Comissão sem conciliação financeira; confirma beneficiário e pagamento antes de registar.");
+      return;
+    }
     if (!window.confirm(`Marcar ${monthLabel(r.month)} de ${r.influencer} (${eur(r.commission)}) como pago?`)) return;
     setBusy(`${r.influencer_id}-${r.month}`);
     try { await api.post("/admin/payouts", { influencer_id: r.influencer_id, month: r.month }); toast.success(`Pagamento registado · ${r.influencer} notificado`); load(); }
@@ -39,6 +44,7 @@ export default function AdminPayouts() {
 
   return (
     <div className="space-y-6">
+      {reportCurrency() === "eur" && <FinanceReconciliationPanel />}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 data-testid="payouts-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Pagamentos de Comissões</h1>

@@ -49,7 +49,7 @@ def env(monkeypatch):
     client.v1.accounts.retrieve_current.return_value={'country':'BR','default_currency':'brl','charges_enabled':True,'payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'pix_payments':'active'}}
     client.v1.payment_method_configurations.retrieve.return_value={'active':True,'livemode':False,'pix':{'available':True,'display_preference':{'value':'on'}}}
     client.v1.accounts.retrieve.return_value={'country':'BR','payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'transfers':'active'},'metadata':{'partner_id':'p'}}
-    client.v1.accounts.retrieve.side_effect=lambda account_id, **kwargs: {'country':'BR','payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'transfers':'active'},'metadata':{'partner_id': 'p' if account_id=='acct' else 'i'}}
+    client.v1.accounts.retrieve.side_effect=lambda account_id, **kwargs: {'id':account_id,'country':'BR','payouts_enabled':True,'settings':{'payouts':{'schedule':{'interval':'daily'}}},'capabilities':{'transfers':'active'},'metadata':{'partner_id': 'p' if account_id=='acct' else 'i'}}
     client.v1.payment_intents.retrieve.return_value={'latest_charge':'ch_pix','status':'succeeded','currency':'brl','amount_received':9500}
     client.v1.transfers.create.side_effect=lambda **kw:{'id':'tr_'+kw['params']['destination']}
     client.v1.transfers.retrieve.return_value={'amount_reversed':0}

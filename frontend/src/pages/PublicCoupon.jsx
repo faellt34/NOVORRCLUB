@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { StripeModeBanner } from "../components/StripeModeBanner";
+import P5FollowerPanel from "../components/P5FollowerPanel";
+import { saveQr } from "../lib/saveQr";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Copy, MapPin, CalendarDays, Users, CheckCircle2, XCircle, CreditCard, Smartphone, Download } from "lucide-react";
 import { BrandLogo } from "../components/BrandLogo";
@@ -16,6 +18,8 @@ export default function PublicCoupon() {
   const sessionId = params.get("session_id");
   const [amount, setAmount] = useState("");
   const [paying, setPaying] = useState(false);
+  const [p5Enabled, setP5Enabled] = useState(false);
+  const [p5CheckoutEnabled, setP5CheckoutEnabled] = useState(false);
   const [paid, setPaid] = useState(null);
   const [email, setEmail] = useState("");
   const [checkVersion, setCheckVersion] = useState(0);
@@ -72,6 +76,22 @@ export default function PublicCoupon() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [pixRequestId, sessionId, code, checkVersion]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setP5Enabled(false);
+    setP5CheckoutEnabled(false);
+    if (!c || c.status !== "Ativa") return () => { cancelled = true; };
+    api.get("/public/p5/config").then(({ data }) => {
+      if (cancelled) return;
+      const selected = (c.currency || "eur").toLowerCase();
+      setP5Enabled(Boolean(c.p5_eligible && data?.currencies?.[selected]));
+      setP5CheckoutEnabled(Boolean(data?.checkout_currencies?.[selected]));
+    }).catch(() => {
+      if (!cancelled) { setP5Enabled(false); setP5CheckoutEnabled(false); }
+    });
+    return () => { cancelled = true; };
+  }, [c?.cupom, c?.currency, c?.status]);
+
   const pay = async () => {
     if (payingRef.current || awaiting || currency === "brl") return;
     const v = Number(String(amount).replace(",", "."));
@@ -103,16 +123,16 @@ export default function PublicCoupon() {
   };
 
   const copy = () => { navigator.clipboard?.writeText(c.cupom).catch(() => {}); toast.success("Código copiado — mostre-o no local"); };
-  const downloadQr = () => {
-    const svg = document.querySelector("[data-testid=public-coupon-download-qr]")?.parentElement?.querySelector("svg");
-    if (svg) {
-      const img = new Image();
-      img.onload = () => { const cv = document.createElement("canvas"); cv.width = cv.height = 600; const ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 600, 600); ctx.drawImage(img, 30, 30, 540, 540); const a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = `qr-${c.cupom}.png`; a.click(); };
-      img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(new XMLSerializer().serializeToString(svg))));
-    }
-    if (c.claim_id) api.post(`/public/coupon/${encodeURIComponent(code)}/qr-downloaded`, { claim_id: c.claim_id }).catch(() => {});
-    toast.success("QR guardado — mostre-o no restaurante");
+  const downloadQr = async () => {
+    try {
+      const svg = document.querySelector('[data-testid="public-coupon-qr"] svg');
+      const result = await saveQr(svg, `qr-${c.cupom}.png`);
+      if (result === "cancelled") return;
+      if (c.claim_id) api.post(`/public/coupon/${encodeURIComponent(code)}/qr-downloaded`, { claim_id: c.claim_id }).catch(() => {});
+      toast.info(result === "shared" ? "QR partilhado." : "Imagem do QR preparada. Se abrir numa nova janela, use Partilhar → Guardar imagem.");
+    } catch (error) { toast.error(error.message); }
   };
+
   const active = c?.status === "Ativa";
 
   return (
@@ -148,9 +168,9 @@ export default function PublicCoupon() {
                   <div><p className="font-bold text-slate-900">{c.parceiro}</p><p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3 h-3" /> {c.categoria} · {c.cidade}</p></div>
                 </div>
                 <div className={`rounded-2xl p-4 flex items-center gap-4 ${active ? "bg-purple-50" : "bg-slate-100"}`}>
-                  <div className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
-                    <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" />
-                    <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>
+                  <div data-testid="public-coupon-qr" className="bg-white p-2 rounded-xl border border-purple-100 flex flex-col items-center gap-1.5">
+                    {!p5Enabled ? <QRCodeSVG value={`${window.location.origin}/c/${encodeURIComponent(c.cupom)}`} size={92} fgColor="#3B0764" /> : <p className="text-[10px] font-bold text-purple-700 text-center w-[92px]">Use o QR P5 seguro abaixo</p>}
+                    {!p5Enabled && <button data-testid="public-coupon-download-qr" onClick={downloadQr} className="text-[10px] font-semibold text-purple-700 hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> Guardar QR</button>}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-1">O seu código</p>
@@ -187,8 +207,11 @@ export default function PublicCoupon() {
                   {!paid?.blocked && !paid?.checkout_url && !attempt?.checkout_url && pixRequestId && <button disabled={paying} onClick={retryPixCheckout} className="block underline font-semibold">Retomar pedido de pagamento</button>}
                   {!paid?.blocked && (paid?.checkout_url || attempt?.checkout_url) && <a href={paid?.checkout_url || attempt.checkout_url} className="block underline font-semibold">Retomar a mesma cobrança</a>}
                 </div>}
-                {active && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
-                {active && currency !== "brl" && !awaiting && !terminal && !completed && (
+                {active && !p5Enabled && currency === "brl" && !pixRequestId && !terminal && !completed && <p data-testid="public-pix-merchant-bill" className="text-sm text-purple-700 bg-purple-50 rounded-xl p-4">Apresente o cupom ao parceiro. O estabelecimento confirma o valor e gera a cobrança Pix.</p>}
+                {active && p5Enabled && !awaiting && !terminal && !completed && (
+                  <P5FollowerPanel code={code} currency={currency} checkoutEnabled={p5CheckoutEnabled} />
+                )}
+                {active && !p5Enabled && currency !== "brl" && !awaiting && !terminal && !completed && (
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
                     <StripeModeBanner compact />
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>

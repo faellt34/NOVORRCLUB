@@ -1,5 +1,6 @@
 import os
 from partner_access import partner_record, normalized_iban
+from finance_evidence import connect_account_evidence
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -59,18 +60,22 @@ async def payments_config():
 async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
     c = await stripe_config(force=True)
     partners = await db.partners.count_documents({"status": "Ativo"})
-    connected = await db.partners.count_documents({"stripe_charges_enabled": True})
-    missing = [p["nome"] async for p in db.partners.find({"status": "Ativo", "stripe_charges_enabled": {"$ne": True}}, {"_id": 0, "nome": 1})]
+    linked_filter = {"status": "Ativo", "stripe_account_id": {"$regex": "^acct_"}}
+    connected = await db.partners.count_documents(linked_filter)
+    missing = [p["nome"] async for p in db.partners.find(
+        {"status": "Ativo", "$nor": [{"stripe_account_id": {"$regex": "^acct_"}}]},
+        {"_id": 0, "nome": 1}
+    )]
     steps = [
         {"id": "chave", "label": "Chave Stripe válida" + (f" · {c['account_name']}" if c.get("account_name") else ""), "ok": c["account_ok"], "action": None if c["account_ok"] else f"Verifique STRIPE_SECRET_KEY nos secrets de produção. Erro: {c.get('erro')}"},
         {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
         {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
-        {"id": "connect", "label": "Stripe Connect ativo (split automático 80/5/10)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
-        {"id": "perfil", "label": "Perfil de plataforma Connect (verificação manual necessária)", "ok": c.get("platform_profile_ok") is True, "action": "Confirme em dashboard.stripe.com → Settings → Connect → Platform profile se os requisitos e responsabilidades estão concluídos. Esta consulta não cria contas para testar a aprovação."},
-        {"id": "parceiros", "label": f"Parceiros ligados ao Connect (hotéis, rooftops, restaurantes): {connected}/{partners}", "ok": partners > 0 and connected == partners,
-         "action": None if partners > 0 and connected == partners else f"Falta ligar: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. Cada parceiro entra no seu Painel do Parceiro → secção Pagamentos → botão 'Ativar split automático' e conclui o onboarding Stripe (só funciona depois do Connect e do perfil de plataforma estarem ativos)." if missing else "Ainda não há parceiros ativos."},
+        {"id": "connect", "label": "Stripe Connect acessível (aptidão financeira validada por operação)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
+        {"id": "perfil", "label": "Perfil da plataforma Connect — estado não confirmado por esta consulta", "ok": c.get("platform_profile_ok"), "action": "Esta consulta não confirma o perfil da plataforma. Este aviso informativo não bloqueia o P5; cada operação verifica os seus destinatários. Consulte o perfil na Stripe se houver um requisito explícito."},
+        {"id": "parceiros", "label": f"Parceiros com conta Connect associada: {connected}/{partners}", "ok": True if partners > 0 and connected == partners else None,
+         "action": None if partners > 0 and connected == partners else f"Sem associação registada: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. A associação não comprova aptidão para receber. Os requisitos são verificados nos destinatários de cada operação; outros parceiros podem continuar." if missing else "Ainda não há parceiros ativos."},
     ]
-    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": len(steps)}
+    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": sum(1 for s in steps if s["ok"] is not None), "informational": sum(1 for s in steps if s["ok"] is None)}
 
 
 def _product(entry_id: str, name: str):
@@ -155,23 +160,45 @@ async def fulfil(session_id: str, extra: dict):
         {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
         {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
     if not res:
-        return
+        # Retomar uma redação financeira interrompida após marcar pagamento
+        # como recebido; o webhook pode ser repetido sem duplicar comissão.
+        res = await db.payment_transactions.find_one(
+            {"session_id": session_id, "kind": "coupon_pay", "payment_status": "paid"}, NO_ID
+        )
+        if not res:
+            return
     if res.get("kind") == "coupon_pay":
         c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
         partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
-        inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID) if c else None
-        rate = float(c["comissao"]) / 100 if c else 0
+        original_influencer_id = res.get("influencer_id")
+        resolved_influencer_id = original_influencer_id or (c.get("influencer_id") if c else None)
+        inf = await db.influencers.find_one({"id": resolved_influencer_id}, NO_ID) if resolved_influencer_id else None
+        rate = float(res.get("commission_percent_snapshot")
+                     if res.get("commission_percent_snapshot") is not None
+                     else c["comissao"] if c else 0) / 100
+        attribution_mismatch = bool(
+            original_influencer_id and
+            (not c or c.get("influencer_id") != original_influencer_id)
+        )
         gross = float(res["gross_amount"])
         rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
-               "influencer_id": c.get("influencer_id") if c else None, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
-               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method")}
-        try:
-            await db.redemptions.insert_one(dict(rec))
-        except Exception:
+               "influencer_id": resolved_influencer_id, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
+               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method"),
+               "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "review_required" if attribution_mismatch else "accrued_unpaid",
+               "attribution_hold": attribution_mismatch, "attribution_source": "checkout_snapshot" if original_influencer_id else "legacy_campaign_lookup"}
+        inserted = await db.redemptions.update_one(
+            {"idempotency_key": session_id}, {"$setOnInsert": dict(rec)}, upsert=True
+        )
+        if inserted.upserted_id is None:
+            existing = await db.redemptions.find_one({"idempotency_key": session_id}, NO_ID)
+            if existing:
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id}, {"$set": {"redemption_id": existing["id"]}}
+                )
             return
         await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
         from realtime import emit
-        emit("split_executado", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
+        emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
              influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
         from routes_data import mark_converted
         await mark_converted(rec["campaign_id"], rec)
@@ -248,9 +275,12 @@ async def stripe_webhook(request: Request):
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if obj.get("payment_status") == "paid":
             await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
+            from pt_split import settle_webhook_safely
+            await settle_webhook_safely(obj["id"])
+
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
-        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
         if st == "failed":
             from realtime import emit
             emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
@@ -336,29 +366,63 @@ async def public_pay(body: PublicPayIn):
     c = await db.campaigns.find_one({"cupom": code}, NO_ID)
     if not c or c["status"] != "Ativa":
         raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+        raise HTTPException(status_code=409, detail="Cupom expirado")
     if body.amount < 1 or body.amount > 10000:
         raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    from p5_checkout import currency_enabled
+    currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
+    if currency != "eur":
+        raise HTTPException(status_code=409, detail="Esta campanha não usa o checkout EUR. Pague pelo fluxo local do parceiro.")
+    if currency_enabled("eur") and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5 and c.get("influencer_id"):
+        raise HTTPException(status_code=409, detail="P5 ativo: o parceiro deve ler o QR individual e confirmar o valor antes do pagamento.")
+    if not 0 <= float(c["desconto"]) < 100:
+        raise HTTPException(status_code=409, detail="Desconto inválido")
     to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    if to_pay < 0.50:
+        raise HTTPException(status_code=409, detail="Valor a pagar inferior ao mínimo")
     base = dict(
         line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
         mode="payment",
         success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
-        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id", "")},
+        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"],
+                  "partner_id": c.get("parceiro_id", ""),
+                  "influencer_id": c.get("influencer_id") or ""},
     )
     if body.email:
         base["customer_email"] = body.email.strip().lower()
+    # Não confiar numa flag antiga. Ler as capacidades atuais da conta Connect.
+    # Sem aptidão comprovada, o pagamento fica na plataforma aguardando conciliação.
     split = False
-    if partner.get("stripe_account_id") and partner.get("stripe_charges_enabled"):
-        fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
-        base["payment_intent_data"] = {"application_fee_amount": fee, "transfer_data": {"destination": partner["stripe_account_id"]}, "description": f"{code} · {partner.get('nome')}"}
-        split = True
+    destination = partner.get("stripe_account_id")
+    if destination:
+        try:
+            account = stripe.Account.retrieve(destination)
+            connected = connect_account_evidence(account, partner["id"])
+            capable = connected["ready_for_partner_transfer"]
+        except stripe.error.StripeError:
+            capable = False
+        if capable:
+            fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
+            charge_cents = int(round(to_pay * 100))
+            if not 0 <= fee <= charge_cents:
+                raise HTTPException(status_code=409, detail="Comissão incompatível com o total")
+            base["payment_intent_data"] = {
+                "application_fee_amount": fee,
+                "transfer_data": {"destination": destination},
+                "metadata": base["metadata"],
+                "description": f"{code} · {partner.get('nome')}",
+            }
+            split = True
     session = None
+    selected_methods = "card"
     try:
         for pm in (["card", "mb_way"], ["card"]):
             try:
                 session = stripe.checkout.Session.create(**base, payment_method_types=pm)
+                selected_methods = "card/mb_way" if len(pm) == 2 else "card"
                 break
             except stripe.error.InvalidRequestError as e:
                 if pm == ["card"]:
@@ -368,7 +432,14 @@ async def public_pay(body: PublicPayIn):
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
     await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
-                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur", "status": "initiated", "payment_status": "pending", "payment_method": "card/mb_way", "split": split, "created_at": now_iso(), "updated_at": now_iso()})
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur",
+                                              "influencer_id": c.get("influencer_id"),
+                                              "commission_percent_snapshot": float(c["comissao"]),
+                                              "status": "initiated", "payment_status": "pending",
+                                              "payment_method": selected_methods, "split": split,
+                                              "distribution_status": "stripe_transfer_unverified" if split else "manual_reconciliation_required",
+                                              "commission_settlement_status": "accrued_unpaid",
+                                              "created_at": now_iso(), "updated_at": now_iso()})
     return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
 
 
