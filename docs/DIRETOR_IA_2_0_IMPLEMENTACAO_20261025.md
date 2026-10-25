@@ -58,3 +58,23 @@ Revisar diff da branch, executar CI/staging com ambiente não financeiro, confir
 - Limite de 4.000 caracteres por mensagem e recorte do histórico enviado ao modelo. Corrigido o exemplo de split nos comandos do Diretor para 80% parceiro, 5% influencer, 10% RRClub e 5% desconto sobre bruto, sem transformar o desconto em uma transferência financeira.
 - **22/22 testes Python aprovados**, incluindo reservas concorrentes e limites de auditoria. Não foi contactada a Stripe nem usado um modelo LLM pago nestes testes.
 - **Ainda pendente:** build React (as dependências de frontend não estão instaladas no ambiente de teste), validação com utilizador admin em staging e conferência de custos reais por modelo. O limite de chamadas não é um limite garantido em euros. Nenhum deploy na RRClub real.
+
+## Etapa 3 — painéis de produção e revisão final (25/10/2026)
+
+- Administração: padrão de visualização `verified_only=true` obtém somente pagamentos P5 locais pós-webhook da moeda atual, sem somar resgates históricos. Modo antigo acessível separadamente com aviso de não verificação.
+- Influenciador: padrão `verified_only=true` mostra apenas pagamentos P5 atribuídos ao utilizador autenticado e respetivas parcelas. Sem vínculo de `influencer_id`, devolve 403, nunca mistura as identidades. Eventos WebSocket apenas provocam nova leitura autenticada, sem fabricar receita/contagens.
+- Parceiro: copiloto P5 comprovado destacado; valores antigos ficam numa secção histórica recolhida, explicitamente sem conciliação. QR não é prova de pagamento.
+- Extrato mensal legado: avisos visíveis; não é declarado comprovativo Stripe ou pagamento financeiro apenas por constar no histórico.
+- Cupom público: aberturas do link deixam de ser descritas como pessoas pagas/beneficiadas.
+- Ferramentas GitHub do Diretor: por omissão consultam `faellt34/NOVORRCLUB` na branch `mainNNOVO`, que é a branch do projeto, sem confundir com a branch de nome `main`; ambiente pode sobrescrever esses valores.
+- Falha de ciclo IA: ao atingir o limite interno de chamadas, devolve um resumo parcial honesto, sem afirmar que concluiu uma análise incompleta.
+
+### Validação local no último ciclo
+
+- 34/34 testes Python passaram (estratégia, parceiros, orçamento IA, segurança dos testes, regras P5 e ativação).
+- 47/47 testes React passaram em 11 suites.
+- Build React produzido com sucesso na cópia isolada; avisos não bloqueantes de sourcemap do leitor QR e hooks existentes.
+- Sintaxe Python da rota de dados, rota do Diretor e estratégia validada por AST.
+- Nenhum pagamento real, transferência Connect, webhook, limpeza física da base de dados, ou publicação foi executado durante estes testes.
+
+**Pendente para afirmar operação em produção:** disponibilizar o código no servidor, confirmar uma sessão real autenticada com o Diretor, autorizações corretas, ligação Mongo/LLM e exibição de EUR/BRL, sem produzir cobrança de teste involuntária. Testes unitários não substituem esta validação integrada.
