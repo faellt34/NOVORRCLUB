@@ -23,17 +23,34 @@ const AUDIT_LIMIT = 8;
 export default function AdminDashboard() {
   const { refreshUnread } = useApp();
   const [data, setData] = useState(null);
-  // Operational pilot is a read-only view. The start timestamp is stored only in this browser.
-  const [pilotSince, setPilotSince] = useState(() => localStorage.getItem("rrclub_pilot_since") || "");
+  // A única referência do piloto é a data guardada no servidor, não neste browser.
+  const [pilotSince, setPilotSince] = useState("");
+  const [pilotBusy, setPilotBusy] = useState(false);
   const [view, setView] = useState("verified");
   const isVerified = view === "verified";
   const isPilot = view === "pilot" && Boolean(pilotSince);
-  const startPilot = () => {
-    if (pilotSince) return;
-    const start = new Date().toISOString();
-    localStorage.setItem("rrclub_pilot_since", start);
-    setPilotSince(start);
-    setView("pilot");
+  const isReal = isVerified || isPilot;
+  useEffect(() => {
+    let alive = true;
+    api.get("/admin/pilot-baseline").then(({ data: result }) => {
+      if (alive) setPilotSince(result.started_at || "");
+    }).catch((e) => { if (alive) toast.error(apiError(e)); });
+    return () => { alive = false; };
+  }, []);
+  const startPilot = async () => {
+    if (pilotSince || pilotBusy) return;
+    setPilotBusy(true);
+    try {
+      const { data: result } = await api.post("/admin/pilot-baseline");
+      if (!result.started_at) throw new Error("Não foi possível guardar a data do piloto.");
+      setPilotSince(result.started_at);
+      setView("pilot");
+      toast.success("Piloto real iniciado: números anteriores preservados fora dos indicadores.");
+    } catch (e) {
+      toast.error(apiError(e));
+    } finally {
+      setPilotBusy(false);
+    }
   };
   const [stats, setStats] = useState({ receita: 0, comissoes: 0, influencers: 0, parceiros: 0, campanhas: 0, usos: 0, cliques: 0, scans: 0 });
   const [origins, setOrigins] = useState([]);
@@ -52,18 +69,14 @@ export default function AdminDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin", { params: isVerified ? { verified_only: true } : isPilot ? { pilot_since: pilotSince } : {} }), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
+      const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin", { params: isReal ? { verified_only: true } : {} }), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
       setData(d.data);
-      setAudit(isVerified ? [] : isPilot ? a.data.filter((item) => {
-        const when = item.date || item.timestamp || item.created_at;
-        return when && new Date(when).getTime() >= new Date(pilotSince).getTime()
-          && !/\\bTESTE\\b|SIMULAÇ/i.test(String(item.detail || ""));
-      }) : a.data);
+      setAudit(isReal ? [] : a.data);
       setLeads(l.data); setResets(r.data); setFeedback(f.data);
       setStats({ receita: d.data.totals.revenue, comissoes: d.data.totals.commission, influencers: d.data.counts.influencers, parceiros: d.data.counts.partners, campanhas: d.data.counts.campaigns, usos: d.data.funnel.uses, cliques: d.data.funnel.clicks, scans: d.data.funnel.scans || 0 });
       setOrigins(d.data.funnel.origins);
     } catch (e) { toast.error(apiError(e)); }
-  }, [isPilot, isVerified, pilotSince]);
+  }, [isReal]);
   useEffect(() => { load(); }, [load]);
 
   const pushAudit = (action, detail, amount, extra = {}) =>
@@ -74,7 +87,7 @@ export default function AdminDashboard() {
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     // In pilot mode every metric is recalculated with server-side filters.
     // This prevents simulated/stale websocket events from inflating pilot totals.
-    if ((isPilot || isVerified) && ["redencao_registada", "clique_cupao", "indicacao_criada", "cupons_gerados", "pagamento_atualizado", "teste_limpo"].includes(ev.tipo)) {
+    if (isReal && ["redencao_registada", "clique_cupao", "indicacao_criada", "cupons_gerados", "pagamento_atualizado", "teste_limpo"].includes(ev.tipo)) {
       load();
       return;
     }
@@ -144,26 +157,26 @@ export default function AdminDashboard() {
         <div className="flex gap-2">
           <button type="button" onClick={() => setView("verified")} className={`px-3 py-2 rounded-lg text-sm font-semibold ${isVerified ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-700"}`}>Financeiro P5 real</button>
           <button type="button" onClick={() => setView("history")} className={`px-3 py-2 rounded-lg text-sm font-semibold ${view === "history" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>Histórico antigo · não verificado</button>
-          <button type="button" onClick={() => pilotSince ? setView("pilot") : startPilot()} className={`px-3 py-2 rounded-lg text-sm font-semibold ${isPilot ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700"}`}>{pilotSince ? "Piloto real" : "Iniciar piloto real"}</button>
+          <button type="button" disabled={pilotBusy} onClick={() => pilotSince ? setView("pilot") : startPilot()} className={`px-3 py-2 rounded-lg text-sm font-semibold ${isPilot ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700"}`}>{pilotBusy ? "A iniciar…" : pilotSince ? "Piloto real" : "Iniciar piloto real"}</button>
         </div>
-        <p className="text-xs text-slate-500 flex-1">{isVerified
-          ? "Apenas cobranças P5 pagas e consistentes no registo local. Não comprova depósito bancário; histórico fictício permanece preservado e separado."
-          : isPilot
-          ? `Só operações não fictícias após ${new Date(pilotSince).toLocaleString("pt-PT")}. Registos anteriores preservados no Histórico.`
-          : "Histórico completo, incluindo testes e dados antigos. Iniciar piloto fixa uma referência apenas neste navegador."}</p>
+        <p className="text-xs text-slate-500 flex-1">{isPilot
+          ? `Só pagamentos P5 verificados e atividade desde ${new Date(pilotSince).toLocaleString("pt-PT")}. Marco global, histórico preservado.`
+          : isVerified
+          ? pilotSince ? `Resultados reais desde ${new Date(pilotSince).toLocaleString("pt-PT")}; Stripe e histórico antigo preservados.` : "Apenas cobranças P5 localmente confirmadas. Para começar os cliques e scans em zero, clique em Iniciar piloto real."
+          : "Histórico antigo, incluindo testes e registos não verificados. Não conta como receita real."}</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-sistema" icon={Euro} label={isVerified ? "Valor cobrado P5 (30d)" : "Receita do Sistema"} live={stats.receita} format={(v) => eur(+v.toFixed(2))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
-        <KpiCard id="comissoes-agregadas" icon={HandCoins} label={isVerified ? "Parcela RRClub antes das taxas" : "Comissões Agregadas"} live={stats.comissoes} format={(v) => eur(+v.toFixed(2))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
+        <KpiCard id="receita-sistema" icon={Euro} label={isReal ? "Valor cobrado P5 (30d)" : "Receita do Sistema"} live={stats.receita} format={(v) => eur(+v.toFixed(2))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
+        <KpiCard id="comissoes-agregadas" icon={HandCoins} label={isReal ? "Parcela RRClub antes das taxas" : "Comissões Agregadas"} live={stats.comissoes} format={(v) => eur(+v.toFixed(2))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
         <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" live={stats.influencers} />
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-usados" icon={Ticket} label={isVerified ? "Pagamentos P5" : "Pessoas que usaram cupom"} live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
-        <KpiCard id="cliques-total" icon={MousePointerClick} label={isVerified ? "Aberturas de cupom" : "Cliques no cupom"} live={stats.cliques} flash={flash.cliques} />
-        {isVerified ? <KpiCard id="scans-p5" icon={Ticket} label="QR P5 lidos pelo parceiro" live={stats.scans} /> : <>
+        <KpiCard id="cupons-usados" icon={Ticket} label={isReal ? "Pagamentos P5" : "Pessoas que usaram cupom"} live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
+        <KpiCard id="cliques-total" icon={MousePointerClick} label={isReal ? "Aberturas de cupom" : "Cliques no cupom"} live={stats.cliques} flash={flash.cliques} />
+        {isReal ? <KpiCard id="scans-p5" icon={Ticket} label="QR P5 lidos pelo parceiro" live={stats.scans} /> : <>
         <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
         <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
         </>}
@@ -171,8 +184,8 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2">{isVerified ? <div className="card-soft p-6 text-sm text-slate-600">Sem gráfico financeiro especulativo. Os valores acima incluem somente pagamentos P5 locais confirmados; movimentos bancários devem ser reconciliados na Stripe.</div> : <RevenueClicksChart series={data.chart_rc || []} />}</div>
-        {!isPilot && !isVerified && <Recommendations refreshKey={stats.cliques} />}
+        <div className="xl:col-span-2">{isReal ? <div className="card-soft p-6 text-sm text-slate-600">Sem gráfico financeiro especulativo. Os valores acima incluem somente pagamentos P5 locais confirmados; movimentos bancários devem ser reconciliados na Stripe.</div> : <RevenueClicksChart series={data.chart_rc || []} />}</div>
+        {!isReal && <Recommendations refreshKey={stats.cliques} />}
       </div>
 
 
