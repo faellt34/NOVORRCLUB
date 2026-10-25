@@ -92,16 +92,25 @@ async def influencer_dashboard(period: int = 30, verified_only: bool = False, us
             c["revenue"] = round(item["revenue_minor"] / 100, 2)
         claim_q = currency_query({"influencer_id": inf_id, "date": {"$gte": cutoff}}, currency)
         claims = await db.coupon_claims.find(claim_q,
-            {"_id": 0, "is_test": 1, "test_run_id": 1, "origem": 1, "idempotency_key": 1}
+            {"_id": 0, "campaign_id": 1, "is_test": 1, "test_run_id": 1,
+             "livemode": 1, "origem": 1, "idempotency_key": 1}
         ).to_list(20000)
-        openings = sum(not is_synthetic(c) for c in claims)
-        downloads = await db.qr_downloads.count_documents(claim_q)
-        counts = defaultdict(int)
-        async for c in db.coupon_claims.find(claim_q, {"_id": 0, "campaign_id": 1}):
-            counts[c.get("campaign_id")] += 1
+        valid_claims = [c for c in claims if not is_synthetic(c)]
+        openings = len(valid_claims)
+        downloads_list = await db.qr_downloads.find(claim_q,
+            {"_id": 0, "campaign_id": 1, "is_test": 1, "test_run_id": 1,
+             "livemode": 1, "origem": 1, "idempotency_key": 1}
+        ).to_list(20000)
+        valid_downloads = [d for d in downloads_list if not is_synthetic(d)]
+        downloads = len(valid_downloads)
+        counts, download_counts = defaultdict(int), defaultdict(int)
+        for claim in valid_claims:
+            counts[claim.get("campaign_id")] += 1
+        for download in valid_downloads:
+            download_counts[download.get("campaign_id")] += 1
         for c in camps:
             c["claims"] = counts[c["id"]]
-            c["downloads"] = 0
+            c["downloads"] = download_counts[c["id"]]
         active = [c for c in camps if c.get("status") == "Ativa"]
         featured = max(active, key=lambda c: c["uses"]) if active else None
         return {
