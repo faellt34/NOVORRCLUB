@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MousePointerClick, Download, QrCode, CheckCircle2, Clock, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError, downloadCsv, dashboardMoney as eur } from "../lib/api";
@@ -32,19 +32,31 @@ const FunnelKpi = ({ k, value, active, flash, onClick }) => {
   );
 };
 
-export const AbandonAnalysis = ({ events }) => {
+export const AbandonAnalysis = ({ events, includeHistory = false, pilotSince = "" }) => {
   const [period, setPeriod] = useState("7d");
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState(null);
   const [detail, setDetail] = useState(null);
   const [flash, triggerFlash] = useFlash();
 
-  const load = useCallback(() => api.get(`/admin/cliques/analysis?period=${period}`).then((r) => setRows(r.data.lista)).catch((e) => toast.error(apiError(e))), [period]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    setRows(null);
+    api.get("/admin/cliques/analysis", { params: { period, include_history: includeHistory } })
+      .then(({ data }) => { if (active) setRows(data.lista || []); })
+      .catch((e) => { if (active) { setRows([]); toast.error(apiError(e)); } });
+    return () => { active = false; };
+  }, [period, includeHistory, pilotSince]);
 
   useEffect(() => {
     const ev = events[0];
     if (!ev) return;
+    if (!includeHistory && pilotSince && ev.tipo === "novo_clique") {
+      const clickedAt = ev.dados?.date;
+      if (String(ev.dados?.origem || "").toLowerCase() === "teste"
+          || ev.dados?.is_test || ev.dados?.test_run_id || ev.dados?.livemode === false
+          || !clickedAt || !Number.isFinite(Date.parse(clickedAt)) || Date.parse(clickedAt) < Date.parse(pilotSince)) return;
+    }
     if (ev.tipo === "novo_clique" && ev.dados) {
       setRows((r) => r && (r.some((x) => x.id === ev.dados.id) ? r : [{ id: ev.dados.id, date: ev.dados.date, origem: ev.dados.origem, cliente: ev.dados.cliente, influencer: ev.dados.influencer, campanha: ev.dados.campaign, cupom: ev.dados.coupon, qr: false, estado: "Sem download", valor: null, enter: true }, ...r].slice(0, 500)));
       triggerFlash("total"); triggerFlash("sem_download");
@@ -55,7 +67,7 @@ export const AbandonAnalysis = ({ events }) => {
       setRows((r) => r && r.map((x) => x.id === ev.claim_id ? { ...x, estado: "Converteu", converted_at: ev.at, valor: ev.valor, enter: true } : x));
       triggerFlash("convertidos");
     }
-  }, [events]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [events, includeHistory, pilotSince]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => {
     const list = rows || [];
@@ -75,7 +87,11 @@ export const AbandonAnalysis = ({ events }) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Análise de Abandono</h3>
-          <p className="text-xs text-slate-500">Do clique ao restaurante — em tempo real</p>
+          <p className="text-xs text-slate-500">{includeHistory
+            ? "Histórico antigo, incluindo interações não verificadas"
+            : pilotSince
+            ? `Do clique ao restaurante · piloto desde ${new Date(pilotSince).toLocaleString("pt-PT")}`
+            : "Do clique ao restaurante — inicia o piloto real para excluir testes anteriores"}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="inline-flex rounded-xl bg-slate-100 p-1" data-testid="abandon-period-filter">
