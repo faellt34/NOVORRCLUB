@@ -29,3 +29,14 @@
 ## Deploy seguro
 
 Revisar diff da branch, executar CI/staging com ambiente não financeiro, confirmar que o painel da RRClub atual e as rotas P5 continuam intactos; só depois integrar e publicar mediante confirmação do administrador.
+
+## Fase 2 — Copiloto do parceiro (25/10/2026)
+
+- Rota `GET /api/partner/insights-p5`, protegida por `require_role("partner")` e `partner_record`. A identidade do parceiro vem da sessão e nunca de um ID escolhido pelo cliente.
+- Apenas pagamentos P5 com status local pós-webhook, moeda certa, snapshots consistentes e sem `is_test`, disputas ou reembolsos entram nas vendas pagas do parceiro.
+- Calcula parcela do parceiro, valor efetivamente cobrado pelo checkout, ticket médio e top campanhas com pagamentos, sempre por moeda e sem tarifa inventada.
+- Fornece até 3 ações comerciais baseadas em evidências, por exemplo verificar checkout quando há scans sem pagamento no recorte, acompanhar Connect pendente ou aumentar amostra antes de concluir ROI.
+- Em `/partner` aparece o novo **Copiloto de crescimento**. Os KPIs antigos de resgates passam para uma seção recolhida por padrão, com aviso de que não foram conciliados e podem incluir dados fictícios. Nenhum registo foi apagado.
+- 5 testes unitários da Fase 2 aprovados: isolamento por parceiro, exclusão de outra moeda, testes/reembolsos/legado, percentuais devidos e recomendações sem ROI fabricado.
+
+**Pendente:** teste integral autenticado em staging com utilizador parceiro (incluindo Josicleide/Sheyson apenas após consentimento), compilação React e validação do deploy. A interface atual permanece inalterada em produção.

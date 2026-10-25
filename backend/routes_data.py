@@ -1,6 +1,7 @@
 from payment_policy import reporting_currency, currency_query
 import os
 from partner_access import partner_record
+from diretor_parceiros import partner_growth_report
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -144,6 +145,13 @@ def _pilot_record_visible(item: dict, start: datetime) -> bool:
         return value >= start
     except (ValueError, TypeError):
         return False
+
+
+@router.get("/partner/insights-p5")
+async def partner_insights_p5(user: dict = Depends(require_role("partner"))):
+    """Read-only: segurança por partner_id autenticado, sem acesso a outros negócios."""
+    partner = await partner_record(user, db)
+    return await partner_growth_report(partner)
 
 
 @router.get("/partner/qr/activity")

@@ -9,6 +9,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { QrScannerDialog } from "../components/QrScannerDialog";
 import { parseCustomerQr } from "../lib/p5Scan";
 import { PartnerOnboarding } from "../components/PartnerOnboarding";
+import { ParceiroCopiloto } from "../components/ParceiroCopiloto";
 import { CouponQrDialog } from "../components/CouponQrDialog";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
@@ -263,6 +264,11 @@ export default function PartnerDashboard() {
         ))}
       </section>
 
+      <ParceiroCopiloto />
+
+      <details className="card-soft p-4" data-testid="partner-historico-nao-conciliado">
+        <summary className="text-sm font-semibold text-slate-700 cursor-pointer">Consultar histórico de resgates — valores não conciliados, podendo incluir simulações</summary>
+        <p className="text-xs text-amber-700 mt-2 mb-3">Os números abaixo representam registos históricos e não comprovam pagamentos. Utilize o Copiloto acima para valores P5 confirmados.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
         <KpiCard id="redencoes" icon={Ticket} label="Redenções" live={totals.count} format={num} flash={flash.count} trend={trend.count} />
@@ -270,6 +276,8 @@ export default function PartnerDashboard() {
         <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão Devida" live={totals.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={trend.commission} />
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={totals.ticket} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
+
+      </details>
 
       {data.partner?.currency !== "brl" && <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
