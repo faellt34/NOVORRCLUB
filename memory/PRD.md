@@ -328,3 +328,6 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - PT: p5_checkout.py — checkout live exige live_enabled() (ENABLED+LIVE_ENABLED), não AUTO_TRANSFER; destinatários Connect pendentes não bloqueiam; tx guarda split 5/80/5/10 com pt_split_status awaiting_manual_transfer_auto_disabled|awaiting_recipient_onboarding|awaiting_paid_webhook, destinos possivelmente None (settle_new_p5_payment já mantém "held" nesses casos — comissão preservada, nunca redirecionada). /public/p5/config prod: live_pt_checkout_ready=true, pt_automatic_transfers=true. 29 testes P5 passam.
 - Desconto: campanhas usam % (5%/10%), quote P5 = 5% da conta; requisito comunicado €5/R$5 fixo NÃO aplicado (decisão do CEO pendente).
 - Métodos MB WAY: não verificáveis sem criar sessão (exige credenciais de parceiro ou Stripe Dashboard).
+
+## PENDENTE CEO — REEMBOLSO (não esquecer)
+- CEO exige reembolso de créditos consumidos pelo Diretor IA durante a resolução repetida do git/500 (recarga 150€). Canal oficial: support@emergent.sh com job ID 4e4b379c-f4f1-4ca9-a2c7-ed52ec99f670, screenshots e descrição. Lembrar em cada entrega até o CEO confirmar que enviou.

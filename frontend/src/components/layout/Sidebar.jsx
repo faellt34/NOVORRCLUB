@@ -39,7 +39,7 @@ const MENUS = {
 };
 
 const ROLE_LABEL = { influencer: "Influencer", partner: "Parceiro", admin: "Admin" };
-import { BrandMark } from "../BrandLogo";
+import { BrandLogo } from "../BrandLogo";
 const ROLE_ICONS = { influencer: Crown, partner: QrCode, admin: ShieldCheck };
 
 export const SidebarContent = ({ onNavigate }) => {
@@ -64,12 +64,8 @@ export const SidebarContent = ({ onNavigate }) => {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#070B1F]/30 to-[#070B1F]" />
       </div>
       <div className="relative px-5 pt-6 pb-4">
-        <div className="flex items-center gap-2.5" data-testid="sidebar-logo">
-          <BrandMark className="w-9 h-9" />
-          <div>
-            <p className="font-display font-extrabold text-white leading-tight"><span className="text-indigo-400">RR</span>Club</p>
-            <p className="text-[10px] uppercase tracking-widest text-indigo-300/80">Luxury Experiences</p>
-          </div>
+        <div data-testid="sidebar-logo">
+          <BrandLogo tagline />
         </div>
       </div>
 

@@ -393,6 +393,8 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
         raise HTTPException(403, "Cobrança pertence a outra sessão de seguidor")
     if rec["expires_at"] <= now_iso():
         raise HTTPException(409, "Cobrança expirada. Peça ao parceiro para preparar outra.")
+    from routes_pix import trusted_origin, availability_configuration
+    origin = trusted_origin(body.origin_url)
     if rec.get("checkout_url"):
         return {
             "checkout_url": rec["checkout_url"],
@@ -402,8 +404,6 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
     if rec["status"] not in ("pending", "awaiting_connect"):
         raise HTTPException(409, "Cobrança em preparação. Aguarde e consulte a mesma referência.")
 
-    from routes_pix import trusted_origin, availability_configuration
-    origin = trusted_origin(body.origin_url)
     campaign = await db.campaigns.find_one({"id": rec["campaign_id"]}, NO_ID)
     partner = await db.partners.find_one({"id": rec["partner_id"]}, NO_ID)
     if not campaign or campaign.get("status") != "Ativa" or not partner:

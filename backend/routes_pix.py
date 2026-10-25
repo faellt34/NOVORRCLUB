@@ -130,8 +130,14 @@ def totals(amount, discount, commission):
 
 
 def trusted_origin(value):
-    origin = value.rstrip('/')
-    allowed = {v.strip().rstrip('/') for v in os.getenv('PAYMENT_ALLOWED_ORIGINS', os.getenv('FRONTEND_URL', '')).split(',') if v.strip()}
+    origin = (value or '').strip().rstrip('/').lower()
+    configured = {v.strip().rstrip('/').lower() for v in os.getenv('PAYMENT_ALLOWED_ORIGINS', os.getenv('FRONTEND_URL', '')).split(',') if v.strip()}
+    allowed = set(configured)
+    for o in configured:
+        p = urlsplit(o)
+        if p.scheme == 'https' and p.netloc:
+            host = p.netloc[4:] if p.netloc.startswith('www.') else 'www.' + p.netloc
+            allowed.add(f'https://{host}')
     parsed = urlsplit(origin)
     if origin not in allowed or parsed.scheme != 'https' or parsed.path or parsed.query or parsed.fragment:
         raise HTTPException(400, 'Origem de pagamento não autorizada')

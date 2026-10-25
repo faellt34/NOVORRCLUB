@@ -1,13 +1,13 @@
 {
-  "name": "RRclub · Luxury Experiences",
-  "short_name": "RRclub",
+  "name": "R-Conekta by RRClub",
+  "short_name": "R-Conekta",
   "description": "Cupons, QR e comissões para influencers e parceiros de experiências de luxo.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#08040E",
-  "theme_color": "#6E2BFF",
+  "theme_color": "#203047",
   "lang": "pt-PT",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
