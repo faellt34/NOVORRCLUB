@@ -198,8 +198,10 @@ def _pick_files(area: str, pergunta: str, ficheiro: str) -> list[str]:
     return list(dict.fromkeys(scored[:2] + default))[:4]
 
 
-GH_REPO = os.environ.get("GITHUB_REPO", "")
-GH_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+# Este projeto publica a partir da branch mainNNOVO; 'main' é outra
+# branch do repositório e não deve ser usada por omissão nas análises do Diretor.
+GH_REPO = os.environ.get("GITHUB_REPO") or "faellt34/NOVORRCLUB"
+GH_BRANCH = os.environ.get("GITHUB_BRANCH") or "mainNNOVO"
 
 
 def _gh_headers() -> dict:
