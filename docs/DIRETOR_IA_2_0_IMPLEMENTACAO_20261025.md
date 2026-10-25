@@ -49,3 +49,12 @@ Revisar diff da branch, executar CI/staging com ambiente não financeiro, confir
 - Adicionados 2 testes de regressão da segurança dos testes. **17/17 testes unitários de Diretor e Copiloto aprovados**, sem ligação à Stripe/MongoDB real.
 - Credenciais de versões anteriores podem continuar no histórico Git. Se corresponderem a acessos ainda válidos, o titular deve revogá-las ou alterá-las; esta atualização não altera contas nem remove histórico Git.
 - **Ainda pendente:** compilação frontend, testes autenticados em staging e validação de rotas e permissões. Nenhum deploy ou movimento financeiro nesta etapa.
+
+## Etapa 2 da consolidação — orçamento e lotes IA (25/10/2026)
+
+- `backend/diretor_orcamento.py` centraliza os limites e seleciona lotes de auditoria sem duplicados. A auditoria deixa de iniciar dezenas de chamadas em paralelo: analisa até **3 ficheiros por confirmação**, com posição do próximo lote e número total no retorno.
+- O contador diário passa a reservar chamadas de forma atómica em `llm_quota`, inicializando com o histórico de `llm_usage`. Uma conversa contabiliza **cada** interação com o modelo, e não apenas um pedido HTTP. Isto reduz risco de ultrapassar o limite quando há pedidos simultâneos.
+- O ecrã do Diretor avisa do consumo por lote, permite continuar o lote seguinte e identifica que os resultados são parciais. O indicador é agora **Chamadas IA**, porque não representa despesa real em euros.
+- Limite de 4.000 caracteres por mensagem e recorte do histórico enviado ao modelo. Corrigido o exemplo de split nos comandos do Diretor para 80% parceiro, 5% influencer, 10% RRClub e 5% desconto sobre bruto, sem transformar o desconto em uma transferência financeira.
+- **22/22 testes Python aprovados**, incluindo reservas concorrentes e limites de auditoria. Não foi contactada a Stripe nem usado um modelo LLM pago nestes testes.
+- **Ainda pendente:** build React (as dependências de frontend não estão instaladas no ambiente de teste), validação com utilizador admin em staging e conferência de custos reais por modelo. O limite de chamadas não é um limite garantido em euros. Nenhum deploy na RRClub real.

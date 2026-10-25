@@ -13,11 +13,12 @@ export const SecurityAudit = ({ onProposed }) => {
   useEffect(() => { api.get("/diretor/auditoria").then((r) => setData(r.data?.id ? r.data : null)).catch(() => {}); }, []);
 
   const run = async () => {
-    let custo = "≈14";
+    const inicio = data?.proximo_inicio ?? 0;
+    let custo = "até 3";
     try { const { data: u } = await api.get("/diretor/uso"); custo = `${u.custo_auditoria} (usadas hoje: ${u.hoje}/${u.limite})`; } catch {}
-    if (!window.confirm(`A auditoria completa gasta ${custo} chamadas de IA dos seus créditos. Continuar?`)) return;
+    if (!window.confirm(`Este lote da auditoria pode consumir ${custo} chamadas de IA. A contagem não equivale ao custo em euros. Continuar?`)) return;
     setBusy(true);
-    try { const { data: d } = await api.post("/diretor/auditoria", {}, { timeout: 300000 }); setData(d); toast.success(`Auditoria concluída: ${d.achados.length} achados em ${d.ficheiros.length} ficheiros`); }
+    try { const { data: d } = await api.post(`/diretor/auditoria?inicio=${inicio}&limite_ficheiros=3`, {}, { timeout: 300000 }); setData(d); setFilter(""); toast.success(`Lote concluído: ${d.achados.length} achados em ${d.ficheiros.length} ficheiros`); }
     catch (e) { toast.error(apiError(e)); } finally { setBusy(false); }
   };
   const propose = async (f) => {
@@ -29,17 +30,18 @@ export const SecurityAudit = ({ onProposed }) => {
   return (
     <div className="card-soft p-5" data-testid="security-audit-card">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-        <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">Auditoria de Segurança</h3>
-          {data && <span className="text-[10px] text-slate-400">{fmt(data.timestamp)} · {data.ficheiros.length} ficheiros</span>}</div>
+        <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-purple-600" /><h3 className="text-lg font-semibold text-slate-900">Auditoria de Segurança · por lotes</h3>
+          {data && <span className="text-[10px] text-slate-400">{fmt(data.timestamp)} · {data.ficheiros.length} ficheiros neste lote {data.total_ficheiros ? `de ${data.total_ficheiros}` : ""}</span>}</div>
         <div className="sm:ml-auto flex items-center gap-2">
           {data && ["alta", "media", "baixa"].map((s) => <button key={s} data-testid={`audit-filter-${s}`} onClick={() => setFilter(filter === s ? "" : s)} className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${SEV[s]} ${filter === s ? "ring-2 ring-purple-400" : ""}`}>{data.resumo[s]} {s}</button>)}
           <button data-testid="audit-run" disabled={busy} onClick={run} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-xs font-semibold btn-press">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : data ? <RefreshCw className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />} {busy ? "A auditar todas as rotas (≈1 min)..." : data ? "Repetir auditoria" : "Auditar todas as rotas"}
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : data ? <RefreshCw className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />} {busy ? "A auditar lote..." : data?.proximo_inicio != null ? "Auditar próximo lote" : data ? "Reiniciar auditoria" : "Auditar 3 ficheiros"}
           </button>
         </div>
       </div>
-      {!data && !busy && <p className="text-sm text-slate-400 py-6 text-center" data-testid="audit-empty">O subagente Backend revê todos os ficheiros de rotas de uma vez e lista os achados aqui.</p>}
-      {data && shown.length === 0 && <p className="text-sm text-slate-400 py-6 text-center">Sem achados{filter ? ` de severidade ${filter}` : ""}.</p>}
+      {!data && !busy && <p className="text-sm text-slate-400 py-6 text-center" data-testid="audit-empty">O subagente Backend analisa até 3 ficheiros por lote, com a sua confirmação antes de consumir chamadas de IA.</p>}
+      {data && <p className="text-[11px] text-slate-500">Mostram-se apenas os resultados deste lote. {data.proximo_inicio != null ? `Próximo lote começa no ficheiro ${data.proximo_inicio + 1}.` : "Último lote concluído."}</p>}
+      {data && shown.length === 0 && <p className="text-sm text-slate-400 py-6 text-center">Sem achados neste lote{filter ? ` de severidade ${filter}` : ""}.</p>}
       <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
         {shown.map((f) => (
           <details key={f.id} data-testid={`audit-finding-${f.id}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">

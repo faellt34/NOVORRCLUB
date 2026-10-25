@@ -18,7 +18,7 @@ export const CreditMeter = ({ refreshKey }) => {
   return (
     <button data-testid="credit-meter" onClick={setLimit} title="Clique para alterar o limite diário" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs hover:border-purple-300 btn-press">
       <Coins className={`w-3.5 h-3.5 ${pct >= 90 ? "text-red-500" : "text-amber-500"}`} />
-      <span className="font-semibold text-slate-700">Créditos IA hoje: <span data-testid="credit-meter-value">{u.hoje}/{u.limite}</span></span>
+      <span className="font-semibold text-slate-700">Chamadas IA hoje: <span data-testid="credit-meter-value">{u.hoje}/{u.limite}</span></span>
       <span className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden"><span className={`block h-full ${pct >= 90 ? "bg-red-500" : "bg-purple-500"}`} style={{ width: `${pct}%` }} /></span>
     </button>
   );

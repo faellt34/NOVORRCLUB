@@ -9,13 +9,14 @@ import sys
 import tempfile
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from core import db, NO_ID, require_role, audit, new_id, now_iso
 from routes_data import since, enrich_campaigns
 from diretor_tools import consultar_logs, metricas_granulares, diagnosticar_sistema, briefing as _briefing
 from diretor_estrategia import snapshot_currency, resumo_estrategico, is_new_p5, financial_state, amounts_minor, is_synthetic
+from diretor_orcamento import LIMITE_DIARIO_DEFAULT, AUDITORIA_LOTE_MAX, MAX_PASSOS_CONVERSA, LimiteAtingido, reservar_quota_diaria, selecionar_lote_auditoria
 
 router = APIRouter(prefix="/diretor", dependencies=[Depends(require_role("admin"))])
 MODEL = ("gemini", "gemini-2.5-flash")
@@ -56,7 +57,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Coordena
           "- listar_hoteis(): hotéis/parceiros com performance\n"
           "- analisar_performance_hotel(hotel_id)\n"
           "- criar_campanha(nome, hotel_id, influencer_id, data_inicio, data_fim, formato)\n"
-          "- gerar_contrato(hotel_id, influencer_id, split, duracao)  # split ex: {\"hotel\":75,\"influencer\":5,\"rrclub\":10,\"stripe\":10}\n"
+          "- gerar_contrato(hotel_id, influencer_id, split, duracao)  # split: {\"parceiro\":80,\"influencer\":5,\"rrclub\":10,\"desconto\":5} sobre o bruto, sujeito às taxas reais\n"
           "- enviar_email(destinatario, assunto, corpo)\n"
           "- gerar_qr_code(influencer_id, campanha_id)\n"
           "- consultar_financeiro(): relatório P5 por moeda e distinção entre pago local, Connect e banco.\n"
@@ -77,7 +78,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Coordena
 
 
 class MsgIn(BaseModel):
-    mensagem: str
+    mensagem: str = Field(min_length=1, max_length=4000)
     modelo: str = "gemini"
 
 
@@ -299,24 +300,24 @@ async def consultar_licoes(**_):
     return {"total": len(items), "licoes": items} if items else {"total": 0, "licoes": [], "nota": "ainda não há rejeições registadas"}
 
 
-LIMITE_DIARIO_DEFAULT = 60
-
-
 async def _llm_guard(origem: str, n: int = 1):
     from datetime import datetime as _dt
     hoje = _dt.now(timezone.utc).date().isoformat()
     cfg = await db.settings.find_one({"id": "diretor"}, NO_ID) or {}
     limite = int(cfg.get("limite_diario") or LIMITE_DIARIO_DEFAULT)
-    usado = await db.llm_usage.count_documents({"dia": hoje})
-    if usado + n > limite:
-        raise HTTPException(status_code=429, detail=f"Limite diário de créditos IA atingido ({usado}/{limite} chamadas hoje). Aumente o limite em Definições do Diretor ou tente amanhã.")
+    try:
+        await reservar_quota_diaria(db.llm_quota, db.llm_usage, hoje, limite, n)
+    except LimiteAtingido as e:
+        raise HTTPException(status_code=429, detail=f"Limite diário de IA atingido ({e.usado}/{e.limite} chamadas hoje). Ajuste o limite ou tente amanhã.") from e
     await db.llm_usage.insert_many([{"id": new_id("llm"), "dia": hoje, "origem": origem, "timestamp": now_iso()} for _ in range(n)])
 
 
 async def uso_hoje() -> dict:
     hoje = datetime.now(timezone.utc).date().isoformat()
     cfg = await db.settings.find_one({"id": "diretor"}, NO_ID) or {}
-    return {"hoje": await db.llm_usage.count_documents({"dia": hoje}), "limite": int(cfg.get("limite_diario") or LIMITE_DIARIO_DEFAULT),
+    quota = await db.llm_quota.find_one({"_id": f"diretor:{hoje}"}) or {}
+    historico = await db.llm_usage.count_documents({"dia": hoje})
+    return {"hoje": max(int(quota.get("usado", 0)), historico), "limite": int(cfg.get("limite_diario") or LIMITE_DIARIO_DEFAULT),
             "por_origem": {o: await db.llm_usage.count_documents({"dia": hoje, "origem": o}) for o in ("diretor", "subagente", "auditoria")}}
 
 
@@ -391,10 +392,9 @@ async def _queue(tipo: str, args: dict) -> dict:
 
 @router.post("/conversar")
 async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
-    await _llm_guard("diretor")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     hist = await db.conversas_diretor.find({"user_id": user["id"]}, NO_ID).sort("timestamp", -1).to_list(6)
-    prior = "\n".join(f"CEO: {h['mensagem_user']}\nDiretor: {h['resposta_diretor']}" for h in reversed(hist))
+    prior = "\n".join(f"CEO: {str(h.get('mensagem_user', ''))[:800]}\nDiretor: {str(h.get('resposta_diretor', ''))[:1000]}" for h in reversed(hist))
     licoes = await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(8)
     lic_txt = "\n".join(f"- Proposto: {l['proposto'][:120]} | Rejeitado porque: {l['motivo'][:120]} | Fazer diferente: {l['fazer_diferente'][:120]}" for l in licoes)
     m = MODELOS.get(body.modelo, MODELOS["gemini"])
@@ -402,7 +402,8 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     text = (f"Contexto recente:\n{prior}\n\n" if prior else "") + f"Hoje: {datetime.now(timezone.utc).date().isoformat()}\nCEO: {body.mensagem}"
     chamadas, pendentes, resposta = [], [], None
     try:
-      for _ in range(5):
+      for _ in range(MAX_PASSOS_CONVERSA):
+        await _llm_guard("diretor")
         out = _parse(await chat.send_message(UserMessage(text=text)))
         if "funcao" in out:
             fn, args = out["funcao"], out.get("args") or {}
@@ -435,6 +436,11 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
             continue
         resposta = out.get("resposta") or json.dumps(out, ensure_ascii=False)
         break
+    except HTTPException as e:
+      if e.status_code == 429 and pendentes:
+        resposta = f"{e.detail} Foram guardadas {len(pendentes)} ações pendentes para sua aprovação; nenhuma foi executada."
+      else:
+        raise
     except Exception as e:
       resposta = f"Erro técnico ao processar o pedido ({type(e).__name__}). A equipa técnica foi notificada; tente novamente."
       from observability import record
@@ -637,7 +643,7 @@ async def reconciliar(body: ReconciliarIn, user: dict = Depends(require_role("ad
 @router.get("/uso")
 async def uso():
     files = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
-    return {**await uso_hoje(), "custo_auditoria": len(files)}
+    return {**await uso_hoje(), "custo_auditoria": min(AUDITORIA_LOTE_MAX, len(files)), "total_ficheiros": len(files)}
 
 
 class LimiteIn(BaseModel):
@@ -734,7 +740,7 @@ def _verify(files: list) -> dict:
             return {"ok": False, "etapa": "import server", "erro": r.stderr[-600:]}
     # Nunca executar em produção a suite completa: contém testes de integração
     # que criam campanhas e requerem uma instância local isolada.
-    safe_tests = ("tests.test_diretor_estrategia", "tests.test_diretor_parceiros", "tests.test_diretor_test_safety")
+    safe_tests = ("tests.test_diretor_estrategia", "tests.test_diretor_parceiros", "tests.test_diretor_test_safety", "tests.test_diretor_orcamento")
     if py:
         r = _run([sys.executable, "-m", "unittest", *safe_tests], cwd=CODE_DIRS["backend"], timeout=60)
         if r.returncode != 0:
@@ -792,14 +798,19 @@ async def _audit_file(rel: str) -> list:
 
 
 @router.post("/auditoria")
-async def auditoria(user: dict = Depends(require_role("admin"))):
-    files = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
+async def auditoria(inicio: int = Query(0, ge=0), limite_ficheiros: int = Query(AUDITORIA_LOTE_MAX, ge=1, le=AUDITORIA_LOTE_MAX), user: dict = Depends(require_role("admin"))):
+    todos = [f for f in _code_index("backend") if f.startswith("routes_") or f in ("core.py", "realtime.py", "mailer.py", "storage.py")]
+    lote = selecionar_lote_auditoria(todos, inicio, limite_ficheiros)
+    files = lote["ficheiros"]
+    if not files:
+        raise HTTPException(status_code=400, detail="Lote de auditoria vazio; recomece no início 0")
     await _llm_guard("auditoria", len(files))
     results = await asyncio.gather(*[_audit_file(f) for f in files])
     achados = [a for r in results for a in r]
     order = {"alta": 0, "media": 1, "baixa": 2}
     achados.sort(key=lambda a: order.get(a["severidade"], 3))
     doc = {"id": new_id("audit"), "timestamp": now_iso(), "ficheiros": files, "achados": achados,
+           "inicio": lote["inicio"], "proximo_inicio": lote["proximo_inicio"], "total_ficheiros": lote["total"],
            "resumo": {k: sum(1 for a in achados if a["severidade"] == k) for k in ("alta", "media", "baixa")}, "por": user["nome"]}
     await db.auditorias.insert_one(dict(doc))
     await audit("AUDITORIA", f"Auditoria de segurança: {len(achados)} achados em {len(files)} ficheiros", user, doc["id"])
