@@ -65,6 +65,8 @@ async def enrich_campaigns(camps):
 @router.get("/dashboard/influencer")
 async def influencer_dashboard(period: int = 30, verified_only: bool = False, user: dict = Depends(require_role("influencer")), currency: str = Depends(reporting_currency)):
     inf_id = user.get("influencer_id")
+    if not isinstance(inf_id, str) or not inf_id.strip():
+        raise HTTPException(403, "Perfil de influenciador sem associação. Contacte o administrador.")
     if verified_only:
         # Registo financeiro P5 local: nunca usar resgates manuais como pagamentos.
         from diretor_estrategia import is_new_p5, financial_state, amounts_minor, is_synthetic
