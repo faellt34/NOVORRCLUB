@@ -1,10 +1,14 @@
 """Offline regression tests: no calls to Stripe, bank, email or AI."""
 from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import HTTPException
-from tests.test_pix_service import env, run, body, paid
+
+from tests.test_pix_service import env as _env_fixture, run, body, paid  # isort: skip
 import routes_pix as pix
 from payments.pix.checks import WEBHOOK_EVENTS, receiving_status
+
+env = _env_fixture
 
 
 def test_missing_configuration_diagnostic_never_calls_stripe(env, monkeypatch):

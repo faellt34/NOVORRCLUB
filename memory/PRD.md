@@ -349,3 +349,10 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## 2026-10-26 — Reconcile Pix BR pronto (iteration_36: 72/72)
 - reconcile exige evidência independente (email Stripe == email do utilizador OU nome Stripe == nome do cadastro), metadata vazia e conta registada; conflito nunca religa; audit. Diagnóstico devolve evidencia_independente. Integração offline: bloqueado → reconcile → checkout_url Stripe Pix.
 - Código já commitado pela plataforma (branch integracao-google-rrclub-20261019); NÃO está no GitHub mainNNOVO (agente não faz push; usar Save to Github). Aguarda "publica": deploy → reconcile c-bdb38f42d4 → diagnóstico → CEO clica Pagar com Pix (sem pagar).
+
+## 2026-06 — Pix P5 Brasil: reconciliação de titularidade (c-bdb38f42d4)
+- `ownership_evidence()` em routes_pix.py: prova por email, nome (tokens), KYC Stripe concluído; exige conta única na base + ≥2 provas; nunca reescreve metadata de outro cadastro.
+- Deploy controlado feito; reconcile executado em produção: Josicleide (p-fc194b8f5c) e Sheyson (if-da6af205f9) → `associado agora`, `receiving_ready:true`, bloqueio null. Audit `PIX CONNECT` gravado.
+- Gates de plataforma Pix em produção: provider_verified true (10/10 checks), livemode. Nenhuma cobrança real.
+- Pendente: prova final do checkout em produção exige sessão da parceira (scan+aprovação) — não há credenciais da Josicleide; validado só com Stripe mockado (iteration_38, 74 testes).
+- Resend: pedido ainda pendente.

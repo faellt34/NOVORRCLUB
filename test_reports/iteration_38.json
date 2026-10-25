@@ -1,0 +1,30 @@
+{
+  "summary": "Offline pytest + code review of the refined ownership_evidence()/recipients_reconcile in routes_pix.py. The 5 listed files ran with 74 passed (plus 9 subtests) in 0.85s. No live HTTP, Stripe or production calls were made. All requested invariants hold in the code.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ownership_evidence (routes_pix.py:82-85)", "issue": "If the record name has only one token longer than 2 chars (e.g. 'Maria'), rec_tokens[0] == rec_tokens[-1], so any Stripe name with 2+ tokens that contains that one token counts as a name proof. This is a weaker proof than intended. Consider requiring len(rec_tokens) >= 2."},
+      {"endpoint": "ownership_evidence", "issue": "Name tokens are not normalized for accents or punctuation ('José' vs 'Jose', 'Torres,'). This can only cause false negatives, so it is safe but may block real owners from reconciling."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_pix_recipients_reconcile.py", "/app/test_reports/pytest/pytest_results_iter38.xml"],
+  "action_items": [
+    "Optional: add tests where KYC is not complete (non-empty requirements.currently_due, past_due or disabled_reason with charges and payouts enabled) to show kyc_stripe_concluido is False and reconcile is refused",
+    "Optional: add a test where the Stripe name has a single token (e.g. 'Sheyson') and is the only other proof, to show it is rejected by points rather than by the uniqueness check (acct_d is currently only used in the shared-account test)",
+    "Optional: require at least 2 significant tokens in the record name before counting a name proof"
+  ],
+  "critical_code_review_comments": [
+    "Verified: name proof requires the first and last significant (>2 chars) tokens of the record name to be present in a Stripe name (business_profile.name or individual first+last), and the Stripe name must have at least 2 tokens",
+    "Verified: kyc_stripe_concluido = charges_enabled AND payouts_enabled AND no currently_due, past_due or disabled_reason",
+    "Verified: suficiente = conta_unica_na_base (no other partner or influencer has the same pix_stripe_account_id) AND at least 2 of the 3 proofs",
+    "Verified reconcile order: already bound to the same owner -> 'já associado'; any partner_id or influencer_id in metadata -> conflict, never rewritten; then country == BR and id == stored account; then evidence; only after that a single accounts.update with metadata only and an idempotency key, followed by an audit entry",
+    "The case where the partner and influencer share one account is caught by the uniqueness check (conta_unica=False)"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (74/74)", "frontend": "N/A"},
+  "seed_data_creation": "None (mongomock in-memory)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run the 5 listed pytest files offline (they should give 74 passed). The reconcile tests use mongomock_motor and a mocked provider. Test coverage gaps are listed in action_items."
+}
