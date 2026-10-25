@@ -331,3 +331,9 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 
 ## PENDENTE CEO — REEMBOLSO (não esquecer)
 - CEO exige reembolso de créditos consumidos pelo Diretor IA durante a resolução repetida do git/500 (recarga 150€). Canal oficial: support@emergent.sh com job ID 4e4b379c-f4f1-4ca9-a2c7-ed52ec99f670, screenshots e descrição. Lembrar em cada entrega até o CEO confirmar que enviou.
+
+## 2026-10-25 — Identidade R-Conekta + P5 (iteration_35 frontend: todos passam)
+- Identidade: ficheiros de 268c658 (index.html, manifest, r-conekta-icon.svg, icon-192/512, BrandLogo.jsx) + Sidebar usa <BrandLogo tagline/> preservando fintech/globo. Nome R-Conekta, "by RRClub".
+- P5 bugs reais corrigidos: (1) p5_checkout.checkout_charge devolvia checkout_url existente ANTES de validar origem → qualquer origem reutilizava a sessão; origem agora validada primeiro. (2) routes_pix.trusted_origin aceita variante www./apex automaticamente (evitava 400 em www.rrclub.online). Preview .env PAYMENT_ALLOWED_ORIGINS inclui a URL de preview (só preview).
+- Campanha de teste P5E2E-01 (c-d42b89cc4c) existe só no preview. Testes: 93 backend offline (env MONGO_URL/DB_NAME/STRIPE_SECRET_KEY=sk_test_offline sem .env completo), yarn build OK, E2E 2x via testing agent.
+- Regra desconto: 5% confirmada (não €5 fixo). Dados preservados. Não publicado (CEO republica).

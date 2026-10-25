@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend E2E check of R-Conekta branding and the P5 flow, using two browser contexts: an anonymous follower on mobile and a logged-in partner on desktop. Everything passed once the frontend was restarted. Before the restart, the CRA dev server was serving an old index.html (title 'RRclub · Luxury Experiences', no favicon link), even though public/index.html had been changed at 14:11. After 'supervisorctl restart frontend': document.title = 'R-Conekta | RRClub', the favicon link /r-conekta-icon.svg returns 200 image/svg+xml, manifest short_name = 'R-Conekta', and brand-logo/sidebar-logo show 'R-Conekta / BY RRCLUB'. P5 flow (run twice, each with a new session): /c/P5E2E-01 creates a session and shows a QR with p5_ref (35 chars). Partner pastes the QR URL, POST /api/partner/p5/scans returns 200 {status:'scanned'} and p5-qr-state turns emerald. The follower then shows only the waiting text with no pay button (a scan is not treated as payment). Amount 40.00, then approve: POST /api/partner/p5/charges returns 200 with gross_minor 4000, discount_minor 200, net_minor 3800. Without a reload, the follower panel showed 40,00 € / -2,00 € / 38,00 € and an enabled p5-pay-button within 1.1-2.0s. Clicking it sends POST /api/public/p5/charges/checkout (origin_url = preview origin), which returns 200 with a checkout.stripe.com/c/pay/cs_test_... URL. The browser started redirecting and I aborted the request (nothing was paid). No 4xx/5xx responses and no console errors in either context.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PartnerDashboard Top Influencers", "issue": "Influencer avatar image is broken (alt text 'Influ...' shown instead of the image)", "selector": "[data-testid^=leaderboard-row-] img", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Partner dashboard", "issues": ["Success toast (top-right) briefly covers the Stripe Connect card button; minor"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "After editing frontend/public/index.html, restart the frontend (sudo supervisorctl restart frontend). The CRA dev server kept serving the old template, so the title and favicon looked wrong until the restart. This was an environment problem, not a code bug.",
+    "Optional: add a fallback for broken influencer avatars in the Top Influencers leaderboard"
+  ],
+  "critical_code_review_comments": [
+    "P5FollowerPanel: the checkout button only has data-testid p5-pay-button; the 'Verificar estado' and 'Criar novo QR P5' buttons and the email input have no data-testid",
+    "P5FollowerPanel reuses the sessionStorage session, so a reload in the same tab shows the old charge state. That is intended, but testers need a new context to get a new session"
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend only)", "frontend": "100% after frontend restart (branding title/favicon failed before restart due to a stale dev-server template)"},
+  "seed_data_creation": "Created P5 charges p5-e435699f3d (pending; checkout redirect started) and p5-b2a5e648cc (Stripe test checkout session created, not paid) on campaign P5E2E-01",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use two browser contexts. Get the follower scan_ref from sessionStorage key rrclub_p5_session_P5E2E-01, then fill coupon-code-input with BASE/c/P5E2E-01?p5_ref=<ref>, which triggers onDetected. To avoid paying, intercept checkout.stripe.com with route.abort."
+}
