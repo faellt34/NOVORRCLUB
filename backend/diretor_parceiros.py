@@ -1,8 +1,6 @@
 """Copiloto do parceiro RRClub: insights P5 privados, verificáveis e sem custo LLM."""
 from datetime import datetime, timedelta, timezone
 
-from core import db, NO_ID
-from payment_policy import currency_query
 from diretor_estrategia import is_new_p5, financial_state, amounts_minor, is_synthetic
 
 
@@ -74,6 +72,8 @@ def growth_suggestions(report, clicks, scans):
 
 
 async def partner_growth_report(partner, days=30):
+    from core import db, NO_ID
+    from payment_policy import currency_query
     pid = partner["id"]
     currency = str(partner.get("currency") or "eur").lower()
     if currency not in ("eur", "brl"):

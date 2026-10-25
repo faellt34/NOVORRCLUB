@@ -6,8 +6,6 @@ Não equivale a confirmação bancária ou a consulta live à Stripe.
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from core import db, NO_ID
-from payment_policy import currency_query
 
 
 TEAM = [
@@ -113,6 +111,8 @@ def euros_or_reais(cents):
 
 
 async def snapshot_currency(currency, days=30):
+    from core import db, NO_ID
+    from payment_policy import currency_query
     if currency not in ("eur", "brl"):
         raise ValueError("Moeda inválida")
     days = max(1, min(int(days), 90))
