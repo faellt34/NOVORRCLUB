@@ -27,12 +27,11 @@ export default function InfluencerDashboard() {
   useRealtime((ev) => {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
-    if (ev.tipo === "pagamento_atualizado") { api.get(`/dashboard/influencer?period=${period}`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))); return; }
+    if (ev.tipo === "pagamento_atualizado") { api.get(`/dashboard/influencer?period=${period}&verified_only=true`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e))); return; }
     if (ev.tipo === "split_executado") {
-      setData((d) => d && { ...d, kpis: { ...d.kpis, uses: d.kpis.uses + 1, revenue: d.kpis.revenue + Number(ev.valor_total || 0), commission: d.kpis.commission + Number(ev.valor_plataforma || 0) },
-        campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, uses: c.uses + 1 } : c) });
-      triggerFlash("uses"); triggerFlash("revenue"); triggerFlash("commission");
-      toast.success(`Venda validada · ${ev.cupom} · +${eur(ev.valor_plataforma)} de comissão`);
+      // Eventos de resgate não comprovam pagamento: recarregar somente o livro P5 verificado.
+      api.get(`/dashboard/influencer?period=${period}&verified_only=true`)
+        .then((r) => setData(r.data)).catch((e) => toast.error(apiError(e)));
     } else if (ev.tipo === "clique_cupao") {
       setData((d) => d && { ...d, kpis: { ...d.kpis, customers: d.kpis.customers + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, claims: (c.claims || 0) + 1 } : c) });
       triggerFlash("customers");
@@ -80,7 +79,7 @@ export default function InfluencerDashboard() {
 
   useEffect(() => {
     setData(null);
-    api.get(`/dashboard/influencer?period=${period}`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e)));
+    api.get(`/dashboard/influencer?period=${period}&verified_only=true`).then((r) => setData(r.data)).catch((e) => toast.error(apiError(e)));
   }, [period]);
 
   const chart = useMemo(() => (data?.chart || []).map((d) => ({ ...d, label: new Date(d.date).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) })), [data]);
@@ -120,7 +119,7 @@ export default function InfluencerDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div>
           <h1 data-testid="influencer-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Olá, {user.nome.split(" ")[0]}! 👋</h1>
-          <p className="text-sm text-slate-500 mt-1">Painel de desempenho e atribuição das suas parcerias de luxo {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
+          <p className="text-sm text-slate-500 mt-1">Painel de desempenho P5 confirmado por registo local, sem misturar valores de demonstração {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={setPeriod}>
@@ -157,17 +156,17 @@ export default function InfluencerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
-        <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
+        <KpiCard id="cupons-utilizados" icon={Ticket} label="Pagamentos P5 confirmados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
+        <KpiCard id="clientes-impactados" icon={Users} label="Aberturas de cupom registadas" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
         <KpiCard id="qr-descarregados" icon={QrCode} label="QR codes descarregados" live={kpis.downloads || 0} format={num} flash={flash.downloads} trend={kpis.trend.downloads} period="guardaram o QR no telemóvel" />
-        <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" live={kpis.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={kpis.trend.revenue} />
-        <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={kpis.trend.commission} />
+        <KpiCard id="receita-gerada" icon={Euro} label="Valor cobrado P5" live={kpis.revenue} format={(v) => eur(+v.toFixed(2))} flash={flash.revenue} trend={kpis.trend.revenue} />
+        <KpiCard id="sua-comissao" icon={Percent} label={`Comissão atribuída P5 (${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(+v.toFixed(2))} flash={flash.commission} trend={kpis.trend.commission} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div data-testid="usage-chart-card" className="card-soft p-5 xl:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Evolução de Utilizações</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Pagamentos P5 confirmados</h3>
             <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full">{period === "90" ? "3 em 3 dias" : "Diário"}</span>
           </div>
           <ResponsiveContainer width="100%" height={260}>
