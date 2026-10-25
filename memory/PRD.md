@@ -337,3 +337,7 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - P5 bugs reais corrigidos: (1) p5_checkout.checkout_charge devolvia checkout_url existente ANTES de validar origem → qualquer origem reutilizava a sessão; origem agora validada primeiro. (2) routes_pix.trusted_origin aceita variante www./apex automaticamente (evitava 400 em www.rrclub.online). Preview .env PAYMENT_ALLOWED_ORIGINS inclui a URL de preview (só preview).
 - Campanha de teste P5E2E-01 (c-d42b89cc4c) existe só no preview. Testes: 93 backend offline (env MONGO_URL/DB_NAME/STRIPE_SECRET_KEY=sk_test_offline sem .env completo), yarn build OK, E2E 2x via testing agent.
 - Regra desconto: 5% confirmada (não €5 fixo). Dados preservados. Não publicado (CEO republica).
+
+## 2026-10-26 — P5 Pix SHEYSO-7182: causa exata
+- Prod: Josicleide p-fc194b8f5c (acct …cSLJUr) e Sheyson if-da6af205f9 (acct …3I0NpA): BR, charges/payouts/transfers active, requirements vazios — APTOS. Bloqueio: metadata das contas Stripe VAZIA (contas criadas antes do onboarding gravar partner_id/influencer_id) → receiving_status recusa titularidade → connect_brasil_associacao_pendente.
+- Novo: GET /admin/pix/recipients/{campaign_id} (read-only, já em prod) e POST /admin/pix/recipients/{campaign_id}/reconcile (grava metadata owner só se vazia e conta = registada; conflito nunca religa; audit). Testes offline 64 passam (3 novos). Aguardando OK para deploy + reconcile + validação do botão Pagar com Pix (CEO no telemóvel; abrir checkout não cobra).

@@ -67,6 +67,74 @@ async def readiness(user: dict = Depends(require_role('admin'))):
     return {**state,'configuration':configuration,'rules':{'discount_percent':5,'partner_percent':80,'influencer_percent':5,'platform_percent':10,'processing_costs':'platform'},'external_validation_required':True}
 
 
+@router.get('/admin/pix/recipients/{campaign_id}')
+async def recipients_diagnostic(campaign_id: str, user: dict = Depends(require_role('admin'))):
+    """Read-only: Stripe GETs only. Explains exactly why a P5 BRL checkout would wait."""
+    camp = await db.campaigns.find_one({'id': campaign_id}, NO_ID)
+    if not camp:
+        raise HTTPException(404, 'Campanha não encontrada')
+    partner = await db.partners.find_one({'id': camp.get('parceiro_id')}, NO_ID)
+    influencer = await db.influencers.find_one({'id': camp.get('influencer_id')}, NO_ID) if camp.get('influencer_id') else None
+    out = {'campaign_id': campaign_id, 'cupom': camp.get('cupom'), 'recipients': {}}
+    for entity, role in ((partner, 'partner'), (influencer, 'influencer')):
+        acct = (entity or {}).get('pix_stripe_account_id')
+        item = {'id': (entity or {}).get('id'), 'nome': (entity or {}).get('nome'), 'pix_account': ('…' + acct[-6:]) if acct else None}
+        if not entity or not acct:
+            item['bloqueio'] = 'sem pix_stripe_account_id'
+        else:
+            try:
+                info = await provider('accounts.retrieve', acct)
+                meta = info.get('metadata') or {}
+                item['metadata_keys'] = {k: ('ok' if v == entity['id'] else 'outro') for k, v in meta.items() if k in ('partner_id', 'influencer_id')}
+                item['country'] = info.get('country'); item['charges_enabled'] = info.get('charges_enabled'); item['payouts_enabled'] = info.get('payouts_enabled')
+                item['transfers_capability'] = (info.get('capabilities') or {}).get('transfers')
+                item['requirements_due'] = ((info.get('requirements') or {}).get('currently_due') or [])[:8]
+                item['disabled_reason'] = (info.get('requirements') or {}).get('disabled_reason')
+                try:
+                    item['receiving'] = receiving_status(info, entity, role)
+                    item['bloqueio'] = None if item['receiving'].get('receiving_ready') else 'recebimentos não prontos'
+                except HTTPException as exc:
+                    item['bloqueio'] = exc.detail; item['reason'] = (exc.headers or {}).get('X-RRClub-Reason')
+            except HTTPException as exc:
+                item['bloqueio'] = f'stripe: {exc.detail}'
+        out['recipients'][role] = item
+    if partner and influencer and partner.get('pix_stripe_account_id') and partner.get('pix_stripe_account_id') == influencer.get('pix_stripe_account_id'):
+        out['bloqueio_global'] = 'parceiro e influencer com a mesma conta'
+    return out
+
+@router.post('/admin/pix/recipients/{campaign_id}/reconcile')
+async def recipients_reconcile(campaign_id: str, user: dict = Depends(require_role('admin'))):
+    """Stamps the stored owner id on legacy Connect accounts whose metadata is EMPTY.
+    Never changes KYC, capabilities, bank data or an account already bound to someone."""
+    from core import audit
+    camp = await db.campaigns.find_one({'id': campaign_id}, NO_ID)
+    if not camp:
+        raise HTTPException(404, 'Campanha não encontrada')
+    partner = await db.partners.find_one({'id': camp.get('parceiro_id')}, NO_ID)
+    influencer = await db.influencers.find_one({'id': camp.get('influencer_id')}, NO_ID) if camp.get('influencer_id') else None
+    result = {}
+    for entity, role in ((partner, 'partner'), (influencer, 'influencer')):
+        acct = (entity or {}).get('pix_stripe_account_id')
+        if not entity or not acct:
+            result[role] = 'sem conta'; continue
+        info = await provider('accounts.retrieve', acct)
+        meta = info.get('metadata') or {}
+        key = 'influencer_id' if role == 'influencer' else 'partner_id'
+        if meta.get(key) == entity['id']:
+            result[role] = 'já associado'; continue
+        if meta.get('partner_id') or meta.get('influencer_id'):
+            result[role] = f"conflito: conta ligada a outro cadastro ({meta.get('partner_id') or meta.get('influencer_id')})"; continue
+        if info.get('country') != 'BR' or info.get('id') != acct:
+            result[role] = 'conta inesperada'; continue
+        await provider('accounts.update', acct, metadata={key: entity['id']}, idempotency_key=f'pix-meta-{entity["id"]}-{acct}')
+        await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); sem alterações financeiras", user, campaign_id)
+        result[role] = 'associado agora'
+    return {'campaign_id': campaign_id, 'cupom': camp.get('cupom'), 'result': result}
+
+
+
+
+
 @router.get('/admin/pix/provider-readiness')
 async def provider_readiness(user: dict = Depends(require_role('admin'))):
     """Explicit admin diagnostic: Stripe GETs only; never enables Pix or saves secrets."""
