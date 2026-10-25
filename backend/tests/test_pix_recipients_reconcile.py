@@ -17,8 +17,10 @@ def env(monkeypatch):
     db = AsyncMongoMockClient().pix
     monkeypatch.setattr(pix, 'db', db)
     calls = []
-    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br'},
-                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': ''}},
+    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br', 'business_profile': {'name': 'Josicleide'}},
+                'acct_1': {'id': 'acct_1', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br'},
+                'acct_d': {'id': 'acct_d', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'verified'}}},
+                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'verified'}}},
                 'acct_x': {'id': 'acct_x', 'country': 'BR', 'metadata': {'partner_id': 'p-outro'}, 'email': 'j@x.br'},
                 'acct_n': {'id': 'acct_n', 'country': 'BR', 'metadata': {}, 'email': 'nobody@x.br', 'business_profile': {'name': 'Loja Z'}}}
     async def provider(op, *a, **kw):
@@ -34,11 +36,11 @@ def env(monkeypatch):
     return db, calls, accounts, core.audit
 
 
-def seed(db, inf_acct='acct_s'):
+def seed(db, inf_acct='acct_s', partner_acct='acct_j'):
     async def go():
         await db.campaigns.insert_one({'id': 'c1', 'cupom': 'SHEYSO-7182', 'parceiro_id': 'p-j', 'influencer_id': 'if-s'})
         await db.users.insert_one({'id': 'u-j', 'email': 'J@x.br'})
-        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'pix_stripe_account_id': 'acct_j', 'user_id': 'u-j'})
+        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'pix_stripe_account_id': partner_acct, 'user_id': 'u-j'})
         await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson', 'pix_stripe_account_id': inf_acct, 'user_id': 'u-s'})
     asyncio.run(go())
 
@@ -79,5 +81,22 @@ def test_no_independent_evidence_is_not_reconciled(env):
     db, calls, accounts, audit = env
     seed(db, inf_acct='acct_n')
     res = asyncio.run(pix.recipients_reconcile('c1', ADMIN))
-    assert res['result']['influencer'].startswith('sem evidência')
+    assert res['result']['influencer'].startswith('evidência insuficiente')
     assert accounts['acct_n']['metadata'] == {}
+
+
+def test_single_proof_is_not_enough(env):
+    db, calls, accounts, audit = env
+    seed(db, partner_acct='acct_1')
+    res = asyncio.run(pix.recipients_reconcile('c1', ADMIN))
+    assert res['result']['partner'].startswith('evidência insuficiente') and 'pontos=1' in res['result']['partner']
+    assert accounts['acct_1']['metadata'] == {}
+
+
+def test_account_shared_by_two_records_is_not_reconciled(env):
+    db, calls, accounts, audit = env
+    seed(db, inf_acct='acct_d')
+    asyncio.run(db.partners.insert_one({'id': 'p-dup', 'nome': 'Dup', 'pix_stripe_account_id': 'acct_d'}))
+    res = asyncio.run(pix.recipients_reconcile('c1', ADMIN))
+    assert 'conta_unica=False' in res['result']['influencer']
+    assert accounts['acct_d']['metadata'] == {}

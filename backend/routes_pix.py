@@ -67,6 +67,29 @@ async def readiness(user: dict = Depends(require_role('admin'))):
     return {**state,'configuration':configuration,'rules':{'discount_percent':5,'partner_percent':80,'influencer_percent':5,'platform_percent':10,'processing_costs':'platform'},'external_validation_required':True}
 
 
+
+async def ownership_evidence(info, entity):
+    """Independent evidence that the Connect account belongs to this record (read-only)."""
+    acct = info.get('id')
+    owner_user = await db.users.find_one({'id': entity.get('user_id')}, {'_id': 0, 'email': 1}) if entity.get('user_id') else None
+    user_email = ((owner_user or {}).get('email') or '').strip().lower()
+    indiv = info.get('individual') or {}
+    acct_emails = {(info.get('email') or '').strip().lower(), (indiv.get('email') or '').strip().lower()} - {''}
+    names = {((info.get('business_profile') or {}).get('name') or '').strip().lower(), ' '.join(x for x in (indiv.get('first_name'), indiv.get('last_name')) if x).strip().lower()} - {''}
+    others = 0
+    for coll in (db.partners, db.influencers):
+        others += await coll.count_documents({'pix_stripe_account_id': acct, 'id': {'$ne': entity['id']}})
+    ev = {
+        'email_stripe_igual_ao_cadastro': bool(user_email) and user_email in acct_emails,
+        'nome_stripe_igual_ao_cadastro': (entity.get('nome') or '').strip().lower() in names,
+        'kyc_individual_verificado': (indiv.get('verification') or {}).get('status') == 'verified',
+        'conta_unica_na_base': others == 0,
+        'nome_stripe': next(iter(names), None), 'nome_cadastro': entity.get('nome'), 'criada_em': info.get('created'),
+    }
+    ev['pontos'] = sum(1 for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_individual_verificado') if ev[k])
+    ev['suficiente'] = ev['conta_unica_na_base'] and ev['pontos'] >= 2
+    return ev
+
 @router.get('/admin/pix/recipients/{campaign_id}')
 async def recipients_diagnostic(campaign_id: str, user: dict = Depends(require_role('admin'))):
     """Read-only: Stripe GETs only. Explains exactly why a P5 BRL checkout would wait."""
@@ -86,17 +109,7 @@ async def recipients_diagnostic(campaign_id: str, user: dict = Depends(require_r
                 info = await provider('accounts.retrieve', acct)
                 meta = info.get('metadata') or {}
                 item['metadata_keys'] = {k: ('ok' if v == entity['id'] else 'outro') for k, v in meta.items() if k in ('partner_id', 'influencer_id')}
-                owner_user = await db.users.find_one({'id': entity.get('user_id')}, {'_id': 0, 'email': 1, 'nome': 1}) if entity.get('user_id') else None
-                acct_email = (info.get('email') or '').strip().lower()
-                acct_name = ((info.get('business_profile') or {}).get('name') or '').strip()
-                indiv = info.get('individual') or {}
-                indiv_name = ' '.join(x for x in (indiv.get('first_name'), indiv.get('last_name')) if x).strip()
-                item['evidencia_independente'] = {
-                    'email_stripe_igual_ao_cadastro': bool(acct_email) and acct_email == ((owner_user or {}).get('email') or '').strip().lower(),
-                    'nome_stripe': acct_name or indiv_name or None,
-                    'nome_cadastro': entity.get('nome'),
-                    'criada_em': info.get('created'),
-                }
+                item['evidencia_independente'] = await ownership_evidence(info, entity)
                 item['country'] = info.get('country'); item['charges_enabled'] = info.get('charges_enabled'); item['payouts_enabled'] = info.get('payouts_enabled')
                 item['transfers_capability'] = (info.get('capabilities') or {}).get('transfers')
                 item['requirements_due'] = ((info.get('requirements') or {}).get('currently_due') or [])[:8]
@@ -137,16 +150,12 @@ async def recipients_reconcile(campaign_id: str, user: dict = Depends(require_ro
             result[role] = f"conflito: conta ligada a outro cadastro ({meta.get('partner_id') or meta.get('influencer_id')})"; continue
         if info.get('country') != 'BR' or info.get('id') != acct:
             result[role] = 'conta inesperada'; continue
-        owner_user = await db.users.find_one({'id': entity.get('user_id')}, {'_id': 0, 'email': 1}) if entity.get('user_id') else None
-        acct_email = (info.get('email') or '').strip().lower()
-        indiv = info.get('individual') or {}
-        names = {((info.get('business_profile') or {}).get('name') or '').strip().lower(), ' '.join(x for x in (indiv.get('first_name'), indiv.get('last_name')) if x).strip().lower()} - {''}
-        email_ok = bool(acct_email) and acct_email == ((owner_user or {}).get('email') or '').strip().lower()
-        name_ok = (entity.get('nome') or '').strip().lower() in names
-        if not (email_ok or name_ok):
-            result[role] = 'sem evidência independente de titularidade (email/nome Stripe ≠ cadastro); não reconciliado'; continue
+        ev = await ownership_evidence(info, entity)
+        if not ev['suficiente']:
+            result[role] = f"evidência insuficiente de titularidade (pontos={ev['pontos']}, conta_unica={ev['conta_unica_na_base']}); não reconciliado"; continue
+        proofs = ','.join(k for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_individual_verificado') if ev[k])
         await provider('accounts.update', acct, metadata={key: entity['id']}, idempotency_key=f'pix-meta-{entity["id"]}-{acct}')
-        await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); evidência: {'email' if email_ok else 'nome'}; sem alterações financeiras", user, campaign_id)
+        await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); evidência: {proofs}; conta única na base; sem alterações financeiras", user, campaign_id)
         result[role] = 'associado agora'
     return {'campaign_id': campaign_id, 'cupom': camp.get('cupom'), 'result': result}
 
