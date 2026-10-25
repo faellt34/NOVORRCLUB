@@ -1,0 +1,38 @@
+{
+  "summary": "Offline-only backend validation of hardened Pix Connect ownership reconciliation. Ran the 5 listed pytest files: 74 passed (+9 subtests), 0 failed, 0.84s. No live HTTP, Stripe, production or /api/diretor calls. Code review of ownership_evidence(), recipients_diagnostic and recipients_reconcile confirms: a single proof is refused (pontos>=2 required), an account referenced by another partner/influencer is refused (conta_unica_na_base), metadata bound to another record is never rewritten (conflito branch runs before any update), and repeat runs return 'já associado' with no second update (idempotent; deterministic Stripe idempotency_key too). Non-BR accounts and accounts whose id differs from the stored one are refused. Each stamp is audited and lists the proofs used.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ownership_evidence", "issue": "The email and business_profile.name proofs may not be truly independent if the platform set them on the Connect account itself when creating it (Express/Custom accounts are often created with the user's email). If so, two 'proofs' could just be data the platform copied from its own DB. KYC verification is the only proof that is clearly independent. Consider requiring KYC verified + 1 other proof, or checking how accounts are created."},
+      {"endpoint": "ownership_evidence", "issue": "Name matching is an exact lowercase compare. Names that differ only by accents, extra spaces or middle names do not match, so some legitimate accounts will be refused. This is the safe direction, but it causes manual work."},
+      {"endpoint": "ownership_evidence", "issue": "kyc_individual_verificado only reads individual.verification. Company accounts can never earn this point, so they must match on both email and name."},
+      {"endpoint": "POST /api/admin/pix/recipients/{id}/reconcile", "issue": "If Stripe fails partway (502 raised by provider) after the partner was already stamped, the response does not show that partial result. Re-running is safe because the endpoint is idempotent."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_pix_recipients_reconcile.py",
+    "/app/backend/tests/test_p5_pix_checkout_integration.py",
+    "/app/backend/tests/test_pix_service.py",
+    "/app/backend/tests/test_pix_readiness.py",
+    "/app/backend/tests/test_p5_rules.py",
+    "/app/test_reports/pytest/pytest_iter37.xml"
+  ],
+  "action_items": [
+    "Optional: add an offline test that GET /admin/pix/recipients/{id} returns evidencia_independente (pontos, suficiente, conta_unica_na_base)",
+    "Optional: add an offline test that a non-BR account or a mismatched account id gets 'conta inesperada'",
+    "Optional: confirm whether the platform sets email/business_profile.name when creating Connect accounts; if yes, make KYC verification a required proof"
+  ],
+  "critical_code_review_comments": [
+    "The order of checks is correct: already bound -> conflicting metadata -> country/id -> evidence -> update. Nothing is written unless every check passes.",
+    "The uniqueness check runs count_documents over partners and influencers excluding entity id. It also catches a partner and influencer on the same campaign sharing one account.",
+    "Nothing in the diagnostic path writes to Stripe. It exposes nome_stripe/nome_cadastro, which is acceptable because the endpoint is admin-only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (74/74)", "frontend": "N/A"},
+  "seed_data_creation": "None (mongomock in-memory only)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Pix P5 reconcile is tested offline with mongomock and a mocked provider. Run the 5 listed files only. Expected result: 74 passed.",
+  "test_credentials": "Not needed (offline tests)"
+}

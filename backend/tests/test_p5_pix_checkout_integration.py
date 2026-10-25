@@ -30,7 +30,7 @@ def world(monkeypatch):
     monkeypatch.setattr(pix, 'db', db); monkeypatch.setattr(p5, 'db', db)
     import core; monkeypatch.setattr(core, 'audit', AsyncMock())
     accounts = {'acct_j': apt('acct_j', 'josi@x.br', business_profile={'name': 'Josicleide'}),
-                'acct_s': apt('acct_s', 'shey@x.br', individual={'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'verified'}})}
+                'acct_s': apt('acct_s', 'shey@x.br', individual={'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'unverified'}})}
     platform = {'country': 'BR', 'default_currency': 'brl', 'charges_enabled': True, 'payouts_enabled': True,
                 'settings': {'payouts': {'schedule': {'interval': 'daily'}}}, 'capabilities': {'pix_payments': 'active'}}
     config = {'id': 'pmc_pix', 'active': True, 'livemode': True, 'pix': {'available': True, 'display_preference': {'value': 'on'}},

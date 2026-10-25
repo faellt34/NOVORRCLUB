@@ -17,10 +17,10 @@ def env(monkeypatch):
     db = AsyncMongoMockClient().pix
     monkeypatch.setattr(pix, 'db', db)
     calls = []
-    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br', 'business_profile': {'name': 'Josicleide'}},
+    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br', 'charges_enabled': True, 'payouts_enabled': True, 'business_profile': {'name': 'Josicleide Farias dos Santos Farias'}},
                 'acct_1': {'id': 'acct_1', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br'},
-                'acct_d': {'id': 'acct_d', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'verified'}}},
-                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'verified'}}},
+                'acct_d': {'id': 'acct_d', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'unverified'}}},
+                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'charges_enabled': True, 'payouts_enabled': True, 'individual': {'first_name': 'Sheyson', 'last_name': 'Torres'}},
                 'acct_x': {'id': 'acct_x', 'country': 'BR', 'metadata': {'partner_id': 'p-outro'}, 'email': 'j@x.br'},
                 'acct_n': {'id': 'acct_n', 'country': 'BR', 'metadata': {}, 'email': 'nobody@x.br', 'business_profile': {'name': 'Loja Z'}}}
     async def provider(op, *a, **kw):
@@ -40,8 +40,8 @@ def seed(db, inf_acct='acct_s', partner_acct='acct_j'):
     async def go():
         await db.campaigns.insert_one({'id': 'c1', 'cupom': 'SHEYSO-7182', 'parceiro_id': 'p-j', 'influencer_id': 'if-s'})
         await db.users.insert_one({'id': 'u-j', 'email': 'J@x.br'})
-        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'pix_stripe_account_id': partner_acct, 'user_id': 'u-j'})
-        await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson', 'pix_stripe_account_id': inf_acct, 'user_id': 'u-s'})
+        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide Farias dos Santos', 'pix_stripe_account_id': partner_acct, 'user_id': 'u-j'})
+        await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson da Silva Torres', 'pix_stripe_account_id': inf_acct, 'user_id': 'u-s'})
     asyncio.run(go())
 
 

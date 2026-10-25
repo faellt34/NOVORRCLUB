@@ -79,14 +79,19 @@ async def ownership_evidence(info, entity):
     others = 0
     for coll in (db.partners, db.influencers):
         others += await coll.count_documents({'pix_stripe_account_id': acct, 'id': {'$ne': entity['id']}})
+    rec_tokens = [t for t in (entity.get('nome') or '').lower().split() if len(t) > 2]
+    def name_match(n):
+        toks = n.split()
+        return bool(rec_tokens) and len(toks) >= 2 and rec_tokens[0] in toks and rec_tokens[-1] in toks
+    req = info.get('requirements') or {}
     ev = {
         'email_stripe_igual_ao_cadastro': bool(user_email) and user_email in acct_emails,
-        'nome_stripe_igual_ao_cadastro': (entity.get('nome') or '').strip().lower() in names,
-        'kyc_individual_verificado': (indiv.get('verification') or {}).get('status') == 'verified',
+        'nome_stripe_igual_ao_cadastro': any(name_match(n) for n in names),
+        'kyc_stripe_concluido': bool(info.get('charges_enabled') and info.get('payouts_enabled')) and not req.get('currently_due') and not req.get('past_due') and not req.get('disabled_reason'),
         'conta_unica_na_base': others == 0,
         'nome_stripe': next(iter(names), None), 'nome_cadastro': entity.get('nome'), 'criada_em': info.get('created'),
     }
-    ev['pontos'] = sum(1 for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_individual_verificado') if ev[k])
+    ev['pontos'] = sum(1 for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_stripe_concluido') if ev[k])
     ev['suficiente'] = ev['conta_unica_na_base'] and ev['pontos'] >= 2
     return ev
 
@@ -153,7 +158,7 @@ async def recipients_reconcile(campaign_id: str, user: dict = Depends(require_ro
         ev = await ownership_evidence(info, entity)
         if not ev['suficiente']:
             result[role] = f"evidência insuficiente de titularidade (pontos={ev['pontos']}, conta_unica={ev['conta_unica_na_base']}); não reconciliado"; continue
-        proofs = ','.join(k for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_individual_verificado') if ev[k])
+        proofs = ','.join(k for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_stripe_concluido') if ev[k])
         await provider('accounts.update', acct, metadata={key: entity['id']}, idempotency_key=f'pix-meta-{entity["id"]}-{acct}')
         await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); evidência: {proofs}; conta única na base; sem alterações financeiras", user, campaign_id)
         result[role] = 'associado agora'
