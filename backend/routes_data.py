@@ -579,10 +579,17 @@ def _claim_state(cl: dict) -> str:
 
 
 @router.get("/admin/cliques/analysis")
-async def clicks_analysis(period: str = "7d", user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+async def clicks_analysis(period: str = "7d", include_history: bool = False, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
     p = period.lower().rstrip("d")
     start = datetime.now(timezone.utc).date().isoformat() if p in ("hoje", "today", "1") else since(int(p or 7))
+    if not include_history:
+        pilot_since = await read_pilot_since()
+        if pilot_since:
+            start = max(start, pilot_since)
     claims = await db.coupon_claims.find(currency_query({"date": {"$gte": start}}, currency), NO_ID).sort("date", -1).to_list(500)
+    if not include_history:
+        from diretor_estrategia import is_synthetic
+        claims = [cl for cl in claims if not is_synthetic(cl)]
     lista = [{"id": cl["id"], "date": cl["date"], "origem": cl.get("origem", "QR / direto"), "cliente": cl.get("cliente", "Cliente"), "influencer": cl.get("influencer", "—"), "campanha": cl.get("campaign", "—"), "cupom": cl["coupon"],
               "qr": bool(cl.get("qr_downloaded")), "qr_downloaded_at": cl.get("qr_downloaded_at"), "estado": _claim_state(cl), "converted_at": cl.get("converted_at"), "valor": cl.get("valor")} for cl in claims]
     return {"total": len(lista), "sem_download": sum(1 for x in lista if x["estado"] in ("Sem download", "Abandonou")), "qr_sem_scan": sum(1 for x in lista if x["estado"] == "QR sem scan"),
