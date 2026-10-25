@@ -6,9 +6,10 @@ import { api, apiError } from "../lib/api";
 import { SecurityAudit } from "../components/SecurityAudit";
 import { CreditMeter } from "../components/CreditMeter";
 import { DiretorBriefing } from "../components/DiretorBriefing";
+import { DiretorEstrategia } from "../components/DiretorEstrategia";
 import { ModelSelector, getModelo } from "../components/ModelSelector";
 
-const SUGGESTIONS = ["Como estamos? Diagnostica o sistema e diz-me o que preciso saber", "Mostra as métricas por campanha dos últimos 30 dias", "Há erros nos logs das últimas 24h?", "Analisa o funil QR: cliques, downloads e vendas por origem", "Pede ao subagente Marketing um plano para aumentar a conversão"];
+const SUGGESTIONS = ["Mostra o resumo estratégico do P5 Brasil e Portugal com evidências", "Como posso aumentar as vendas dos parceiros sem gastar em anúncios?", "Como estamos? Diagnostica o sistema e diz-me o que preciso saber", "Mostra as métricas por campanha dos últimos 30 dias", "Há erros nos logs das últimas 24h?", "Analisa o funil QR: cliques, downloads e vendas por origem", "Pede ao subagente Marketing um plano para aumentar a conversão"];
 const TIPO = { criar_campanha: "Campanha", gerar_contrato: "Contrato", enviar_email: "Email", gerar_qr_code: "QR Code", propor_correcao: "Correção de código" };
 const fmt = (d) => new Date(d).toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
@@ -62,13 +63,14 @@ export default function Diretor() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <h1 data-testid="diretor-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Diretor Geral · IA</h1>
-          <p className="text-sm text-slate-500 mt-1">Diretor IA com acesso a dados reais, logs detalhados e métricas por campanha/influencer/hotel. Vigia o sistema de forma proativa. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
+          <p className="text-sm text-slate-500 mt-1">Diretor IA com leituras P5 verificadas por país, prioridades comerciais, logs e equipa de especialidades. Os valores fictícios não entram na faturação P5. Ações que alteram dados só executam após a sua aprovação. Subagentes e auditorias gastam créditos — pergunta antes.</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <CreditMeter refreshKey={msgs.length} />
           <ModelSelector value={modelo} onChange={setModelo} />
         </div>
       </div>
+      <DiretorEstrategia onAsk={send} refreshKey={msgs.length} />
       <DiretorBriefing onAsk={send} refreshKey={msgs.length} />
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2 card-soft p-5 flex flex-col min-h-[560px]" data-testid="diretor-chat">
@@ -93,7 +95,7 @@ export default function Diretor() {
             {busy && <div className="rounded-2xl px-4 py-2.5 bg-slate-50 border border-slate-100 w-fit" data-testid="diretor-thinking"><Loader2 className="w-4 h-4 animate-spin text-purple-500" /></div>}
           </div>
           <form onSubmit={(e) => { e.preventDefault(); send(); }} className="mt-3 flex gap-2">
-            <input data-testid="diretor-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ex.: Analisa o Hotel X e propõe uma campanha para outubro" className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
+            <input data-testid="diretor-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ex.: Apresenta 3 ações para crescer no Brasil com dados verificados" className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
             <button data-testid="diretor-send" type="submit" disabled={busy || !input.trim()} className="px-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white btn-press">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}</button>
           </form>
         </div>

@@ -1,0 +1,31 @@
+# RRClub — Diretor IA 2.0 · Implementação isolada (25/10/2026)
+
+**Branch:** `feat/diretor-ia-2-operacional-20261025` sobre `mainNNOVO` (`af2a110`).
+**Estado:** código preparado em branch de revisão; **não fez deploy, não alterou P5 nem transacionou dinheiro**.
+
+## Entregue nesta primeira fase
+
+- Rota `GET /api/diretor/estrategia?dias=30`: leitura só de `payment_transactions` associadas ao novo P5, com moeda distinta, rejeição de simulações, reembolsos e disputas. Diferencia pago local, Connect confirmado no registo local e depósito bancário desconhecido. Zero chamadas LLM.
+- Novo painel executivo na página existente, separa BRL/EUR, funil P5, parcelas devido ao parceiro/influenciador/RRClub, pendência Connect, 3 decisões e especialistas.
+- Sete especialidades organizadas e identificadas; Executivo/Operações/Finanças têm dados determinísticos; Marketing/Frontend/Backend conservam a colaboração IA existente. Pesquisa externa automática **ainda não está implementada** e exige fontes; nenhuma análise inventada.
+- `ler_dashboard`, `consultar_financeiro`, consultas por parceiro e `/diretor/metricas` já não somam valores de `redemptions` como receita. Removidas estimativas erradas de 23% IVA, 10% tarifas Stripe e 75% hotel.
+- Briefing do Diretor passou a reportar funil por moeda e evitar tratar onboarding Connect de terceiros como pane geral; relatório não afirma que erro antigo foi corrigido sem validação.
+- Criar campanha pelo Diretor (após aprovação admin): desconto 5%, comissão 5%, moeda do parceiro e proteção contra mesmo nome/parceiro/influenciador duplicado. Minutas usam regra 80/5/10/5; não são contratos assinados.
+- Histórico de conversa filtrado ao administrador que o criou. Subagente utiliza modelo económico existente por defeito.
+
+## Limitações deliberadas
+
+- Os valores vêm do livro local depois de webhook: **não há consulta Stripe ao vivo, conciliação bancária, nem confirmação de tarifas reais**.
+- `payment_transactions` limitadas a 20 mil/país/90 dias nesta leitura; avaliar paginação e agregações no crescimento.
+- Contagem de fases do funil é observacional e não uma taxa de conversão estritamente atribuída aos mesmos utilizadores.
+- Regras de repartição em produção continuam governadas pelos módulos P5 já existentes; nada foi reescrito nesse mecanismo.
+- O Diretor não envia pagamentos, não associa destinatários Stripe, não publica campanhas automaticamente.
+- Tarefas futuras: validação integrada com base de staging, permissões de pesquisa, ligação às fontes externas e eficácia das recomendações.
+
+## Testes executados no ambiente isolado
+
+`backend/tests/test_diretor_estrategia.py`: 8 testes unitários aprovados (pagamento vs histórico, BRL/EUR, simulação, não pago, disputa/reembolso, transferência Connect, split e integridade de valores). Os ficheiros Python foram analisados sintaticamente. **Ainda não houve teste de API com MongoDB real, teste frontend compilado nem teste funcional em produção**.
+
+## Deploy seguro
+
+Revisar diff da branch, executar CI/staging com ambiente não financeiro, confirmar que o painel da RRClub atual e as rotas P5 continuam intactos; só depois integrar e publicar mediante confirmação do administrador.

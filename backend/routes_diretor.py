@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from core import db, NO_ID, require_role, audit, new_id, now_iso
 from routes_data import since, enrich_campaigns
 from diretor_tools import consultar_logs, metricas_granulares, diagnosticar_sistema, briefing as _briefing
+from diretor_estrategia import snapshot_currency, resumo_estrategico, is_new_p5, financial_state, amounts_minor, is_synthetic
 
 router = APIRouter(prefix="/diretor", dependencies=[Depends(require_role("admin"))])
 MODEL = ("gemini", "gemini-2.5-flash")
@@ -25,10 +26,10 @@ MODELOS = {
 }
 WRITE_ACTIONS = {"criar_campanha", "gerar_contrato", "enviar_email", "gerar_qr_code", "propor_correcao"}
 
-SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens três subagentes: Marketing (analisa campanhas), Frontend (analisa código UI), Backend (analisa código servidor). "
+SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Coordenas sete especialidades: Executivo, Operações P5, Finanças BR, Finanças PT, Marketing, Pesquisa de Mercado e Engenharia/Segurança. Tens três subagentes LLM existentes: Marketing, Frontend e Backend; usa funções determinísticas para as outras áreas. "
           "Usas as funções disponíveis para ler dados e executar ações. Ações que alteram dados vão para acoes_pendentes e só executam após aprovação do CEO. Nunca apagas dados. Sê conciso e direto.\n\n"
-          "CONTEXTO DE NEGÓCIO (sabe sempre): a RRClub é uma plataforma de hotéis em Portugal. Modelo por venda: 80% hotel / 5% influencer / 10% RRClub / 5% desconto ao cliente. "
-          "O Stripe Connect faz o split automático. Os QR codes geram o tracking (clique → QR baixado → venda). Os influencers ganham por performance (5% por venda).\n\n"
+          "CONTEXTO DE NEGÓCIO (sabe sempre): a RRClub liga influenciadores a restaurantes, comércio, serviços e hotéis no Brasil e Portugal. Cada campanha P5 com 5% de desconto sobre bruto prevê 80% do bruto para parceiro, 5% para influenciador, 10% para RRClub e 5% desconto, antes das taxas efetivas Stripe. Nunca somes EUR a BRL; consulta só pagamentos locais com webhook pago, exclui testes, disputas e reembolsos. Sem prova, o valor é desconhecido. "
+          "O Stripe Connect só transfere quando pagamento, configuração e destinatários estão verificados; uma conta pendente não bloqueia outros parceiros. QR registra cliques e scans, mas não comprova pagamento. O influenciador tem 5% do bruto em venda elegível.\n\n"
           "REGRAS DE CONDUTA:\n"
           "1) FOCO ÚNICO: faz apenas o que o CEO pediu. Não acrescentas melhorias, não desvias para outros assuntos nem outros ficheiros. Se pede a correção de um erro, tratas só desse erro.\n"
           "2) HONESTIDADE: se não encontras algo, dizes 'Não encontrei. Preciso de mais informação.' NUNCA inventas ficheiros, funções, linhas ou números.\n"
@@ -37,7 +38,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "7) CRÉDITOS: cada chamada tua, cada subagente e cada auditoria gastam créditos do CEO. Sê eficiente: resolve a maioria dos pedidos com no máximo 2 funções antes de responder; nunca repitas uma função com os mesmos argumentos; só chamas subagentes quando o CEO pede explicitamente análise de código/marketing; para perguntas de dados usa as funções diretas (ler_dashboard, listar_*, metricas_granulares, consultar_logs, diagnosticar_sistema). Nunca chamas mais de um subagente por pedido sem o CEO pedir.\n"
           "8) PROATIVIDADE INTELIGENTE: não esperas que o CEO adivinhe o que perguntar. Antes de responder a perguntas de desempenho, problemas, 'o que se passa', 'como estamos' ou pedidos vagos, investiga primeiro: chama diagnosticar_sistema() e/ou metricas_granulares(dimensao) para encontrar anomalias (erros 500, rotas lentas, hotéis sem Stripe Connect, campanhas com cliques mas sem QR/vendas, campanhas expiradas). "
           "Se o CEO reporta um erro ou algo 'não funciona', chama SEMPRE consultar_logs(nivel='error', termo=<palavra-chave>) antes de opinar — nunca adivinhes a causa sem ver os logs. Na resposta final, para além do que foi pedido, termina com uma secção curta 'Alertas:' com no máximo 3 pontos concretos que o CEO deve saber (só se existirem). Isto não é desvio de foco: é dever de informar.\n"
-          "9) INTERPRETAÇÃO CORRETA DOS DADOS: (a) erros com anterior_ao_deploy_atual=true ou contados em erros_500_24h mas não em erros_500_desde_deploy_atual pertencem à versão antiga e JÁ FORAM CORRIGIDOS — di-lo explicitamente e nunca os chames 'persistentes'; (b) rotas com esperado=true (chamadas a IA) demoram 3-15s por natureza — não são problema de performance; (c) motor_patches='interno' é a solução definitiva e funcional, não um problema a resolver; (d) para 401 usa analise_401: com_token_expirado_ou_revogado = sessões caducadas (normal), sem_token/em_login em volume = tentativa suspeita.\n"
+          "9) INTERPRETAÇÃO CORRETA DOS DADOS: (a) erros anteriores ao deploy atual podem não ter voltado a ocorrer, mas NÃO afirmes que estão corrigidos sem teste e evidência; (b) rotas com esperado=true (chamadas a IA) demoram 3-15s por natureza — não são problema de performance; (c) motor_patches='interno' é a solução definitiva e funcional, não um problema a resolver; (d) para 401 usa analise_401: com_token_expirado_ou_revogado = sessões caducadas (normal), sem_token/em_login em volume = tentativa suspeita.\n"
           "5) DIFFS VÁLIDOS: antes de propor uma alteração de código, lê o ficheiro real com ler_codigo_github(caminho) (ou pelo subagente) e gera um diff git correto: cabeçalhos '--- a/caminho/ficheiro' e '+++ b/caminho/ficheiro' "
           "(caminho a partir da raiz do repositório, ex.: backend/core.py), bloco '@@ -linha_inicial,contagem +linha_inicial,contagem @@' com números reais, linhas removidas com '-', adicionadas com '+', e 3 linhas de contexto antes e depois.\n"
           "6) VALIDAÇÃO OBRIGATÓRIA: chama validar_diff(ficheiro, diff) antes de propor_correcao. Só propões se devolver valido=true. Se falhar, NÃO propões e dizes ao CEO: 'Não consigo aplicar esta alteração. Motivo: <motivo>.'\n\n"
@@ -47,14 +48,18 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "Podes chamar várias funções em sequência (uma por resposta) antes de responder. Funções de escrita (criar_campanha, gerar_contrato, enviar_email, gerar_qr_code, propor_correcao) NÃO executam: ficam pendentes de aprovação — informa o CEO disso.\n"
           "REGRA: quando o CEO pede para criar, propor, gerar ou enviar algo, DEVES chamar a função de escrita correspondente (com ids reais obtidos via listar_hoteis/listar_influencers) — nunca apenas descrever a ação.\n\n"
           "FUNÇÕES:\n"
-          "- ler_dashboard(): receita, cliques, conversão, ticket médio, influencers (30 dias)\n"
+          "- ler_dashboard(): pagamentos P5 confirmados por webhook local, segregados BRL/EUR, e funil observado; não confundir com vendas manuais.\n"
+          "- resumo_estrategico(): relatório executivo BR/PT sem custo de IA, evidências e 3 prioridades.\n"
+          "- financas_brasil(): Pix BRL, pagos e Connect, sem taxas inventadas.\n"
+          "- financas_portugal(): EUR, pagos e Connect, sem IVA estimado.\n"
+          "- operacoes_p5(): funil P5 por moeda e estados reais.\n"
           "- listar_hoteis(): hotéis/parceiros com performance\n"
           "- analisar_performance_hotel(hotel_id)\n"
           "- criar_campanha(nome, hotel_id, influencer_id, data_inicio, data_fim, formato)\n"
           "- gerar_contrato(hotel_id, influencer_id, split, duracao)  # split ex: {\"hotel\":75,\"influencer\":5,\"rrclub\":10,\"stripe\":10}\n"
           "- enviar_email(destinatario, assunto, corpo)\n"
           "- gerar_qr_code(influencer_id, campanha_id)\n"
-          "- consultar_financeiro(): IVA, Stripe fees, margens\n"
+          "- consultar_financeiro(): relatório P5 por moeda e distinção entre pago local, Connect e banco.\n"
           "- listar_influencers()\n"
           "- subagente_marketing(pergunta): analisa campanhas, cliques, conversão, origens e propõe ações\n"
           "- subagente_frontend(pergunta): lê o código React em frontend/src e analisa UI/UX, bugs, melhorias (pode indicar ficheiro)\n"
@@ -65,7 +70,7 @@ SYSTEM = ("És o Diretor Geral da RRClub. Falas português de Portugal. Tens tr�
           "- validar_diff(ficheiro, diff): verifica se o ficheiro existe, se as linhas do diff existem no código atual e se aplica com 'git apply --check'. Devolve {valido, motivo}.\n"
           "- consultar_licoes(): lições aprendidas de propostas rejeitadas pelo CEO (o que foi proposto, porquê rejeitado, o que fazer diferente)\n"
           "- consultar_logs(nivel, termo, horas, limite): logs detalhados do sistema (nivel: error|warn|''; termo filtra mensagem/rota/traceback; horas até 336). Devolve erros 500 com traceback, 4xx, pedidos lentos, rotas mais afetadas e auditoria recente. USA quando algo 'não funciona'.\n"
-          "- metricas_granulares(dimensao, dias): funil cliques → QR baixados → vendas → receita por 'campanha' | 'influencer' | 'hotel', com taxa_qr_pct, conversao_pct, ticket_medio e campo 'alerta' por item; dimensao 'qr' dá o funil global, por origem, por dia e tempo médio QR→venda.\n"
+          "- metricas_granulares(dimensao, dias): atividade de QR e resgates (inclui histórico NÃO financeiro); para receitas reais utiliza resumo_estrategico.\n"
           "- diagnosticar_sistema(): saúde 24h (erros 500, 4xx, pedidos lentos, rotas mais lentas), estado Stripe (modo, hotéis sem Connect/incompletos, último pagamento) e operação (parceiros pendentes, campanhas expiradas/a expirar, ações pendentes).\n"
           "- propor_correcao(area, ficheiro, descricao, diff): coloca uma correção de código VALIDADA em ações pendentes (area: frontend|backend; ficheiro a partir da raiz, ex. backend/core.py; diff unified). NÃO altera código até aprovação. Recusada automaticamente se o diff não validar.\n"
           "Delega aos subagentes quando a pergunta envolver análise aprofundada; integra as conclusões deles na resposta final. Quando um subagente devolver 'correcao_sugerida', valida o diff e só depois chamas propor_correcao.")
@@ -77,44 +82,78 @@ class MsgIn(BaseModel):
 
 
 async def ler_dashboard(**_):
-    reds = await db.redemptions.find({"date": {"$gte": since(30)}}, NO_ID).to_list(20000)
-    claims = await db.coupon_claims.count_documents({"date": {"$gte": since(30)}})
-    rev = round(sum(r["amount"] for r in reds), 2)
-    return {"janela": "30 dias", "receita": rev, "vendas": len(reds), "comissoes": round(sum(r["commission"] for r in reds), 2), "cliques": claims,
-            "conversao_pct": round(len(reds) / claims * 100, 1) if claims else 0, "ticket_medio": round(rev / len(reds), 2) if reds else 0,
-            "influencers_ativos": await db.influencers.count_documents({"status": "Ativo"}), "hoteis_ativos": await db.partners.count_documents({"status": "Ativo"}),
-            "campanhas_ativas": await db.campaigns.count_documents({"status": "Ativa"})}
+    result = await resumo_estrategico()
+    return {
+        "janela": "30 dias", "fonte": "payment_transactions; exclui resgates manuais",
+        "por_moeda": result["financeiro_por_pais"],
+        "nota": "Não somar EUR e BRL; não chamar receita Stripe a resgates fictícios."
+    }
 
 
 async def listar_hoteis(**_):
-    parts = await db.partners.find({}, {"_id": 0, "id": 1, "nome": 1, "categoria": 1, "cidade": 1, "status": 1}).to_list(200)
-    reds = await db.redemptions.find({"date": {"$gte": since(30)}}, {"_id": 0, "partner_id": 1, "amount": 1}).to_list(20000)
+    parts = await db.partners.find({}, {"_id": 0, "id": 1, "nome": 1, "categoria": 1, "cidade": 1, "status": 1, "currency": 1}).to_list(200)
+    since_date = since(30)
+    txs = await db.payment_transactions.find(
+        {"created_at": {"$gte": since_date}, "payment_status": "paid"},
+        {"_id": 0}
+    ).to_list(20000)
     for p in parts:
-        mine = [r for r in reds if r["partner_id"] == p["id"]]
-        p["vendas_30d"] = len(mine); p["receita_30d"] = round(sum(r["amount"] for r in mine), 2)
+        currency = str(p.get("currency") or "eur").lower()
+        paid = [
+            t for t in txs if t.get("partner_id") == p["id"]
+            and is_new_p5(t, currency)
+            and financial_state(t, currency) in ("transferido_connect", "pago_repasses_pendentes")
+        ]
+        p["vendas_p5_pagas_30d"] = len(paid)
+        p["receita_p5_cobrada_30d"] = round(sum(amounts_minor(t, currency)["cobrado"] for t in paid) / 100, 2)
+        p["receita_moeda"] = currency
     return parts
 
 
 async def listar_influencers(**_):
-    return await db.influencers.find({}, {"_id": 0, "id": 1, "nome": 1, "handle": 1, "seguidores": 1, "status": 1, "email": 1}).to_list(200)
+    return await db.influencers.find({}, {"_id": 0, "id": 1, "nome": 1, "handle": 1, "seguidores": 1, "status": 1}).to_list(200)
 
 
 async def analisar_performance_hotel(hotel_id: str = "", **_):
-    p = await db.partners.find_one({"id": hotel_id}, NO_ID)
-    if not p:
-        return {"erro": "hotel_id não encontrado; usa listar_hoteis()"}
+    partner = await db.partners.find_one({"id": hotel_id}, NO_ID)
+    if not partner:
+        return {"erro": "parceiro não encontrado; consulta listar_hoteis()"}
+    currency = str(partner.get("currency") or "eur").lower()
     camps = await enrich_campaigns(await db.campaigns.find({"parceiro_id": hotel_id}, NO_ID).to_list(100))
-    reds = await db.redemptions.find({"partner_id": hotel_id}, NO_ID).to_list(20000)
-    claims = await db.coupon_claims.count_documents({"partner_id": hotel_id})
-    return {"hotel": {k: p.get(k) for k in ("id", "nome", "categoria", "cidade", "status", "iban")}, "campanhas": [{k: c.get(k) for k in ("id", "nome", "cupom", "influencer", "desconto", "status", "uses", "claims")} for c in camps],
-            "vendas": len(reds), "receita": round(sum(r["amount"] for r in reds), 2), "cliques": claims, "conversao_pct": round(len(reds) / claims * 100, 1) if claims else 0}
+    txs = await db.payment_transactions.find(
+        {"partner_id": hotel_id, "currency": currency, "payment_status": "paid", "created_at": {"$gte": since(30)}},
+        NO_ID
+    ).to_list(20000)
+    paid = [t for t in txs if is_new_p5(t, currency) and financial_state(t, currency) in ("transferido_connect", "pago_repasses_pendentes")]
+    return {
+        "parceiro": {k: partner.get(k) for k in ("id", "nome", "categoria", "cidade", "status", "currency")},
+        "campanhas": [{k: c.get(k) for k in ("id", "nome", "cupom", "influencer", "desconto", "status")} for c in camps],
+        "vendas_p5_pagas_30d": len(paid),
+        "cobrado_p5_30d": round(sum(amounts_minor(t, currency)["cobrado"] for t in paid) / 100, 2),
+        "currency": currency,
+        "fonte": "pagamentos P5 locais pós-webhook; não equivale a saldo bancário",
+    }
 
 
 async def consultar_financeiro(**_):
-    reds = await db.redemptions.find({"date": {"$gte": since(30)}}, NO_ID).to_list(20000)
-    bruto = sum(r["amount"] for r in reds)
-    return {"janela": "30 dias", "faturacao_bruta": round(bruto, 2), "iva_23pct_incluido": round(bruto - bruto / 1.23, 2), "stripe_fees_estimadas_10pct": round(bruto * 0.10, 2),
-            "split": {"hotel_75pct": round(bruto * 0.75, 2), "influencer_5pct": round(bruto * 0.05, 2), "rrclub_10pct": round(bruto * 0.10, 2)}, "margem_rrclub": round(bruto * 0.10, 2), "vendas": len(reds)}
+    return {"brl": await snapshot_currency("brl"), "eur": await snapshot_currency("eur"),
+            "nota": "Nunca somar moedas, estimar IVA ou criar tarifa Stripe fictícia."}
+
+
+async def financas_brasil(**_):
+    return await snapshot_currency("brl")
+
+
+async def financas_portugal(**_):
+    return await snapshot_currency("eur")
+
+
+async def operacoes_p5(**_):
+    data = await resumo_estrategico()
+    return {"gerado_em": data["gerado_em"],
+            "funis": {c: d["funil_observado"] for c, d in data["financeiro_por_pais"].items()},
+            "estados": {c: d["estados_p5"] for c, d in data["financeiro_por_pais"].items()},
+            "nota": "Clique, scan, checkout, pagamento e transferência são estados diferentes."}
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -284,7 +323,8 @@ async def uso_hoje() -> dict:
 async def _subagent(role: str, system: str, prompt: str) -> dict:
     await _llm_guard("subagente")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
-    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model("anthropic", "claude-sonnet-4-6")
+    model = MODELOS["gemini"]  # Económico: não abrir Sonnet automaticamente por cada especialista.
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=new_id(role), system_message=system).with_model(model["provider"], model["model"])
     txt = await chat.send_message(UserMessage(text=prompt))
     return {"subagente": role, "analise": txt.strip()[:4000]}
 
@@ -296,8 +336,8 @@ async def subagente_marketing(pergunta: str = "Analisa as campanhas", **_):
     fin = await consultar_financeiro()
     data = {"dashboard": dash, "financeiro": fin, "campanhas": [{k: c.get(k) for k in ("nome", "cupom", "parceiro", "influencer", "desconto", "comissao", "status", "validade", "uses", "claims")} for c in camps],
             "origens": {o: sum(1 for c in claims if c.get("origem") == o) for o in {c.get("origem") for c in claims}},
-            "qr_baixados": sum(1 for c in claims if c.get("qr_downloaded")), "convertidos": sum(1 for c in claims if c.get("converted"))}
-    return await _subagent("Marketing", "És o subagente de Marketing da RRClub (cupões QR de influencers para hotéis/restaurantes premium). Português de Portugal, conciso, orientado a ações com números. Máx. 200 palavras.",
+            "qr_baixados": sum(1 for c in claims if c.get("qr_downloaded")), "interacoes_convertidas_nao_e_pagamento": sum(1 for c in claims if c.get("converted"))}
+    return await _subagent("Marketing", "És o subagente de Marketing da RRClub (cupões QR de influenciadores para negócios locais no Brasil e em Portugal). Só tratas números financeiros de pagamentos P5 locais pós-webhook, segregados em EUR e BRL. Não inferes que clique ou conversão de cupom significa venda paga. Português de Portugal, conciso, orientado a ações com números. Máx. 200 palavras.",
                            f"Pergunta do Diretor: {pergunta}\n\nDADOS:\n{json.dumps(data, ensure_ascii=False, default=str)[:12000]}")
 
 
@@ -313,10 +353,10 @@ async def subagente_backend(pergunta: str = "Analisa a API", ficheiro: str = "",
                               f"Pergunta do Diretor: {pergunta}\n\nÍNDICE (backend/): {', '.join(_code_index('backend'))}\n\nCÓDIGO:\n{_code_read('backend', files)}"), "ficheiros_lidos": files}
 
 
-READ_FUNCS = {"ler_dashboard": ler_dashboard, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
+READ_FUNCS = {"ler_dashboard": ler_dashboard, "resumo_estrategico": resumo_estrategico, "financas_brasil": financas_brasil, "financas_portugal": financas_portugal, "operacoes_p5": operacoes_p5, "listar_hoteis": listar_hoteis, "listar_influencers": listar_influencers, "analisar_performance_hotel": analisar_performance_hotel, "consultar_financeiro": consultar_financeiro,
               "subagente_marketing": subagente_marketing, "subagente_frontend": subagente_frontend, "subagente_backend": subagente_backend,
               "ler_codigo_github": ler_codigo_github, "listar_ficheiros_github": listar_ficheiros_github, "procurar_codigo_github": procurar_codigo_github,
-              "validar_diff": validar_diff, "consultar_licoes": consultar_licoes, "consultar_logs": consultar_logs, "metricas_granulares": metricas_granulares, "diagnosticar_sistema": diagnosticar_sistema}
+              "validar_diff": validar_diff, "consultar_licoes": consultar_licoes, "consultar_logs": consultar_logs, "diagnosticar_sistema": diagnosticar_sistema}
 
 
 def _parse(txt: str) -> dict:
@@ -353,7 +393,7 @@ async def _queue(tipo: str, args: dict) -> dict:
 async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     await _llm_guard("diretor")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
-    hist = await db.conversas_diretor.find({}, NO_ID).sort("timestamp", -1).to_list(6)
+    hist = await db.conversas_diretor.find({"user_id": user["id"]}, NO_ID).sort("timestamp", -1).to_list(6)
     prior = "\n".join(f"CEO: {h['mensagem_user']}\nDiretor: {h['resposta_diretor']}" for h in reversed(hist))
     licoes = await db.licoes_aprendidas.find({}, NO_ID).sort("timestamp", -1).to_list(8)
     lic_txt = "\n".join(f"- Proposto: {l['proposto'][:120]} | Rejeitado porque: {l['motivo'][:120]} | Fazer diferente: {l['fazer_diferente'][:120]}" for l in licoes)
@@ -407,9 +447,14 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
 
 
 @router.get("/conversas")
-async def conversas():
-    items = await db.conversas_diretor.find({}, {"_id": 0, "user_id": 0}).sort("timestamp", -1).to_list(50)
+async def conversas(user: dict = Depends(require_role("admin"))):
+    items = await db.conversas_diretor.find({"user_id": user["id"]}, {"_id": 0, "user_id": 0}).sort("timestamp", -1).to_list(50)
     return list(reversed(items))
+
+
+@router.get("/estrategia")
+async def estrategia(dias: int = 30):
+    return await resumo_estrategico(dias)
 
 
 @router.get("/briefing")
@@ -429,7 +474,7 @@ async def logs(nivel: str = "", termo: str = "", horas: int = 24, limite: int = 
 
 @router.get("/metricas")
 async def metricas(dimensao: str = "campanha", dias: int = 30):
-    return await metricas_granulares(dimensao, dias)
+    return await resumo_estrategico(dias)  # Dados verificados, não redemptions manuais.
 
 
 
@@ -442,24 +487,62 @@ async def acoes(status: str = ""):
 async def _executar(a: dict, user: dict) -> dict:
     d, tipo = a["dados_json"], a["tipo_acao"]
     if tipo == "criar_campanha":
-        p = await db.partners.find_one({"id": d.get("hotel_id")}, NO_ID) or {}
-        i = await db.influencers.find_one({"id": d.get("influencer_id")}, NO_ID) or {}
-        camp = {"id": new_id("c"), "nome": d.get("nome") or "Campanha Diretor", "parceiro_id": d.get("hotel_id"), "parceiro": p.get("nome", "—"), "influencer_id": d.get("influencer_id"), "influencer": i.get("nome", "—"),
-                "cupom": f"{(i.get('handle') or 'RR').strip('@')[:6].upper()}-{secrets.token_hex(2).upper()}", "desconto": float(d.get("desconto") or 10), "comissao": float(d.get("comissao") or 5),
-                "validade": d.get("data_fim") or (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat(), "data_inicio": d.get("data_inicio"), "formato": d.get("formato") or "QR", "status": "Ativa", "origem": "diretor", "created_at": now_iso()}
+        p = await db.partners.find_one({"id": d.get("hotel_id")}, NO_ID)
+        i = await db.influencers.find_one({"id": d.get("influencer_id")}, NO_ID)
+        if not p or not i:
+            raise HTTPException(409, "É necessário parceiro e influenciador existentes; sem duplicar cadastros.")
+        currency = str(p.get("currency") or "eur").lower()
+        if currency not in ("eur", "brl"):
+            raise HTTPException(409, "Moeda do parceiro inválida")
+        if i.get("currency") and str(i["currency"]).lower() != currency:
+            raise HTTPException(409, "Moeda do influenciador diferente da moeda do parceiro")
+        name = str(d.get("nome") or "").strip()
+        if not name or len(name) > 120:
+            raise HTTPException(400, "O nome da campanha deve conter 1 a 120 caracteres")
+        if float(d.get("desconto", 5)) != 5 or float(d.get("comissao", 5)) != 5:
+            raise HTTPException(409, "Regra P5: desconto 5% e comissão influenciador 5%; rever no contrato antes de alterar")
+        prior = await db.campaigns.find_one(
+            {"nome": name, "parceiro_id": p["id"], "influencer_id": i["id"]}, NO_ID
+        )
+        if prior:
+            return {"campanha_id": prior["id"], "cupom": prior.get("cupom"), "ja_existia": True}
+        camp = {
+            "id": new_id("c"), "nome": name, "parceiro_id": p["id"], "parceiro": p.get("nome", "—"),
+            "influencer_id": i["id"], "influencer": i.get("nome", "—"), "currency": currency,
+            "cupom": f"{(i.get('handle') or 'RR').strip('@')[:6].upper()}-{secrets.token_hex(2).upper()}",
+            "desconto": 5.0, "comissao": 5.0,
+            "validade": d.get("data_fim") or (datetime.now(timezone.utc) + timedelta(days=30)).date().isoformat(),
+            "data_inicio": d.get("data_inicio"), "formato": d.get("formato") or "QR", "status": "Ativa",
+            "origem": "diretor", "created_at": now_iso(),
+        }
         await db.campaigns.insert_one(dict(camp))
         from realtime import emit
         emit("cupons_gerados", quantidade=1, cupom=camp["cupom"], campanha=camp["nome"], parceiro=camp["parceiro"], por="Diretor IA", ref=camp["id"])
-        return {"campanha_id": camp["id"], "cupom": camp["cupom"], "qr_code_url": f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{camp['cupom']}"}
+        return {"campanha_id": camp["id"], "cupom": camp["cupom"], "currency": currency,
+                "qr_code_url": f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{camp['cupom']}",
+                "nota": "Campanha criada após aprovação do admin. Repasse individual depende do Connect de cada beneficiário."}
     if tipo == "gerar_contrato":
-        p = await db.partners.find_one({"id": d.get("hotel_id")}, NO_ID) or {}
-        i = await db.influencers.find_one({"id": d.get("influencer_id")}, NO_ID) or {}
-        split = d.get("split") or {"hotel": 75, "influencer": 5, "rrclub": 10, "stripe": 10}
-        clausulas = (f"CONTRATO DE PARCERIA RRCLUB\n\nEntre {p.get('nome', 'Hotel')} (\"Parceiro\") e {i.get('nome', 'Influencer')} (\"Influencer\"), mediado pela RRClub.\n"
-                     f"1. Objeto: promoção de experiências do Parceiro através de cupões QR do Influencer.\n2. Duração: {d.get('duracao', '30 dias')}.\n"
-                     f"3. Split por venda paga: Parceiro {split.get('hotel')}%, Influencer {split.get('influencer')}%, RRClub {split.get('rrclub')}%, Stripe {split.get('stripe')}%.\n"
-                     "4. Pagamentos via Stripe Connect ou transferência IBAN mensal com extrato.\n5. Dados pessoais tratados conforme RGPD.\n6. Rescisão com 15 dias de aviso.\n\nGerado automaticamente pelo Diretor IA; sujeito a assinatura.")
-        ct = {"id": new_id("ct"), "hotel_id": d.get("hotel_id"), "influencer_id": d.get("influencer_id"), "hotel": p.get("nome"), "influencer": i.get("nome"), "split_json": split, "clausulas_texto": clausulas, "status": "rascunho", "timestamp": now_iso()}
+        p = await db.partners.find_one({"id": d.get("hotel_id")}, NO_ID)
+        i = await db.influencers.find_one({"id": d.get("influencer_id")}, NO_ID)
+        if not p or not i:
+            raise HTTPException(409, "Parceiro/influenciador não encontrados")
+        split = {"parceiro": 80, "influencer": 5, "rrclub": 10, "desconto": 5}
+        if d.get("split") and d["split"] != split:
+            raise HTTPException(409, "Percentagens do contrato divergentes do P5; revisão manual necessária")
+        clausulas = (
+            f"MINUTA DE PARCERIA RRCLUB\n\nEntre {p.get('nome', 'Parceiro')} e "
+            f"{i.get('nome', 'Influenciador')}, através da RRClub.\n"
+            f"1. Campanha por QR em {p.get('currency', 'eur').upper()}; duração: {d.get('duracao', '30 dias')}.\n"
+            "2. De cada compra bruta elegível: 5% de desconto ao seguidor, "
+            "80% ao parceiro, 5% ao influenciador e 10% à RRClub.\n"
+            "3. Tarifas de processamento reais não são percentual fixo; ver contrato e extratos.\n"
+            "4. Transferências dependem da cobrança confirmada e contas Connect verificadas.\n"
+            "5. Dados e cumprimento fiscal sujeitos à revisão jurídica e contabilística local.\n"
+            "Minuta gerada pelo Diretor IA. Não equivale a contrato assinado."
+        )
+        ct = {"id": new_id("ct"), "hotel_id": p["id"], "influencer_id": i["id"],
+              "hotel": p.get("nome"), "influencer": i.get("nome"), "split_json": split,
+              "clausulas_texto": clausulas, "status": "rascunho", "timestamp": now_iso()}
         await db.contratos_gerados.insert_one(dict(ct))
         return {"contrato_id": ct["id"], "status": "rascunho"}
     if tipo == "enviar_email":

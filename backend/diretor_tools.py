@@ -134,29 +134,50 @@ async def diagnosticar_sistema(**_):
 
 
 async def briefing() -> dict:
+    """Alertas verificáveis. Não apresenta resgates fictícios como vendas nem alerta global por KYC individual."""
+    from diretor_estrategia import resumo_estrategico
+    estrategia = await resumo_estrategico(30)
     diag = await diagnosticar_sistema()
-    m = await metricas_granulares("campanha", 30)
-    alertas = []
     s = diag["saude"]
-    if s["erros_500"]:
-        ult = (s.get("ultimo_erro_500") or {}).get("timestamp", "")[11:16]
-        alertas.append({"nivel": "error", "titulo": f"{s['erros_500']} erro(s) 500 desde o deploy atual" + (f" · último às {ult} UTC" if ult else ""), "detalhe": (s.get("ultimo_erro_500") or {}).get("mensagem", "")[:110], "acao": "consulta os logs de erro das últimas 24h e explica a causa"})
-    elif s["erros_500_24h"]:
-        alertas.append({"nivel": "info", "titulo": f"{s['erros_500_24h']} erro(s) 500 da versão anterior — já corrigidos", "detalhe": "Nenhum erro desde o deploy atual", "acao": None})
-    if s["pedidos_lentos_1500ms"] > 5:
-        alertas.append({"nivel": "warn", "titulo": f"{s['pedidos_lentos_1500ms']} pedidos lentos (>1,5s, excluindo IA)", "detalhe": ", ".join(r["rota"] for r in s["rotas_mais_lentas"] if not r["esperado"])[:120], "acao": "diagnostica o sistema e identifica as rotas mais lentas"})
-    for n in diag["stripe"]["hoteis_sem_connect"][:5]:
-        alertas.append({"nivel": "warn", "titulo": f"{n} ainda não ativou o split Stripe", "detalhe": "Sem Stripe Connect as vendas não fazem split automático", "acao": f"prepara um email para o hotel {n} a pedir que ative o Stripe Connect"})
-    for n in diag["stripe"]["hoteis_connect_incompleto"][:5]:
-        alertas.append({"nivel": "warn", "titulo": f"{n}: verificação Stripe incompleta", "detalhe": "Onboarding iniciado mas charges ainda desativados", "acao": f"analisa a situação Stripe do hotel {n}"})
-    for n in diag["operacao"]["parceiros_pendentes"][:5]:
-        alertas.append({"nivel": "info", "titulo": f"Parceiro pendente de aprovação: {n}", "detalhe": "Gestão › Parceiros", "acao": None})
-    for n in diag["operacao"]["campanhas_expiradas_ainda_ativas"][:5]:
-        alertas.append({"nivel": "warn", "titulo": f"Campanha expirada mas ativa: {n}", "detalhe": "A validade já passou", "acao": f"analisa a campanha {n} e propõe renovar ou encerrar"})
-    for n in diag["operacao"]["campanhas_a_expirar_7d"][:5]:
-        alertas.append({"nivel": "info", "titulo": f"Campanha expira em 7 dias: {n}", "detalhe": "Decidir renovação", "acao": f"analisa a performance da campanha {n} e recomenda se devo renovar"})
-    for c in m["itens"]:
-        if c.get("status") == "Ativa" and c["alerta"] in ("cliques sem QR baixado", "QR baixados sem vendas") and c["cliques"] >= 3:
-            alertas.append({"nivel": "warn", "titulo": f"Campanha {c['nome']}: {c['alerta']}", "detalhe": f"{c['cliques']} cliques · {c['qr_baixados']} QR · {c['vendas']} vendas", "acao": f"analisa porque a campanha {c['nome']} tem {c['alerta']} e propõe uma ação"})
-    top = [c for c in m["itens"] if c["receita"] > 0][:3]
-    return {"gerado_em": datetime.now(timezone.utc).isoformat(), "alertas": alertas[:12], "saude": s, "top_campanhas": [{k: c[k] for k in ("nome", "receita", "vendas", "conversao_pct")} for c in top], "funil_30d": m["total"]}
+    alertas = []
+    if s.get("erros_500_desde_deploy_atual"):
+        alertas.append({
+            "nivel": "error",
+            "titulo": f"{s['erros_500_desde_deploy_atual']} erro(s) registados desde o arranque atual",
+            "detalhe": "Consultar logs por rota e reproduzir antes de concluir causa ou correção.",
+            "acao": "Analisa os erros 500 desde o arranque do servidor, com evidências.",
+        })
+    elif s.get("erros_500_24h"):
+        alertas.append({
+            "nivel": "info",
+            "titulo": "Existem erros anteriores ao arranque atual",
+            "detalhe": "A ausência de novos erros não comprova que foram corrigidos.",
+            "acao": None,
+        })
+    for item in estrategia["alertas"]:
+        alertas.append({
+            "nivel": "warn" if item["severidade"] == "atencao" else "info",
+            "titulo": item["titulo"],
+            "detalhe": item["evidencia"],
+            "acao": item["acao"],
+        })
+    for title in diag["operacao"]["campanhas_expiradas_ainda_ativas"][:3]:
+        alertas.append({
+            "nivel": "warn", "titulo": f"Campanha expirada: {title}",
+            "detalhe": "Estado ativo com data de validade ultrapassada.",
+            "acao": f"Rever a validade da campanha {title} antes de propor ação.",
+        })
+    return {
+        "gerado_em": estrategia["gerado_em"],
+        "fonte_financeira": "base_local.payment_transactions; não é extrato bancário",
+        "alertas": alertas[:10],
+        "saude": s,
+        "funil_por_moeda": {
+            currency: dados["funil_observado"]
+            for currency, dados in estrategia["financeiro_por_pais"].items()
+        },
+        "pendencias_individuais_connect": (
+            diag["stripe"]["hoteis_sem_connect"] + diag["stripe"]["hoteis_connect_incompleto"]
+        )[:12],
+        "nota_connect": "Onboarding individual não significa pane global da plataforma.",
+    }
