@@ -356,3 +356,4 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Gates de plataforma Pix em produção: provider_verified true (10/10 checks), livemode. Nenhuma cobrança real.
 - Pendente: prova final do checkout em produção exige sessão da parceira (scan+aprovação) — não há credenciais da Josicleide; validado só com Stripe mockado (iteration_38, 74 testes).
 - Resend: pedido ainda pendente.
+- 2026-06: Admin "Recebimentos Pix" (PixRecipientsDialog, botão só em campanhas BRL) + GET /admin/p5/charges/{id} (prova de checkout read-only) + recibo "Recibo Pix · P5" com % desconto. Testado iteration_39. Preview: Loja BR Teste / BRTEST-01 são dados de teste do preview.

@@ -1,0 +1,26 @@
+{
+  "summary": "Tested the new 'Recebimentos Pix' admin feature in the preview env. Backend: 10/10 pytest pass. Frontend: all requested flows pass. Covered: campaign currency in /admin/campanhas, GET p5/charges (returns empty), GET pix/recipients (bloqueio 'sem pix_stripe_account_id' for both recipients), POST reconcile (returns 'sem conta' for both), 404 for an unknown campaign, 401/403 when there is no token or an invalid one, 403 for the partner role. UI: only BRTEST-01 out of 6 campaigns has the pix button. The dialog shows the Loja BR Teste and Influencer Exemplo cards with the bloqueio text. Reconcile is disabled. Refresh calls the API again. Esc closes the dialog. The QR dialog still opens, the other tabs load, and there are no page errors. No Stripe calls were made and no data was created or changed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Campanhas actions", "issues": ["The pix button (ShieldCheck) has only a title and no aria-label. This is a small accessibility gap."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_pix_recipients_dialog_api.py", "/app/test_reports/pytest/pytest_results_iter39.xml"],
+  "action_items": [
+    "Optional: the 'needs' condition in PixRecipientsDialog also enables Reconcile when the account metadata points to another record ('outro'). The backend would then only return 'conflito'. Consider excluding 'outro' too.",
+    "PublicCoupon receipt ('Recibo Pix' label and public-receipt-discount-percent line) was not checked end-to-end. No paid BRL transaction exists in preview and we may not create payments. The code was reviewed only (line 190-192), and the logic looks correct."
+  ],
+  "critical_code_review_comments": [
+    "routes_admin.list_items queries db.partners twice (once for names, once for currencies). These could be one query.",
+    "recipients_reconcile calls provider('accounts.retrieve') without the try/except that the diagnostic has. If Stripe raises an HTTPException for one recipient, the whole reconcile fails instead of giving a per-role result."
+  ],
+  "updated_files": ["/app/backend/tests/test_pix_recipients_dialog_api.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. Used the existing preview partner p-3657b48e8e and campaign c-be2c66f79d (BRTEST-01).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin faellt@gmail.com / Robson2026!. BRTEST-01 (c-be2c66f79d) is the only BRL campaign. Its partner and influencer have no pix_stripe_account_id. Run: REACT_APP_BACKEND_URL=... pytest tests/test_pix_recipients_dialog_api.py. The parceiro.exemplo@club.pt login works and was used for the 403 check."
+}
