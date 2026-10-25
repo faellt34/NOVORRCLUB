@@ -1,6 +1,7 @@
 from payment_policy import reporting_currency, currency_query
 import os
 from partner_access import partner_record
+from diretor_parceiros import partner_growth_report
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -62,8 +63,67 @@ async def enrich_campaigns(camps):
 
 
 @router.get("/dashboard/influencer")
-async def influencer_dashboard(period: int = 30, user: dict = Depends(require_role("influencer")), currency: str = Depends(reporting_currency)):
+async def influencer_dashboard(period: int = 30, verified_only: bool = False, user: dict = Depends(require_role("influencer")), currency: str = Depends(reporting_currency)):
     inf_id = user.get("influencer_id")
+    if not isinstance(inf_id, str) or not inf_id.strip():
+        raise HTTPException(403, "Perfil de influenciador sem associação. Contacte o administrador.")
+    if verified_only:
+        # Registo financeiro P5 local: nunca usar resgates manuais como pagamentos.
+        from diretor_estrategia import is_new_p5, financial_state, amounts_minor, is_synthetic
+        days = max(1, min(int(period), 90))
+        cutoff = since(days)
+        candidates = await db.payment_transactions.find({
+            "influencer_id": inf_id, "currency": currency, "created_at": {"$gte": cutoff}
+        }, NO_ID).to_list(20000)
+        paid = [tx for tx in candidates if is_new_p5(tx, currency)
+                and financial_state(tx, currency) in ("transferido_connect", "pago_repasses_pendentes")]
+        amount_paid = sum(amounts_minor(tx, currency)["cobrado"] for tx in paid)
+        influence_due = sum(amounts_minor(tx, currency)["influenciador"] for tx in paid)
+        camps = await enrich_campaigns(await db.campaigns.find({"influencer_id": inf_id}, NO_ID).to_list(500))
+        camps = [c for c in camps if c.get("currency", "eur") == currency]
+        by_campaign = defaultdict(lambda: {"uses": 0, "revenue_minor": 0})
+        for tx in paid:
+            item = by_campaign[tx.get("campaign_id")]
+            item["uses"] += 1
+            item["revenue_minor"] += amounts_minor(tx, currency)["cobrado"]
+        for c in camps:
+            item = by_campaign.get(c["id"], {"uses": 0, "revenue_minor": 0})
+            c["uses"] = item["uses"]
+            c["revenue"] = round(item["revenue_minor"] / 100, 2)
+        claim_q = currency_query({"influencer_id": inf_id, "date": {"$gte": cutoff}}, currency)
+        claims = await db.coupon_claims.find(claim_q,
+            {"_id": 0, "campaign_id": 1, "is_test": 1, "test_run_id": 1,
+             "livemode": 1, "origem": 1, "idempotency_key": 1}
+        ).to_list(20000)
+        valid_claims = [c for c in claims if not is_synthetic(c)]
+        openings = len(valid_claims)
+        downloads_list = await db.qr_downloads.find(claim_q,
+            {"_id": 0, "campaign_id": 1, "is_test": 1, "test_run_id": 1,
+             "livemode": 1, "origem": 1, "idempotency_key": 1}
+        ).to_list(20000)
+        valid_downloads = [d for d in downloads_list if not is_synthetic(d)]
+        downloads = len(valid_downloads)
+        counts, download_counts = defaultdict(int), defaultdict(int)
+        for claim in valid_claims:
+            counts[claim.get("campaign_id")] += 1
+        for download in valid_downloads:
+            download_counts[download.get("campaign_id")] += 1
+        for c in camps:
+            c["claims"] = counts[c["id"]]
+            c["downloads"] = download_counts[c["id"]]
+        active = [c for c in camps if c.get("status") == "Ativa"]
+        featured = max(active, key=lambda c: c["uses"]) if active else None
+        return {
+            "mode": "verified_p5", "currency": currency,
+            "financial_note": "Somente pagamentos P5 confirmados no registo local; não é extrato bancário.",
+            "kpis": {"uses": len(paid), "customers": openings, "claims": openings,
+                     "downloads": downloads, "revenue": round(amount_paid / 100, 2),
+                     "commission": round(influence_due / 100, 2), "rate": 5,
+                     "conversion": None,
+                     "trend": {"uses": None, "revenue": None, "commission": None,
+                               "customers": None, "claims": None, "downloads": None}},
+            "chart": [], "topPartners": [], "campaigns": camps, "featured": featured,
+        }
     reds = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period)}}, currency), NO_ID).to_list(20000)
     prev = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}}, currency), NO_ID).to_list(20000)
     t, tp = totals(reds), totals(prev)
@@ -146,6 +206,13 @@ def _pilot_record_visible(item: dict, start: datetime) -> bool:
         return False
 
 
+@router.get("/partner/insights-p5")
+async def partner_insights_p5(user: dict = Depends(require_role("partner"))):
+    """Read-only: segurança por partner_id autenticado, sem acesso a outros negócios."""
+    partner = await partner_record(user, db)
+    return await partner_growth_report(partner)
+
+
 @router.get("/partner/qr/activity")
 async def partner_qr_activity(user: dict = Depends(require_role("partner")), currency: str = Depends(reporting_currency)):
     """Read-only, partner-scoped QR activity. A scan/open is not a paid sale."""
@@ -176,7 +243,38 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
 
 
 @router.get("/dashboard/admin")
-async def admin_dashboard(pilot_since: Optional[str] = None, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+async def admin_dashboard(pilot_since: Optional[str] = None, verified_only: bool = False, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+    # Financeiros verificáveis no livro P5 local, sem misturar com resgates manuais.
+    # Continua sendo apenas leitura: nunca apaga ou altera pagamentos e histórico.
+    if verified_only:
+        from diretor_estrategia import snapshot_currency
+        report = await snapshot_currency(currency, 30)
+        amounts = report["financeiro"]
+        funnel = report["funil_observado"]
+        paid = report["vendas_p5_pagas"]
+        opened = funnel["aberturas_cupom"]
+        return {
+            "mode": "verified_p5", "currency": currency, "pilot_since": None,
+            "financial_source": "payment_transactions_p5_paid_local",
+            "financial_note": "Pagamentos P5 localmente confirmados após webhook; não comprova depósito bancário ou tarifa Stripe.",
+            "totals": {"count": paid, "revenue": amounts["cobrado"],
+                       "commission": amounts["rrclub"],
+                       "discounts": round(amounts["bruto"] - amounts["cobrado"], 2),
+                       "ticket": round(amounts["cobrado"] / paid, 2) if paid else 0},
+            "trend": {"revenue": None, "commission": None, "count": None},
+            "counts": {
+                "influencers": await db.influencers.count_documents({"status": "Ativo"}),
+                "partners": await db.partners.count_documents({"status": "Ativo"}),
+                "campaigns": await db.campaigns.count_documents({"status": "Ativa"}),
+                "users": await db.users.count_documents({}),
+            },
+            "funnel": {"clicks": opened, "uses": paid, "scans": funnel["scans_p5"],
+                       "not_used": None, "conversion": None,
+                       "ticket": round(amounts["cobrado"] / paid, 2) if paid else 0,
+                       "origins": []},
+            "campaigns": [], "chart": [], "chart_rc": [],
+            "repasses_pendentes": report["pagos_com_repasses_pendentes"],
+        }
     # pilot_since affects presentation ONLY. Historical records, Stripe and audits remain untouched.
     pilot_start = None
     if pilot_since:

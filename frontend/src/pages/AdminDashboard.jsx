@@ -25,7 +25,8 @@ export default function AdminDashboard() {
   const [data, setData] = useState(null);
   // Operational pilot is a read-only view. The start timestamp is stored only in this browser.
   const [pilotSince, setPilotSince] = useState(() => localStorage.getItem("rrclub_pilot_since") || "");
-  const [view, setView] = useState(() => localStorage.getItem("rrclub_pilot_since") ? "pilot" : "history");
+  const [view, setView] = useState("verified");
+  const isVerified = view === "verified";
   const isPilot = view === "pilot" && Boolean(pilotSince);
   const startPilot = () => {
     if (pilotSince) return;
@@ -34,7 +35,7 @@ export default function AdminDashboard() {
     setPilotSince(start);
     setView("pilot");
   };
-  const [stats, setStats] = useState({ receita: 0, comissoes: 0, influencers: 0, parceiros: 0, campanhas: 0, usos: 0, cliques: 0 });
+  const [stats, setStats] = useState({ receita: 0, comissoes: 0, influencers: 0, parceiros: 0, campanhas: 0, usos: 0, cliques: 0, scans: 0 });
   const [origins, setOrigins] = useState([]);
   const [audit, setAudit] = useState([]);
   const [flash, triggerFlash] = useFlash();
@@ -51,18 +52,18 @@ export default function AdminDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin", { params: isPilot ? { pilot_since: pilotSince } : {} }), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
+      const [d, a, l, r, f] = await Promise.all([api.get("/dashboard/admin", { params: isVerified ? { verified_only: true } : isPilot ? { pilot_since: pilotSince } : {} }), api.get("/audit"), api.get("/leads"), api.get("/admin/reset-requests"), api.get("/admin/feedback")]);
       setData(d.data);
-      setAudit(isPilot ? a.data.filter((item) => {
+      setAudit(isVerified ? [] : isPilot ? a.data.filter((item) => {
         const when = item.date || item.timestamp || item.created_at;
         return when && new Date(when).getTime() >= new Date(pilotSince).getTime()
           && !/\\bTESTE\\b|SIMULAÇ/i.test(String(item.detail || ""));
       }) : a.data);
       setLeads(l.data); setResets(r.data); setFeedback(f.data);
-      setStats({ receita: d.data.totals.revenue, comissoes: d.data.totals.commission, influencers: d.data.counts.influencers, parceiros: d.data.counts.partners, campanhas: d.data.counts.campaigns, usos: d.data.funnel.uses, cliques: d.data.funnel.clicks });
+      setStats({ receita: d.data.totals.revenue, comissoes: d.data.totals.commission, influencers: d.data.counts.influencers, parceiros: d.data.counts.partners, campanhas: d.data.counts.campaigns, usos: d.data.funnel.uses, cliques: d.data.funnel.clicks, scans: d.data.funnel.scans || 0 });
       setOrigins(d.data.funnel.origins);
     } catch (e) { toast.error(apiError(e)); }
-  }, [isPilot, pilotSince]);
+  }, [isPilot, isVerified, pilotSince]);
   useEffect(() => { load(); }, [load]);
 
   const pushAudit = (action, detail, amount, extra = {}) =>
@@ -73,7 +74,7 @@ export default function AdminDashboard() {
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     // In pilot mode every metric is recalculated with server-side filters.
     // This prevents simulated/stale websocket events from inflating pilot totals.
-    if (isPilot && ["redencao_registada", "clique_cupao", "indicacao_criada", "cupons_gerados", "pagamento_atualizado", "teste_limpo"].includes(ev.tipo)) {
+    if ((isPilot || isVerified) && ["redencao_registada", "clique_cupao", "indicacao_criada", "cupons_gerados", "pagamento_atualizado", "teste_limpo"].includes(ev.tipo)) {
       load();
       return;
     }
@@ -136,38 +137,42 @@ export default function AdminDashboard() {
             <span className="w-px h-4 bg-slate-200" />
             <span className={`inline-flex items-center gap-1.5 ${wsStatus === "conectado" ? "text-emerald-700" : "text-amber-700"}`} data-testid="ws-indicator" data-status={wsStatus}><span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : "bg-amber-500"}`} /> {wsStatus === "conectado" ? "Sistema operacional" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}</span>
           </div>
-          {view === "history" && <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold btn-press">+ Novo teste</button>}
         </div>
       </div>
 
       <div data-testid="pilot-view-switch" className="card-soft p-4 flex flex-wrap items-center gap-3">
         <div className="flex gap-2">
-          <button type="button" onClick={() => setView("history")} className={`px-3 py-2 rounded-lg text-sm font-semibold ${view === "history" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>Histórico completo</button>
+          <button type="button" onClick={() => setView("verified")} className={`px-3 py-2 rounded-lg text-sm font-semibold ${isVerified ? "bg-emerald-700 text-white" : "bg-emerald-50 text-emerald-700"}`}>Financeiro P5 real</button>
+          <button type="button" onClick={() => setView("history")} className={`px-3 py-2 rounded-lg text-sm font-semibold ${view === "history" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>Histórico antigo · não verificado</button>
           <button type="button" onClick={() => pilotSince ? setView("pilot") : startPilot()} className={`px-3 py-2 rounded-lg text-sm font-semibold ${isPilot ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-700"}`}>{pilotSince ? "Piloto real" : "Iniciar piloto real"}</button>
         </div>
-        <p className="text-xs text-slate-500 flex-1">{isPilot
+        <p className="text-xs text-slate-500 flex-1">{isVerified
+          ? "Apenas cobranças P5 pagas e consistentes no registo local. Não comprova depósito bancário; histórico fictício permanece preservado e separado."
+          : isPilot
           ? `Só operações não fictícias após ${new Date(pilotSince).toLocaleString("pt-PT")}. Registos anteriores preservados no Histórico.`
           : "Histórico completo, incluindo testes e dados antigos. Iniciar piloto fixa uma referência apenas neste navegador."}</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-sistema" icon={Euro} label="Receita do Sistema" live={stats.receita} format={(v) => eur(Math.round(v))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
-        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões Agregadas" live={stats.comissoes} format={(v) => eur(Math.round(v))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
+        <KpiCard id="receita-sistema" icon={Euro} label={isVerified ? "Valor cobrado P5 (30d)" : "Receita do Sistema"} live={stats.receita} format={(v) => eur(+v.toFixed(2))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
+        <KpiCard id="comissoes-agregadas" icon={HandCoins} label={isVerified ? "Parcela RRClub antes das taxas" : "Comissões Agregadas"} live={stats.comissoes} format={(v) => eur(+v.toFixed(2))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
         <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" live={stats.influencers} />
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-usados" icon={Ticket} label="Pessoas que usaram cupom" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
-        <KpiCard id="cliques-total" icon={MousePointerClick} label="Cliques no cupom" live={stats.cliques} flash={flash.cliques} />
+        <KpiCard id="cupons-usados" icon={Ticket} label={isVerified ? "Pagamentos P5" : "Pessoas que usaram cupom"} live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
+        <KpiCard id="cliques-total" icon={MousePointerClick} label={isVerified ? "Aberturas de cupom" : "Cliques no cupom"} live={stats.cliques} flash={flash.cliques} />
+        {isVerified ? <KpiCard id="scans-p5" icon={Ticket} label="QR P5 lidos pelo parceiro" live={stats.scans} /> : <>
         <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
         <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
+        </>}
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2"><RevenueClicksChart series={data.chart_rc || []} /></div>
-        {!isPilot && <Recommendations refreshKey={stats.cliques} />}
+        <div className="xl:col-span-2">{isVerified ? <div className="card-soft p-6 text-sm text-slate-600">Sem gráfico financeiro especulativo. Os valores acima incluem somente pagamentos P5 locais confirmados; movimentos bancários devem ser reconciliados na Stripe.</div> : <RevenueClicksChart series={data.chart_rc || []} />}</div>
+        {!isPilot && !isVerified && <Recommendations refreshKey={stats.cliques} />}
       </div>
 
 
@@ -246,9 +251,9 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {!isPilot && <AbandonAnalysis events={eventos} />}
+      {!isPilot && !isVerified && <AbandonAnalysis events={eventos} />}
 
-      {!isPilot && <AiAnalyst refreshKey={clicksKey} />}
+      {!isPilot && !isVerified && <AiAnalyst refreshKey={clicksKey} />}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div data-testid="admin-feedback-card" className="card-soft p-5">
@@ -350,7 +355,7 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {!isPilot && <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />}
+      {!isPilot && !isVerified && <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />}
 
     </div>
   );
