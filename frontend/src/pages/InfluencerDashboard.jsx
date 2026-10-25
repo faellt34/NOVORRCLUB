@@ -32,12 +32,11 @@ export default function InfluencerDashboard() {
       // Eventos de resgate não comprovam pagamento: recarregar somente o livro P5 verificado.
       api.get(`/dashboard/influencer?period=${period}&verified_only=true`)
         .then((r) => setData(r.data)).catch((e) => toast.error(apiError(e)));
-    } else if (ev.tipo === "clique_cupao") {
-      setData((d) => d && { ...d, kpis: { ...d.kpis, customers: d.kpis.customers + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, claims: (c.claims || 0) + 1 } : c) });
-      triggerFlash("customers");
-    } else if (ev.tipo === "qr_baixado") {
-      setData((d) => d && { ...d, kpis: { ...d.kpis, downloads: (d.kpis.downloads || 0) + 1 }, campaigns: d.campaigns.map((c) => c.cupom === ev.cupom ? { ...c, downloads: (c.downloads || 0) + 1 } : c) });
-      triggerFlash("downloads");
+    } else if (ev.tipo === "clique_cupao" || ev.tipo === "qr_baixado") {
+      // O evento WebSocket pode ser global ou duplicado; apenas a API filtrada
+      // pela identidade autenticada confirma contagens deste influenciador.
+      api.get(`/dashboard/influencer?period=${period}&verified_only=true`)
+        .then((r) => setData(r.data)).catch(() => {});
     }
   });
   const [videoBusy, setVideoBusy] = useState(false);
