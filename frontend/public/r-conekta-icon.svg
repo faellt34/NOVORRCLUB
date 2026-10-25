@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 88 88" role="img" aria-label="R-Conekta">
+  <rect width="88" height="88" rx="22" fill="#203047" />
+  <path d="M67 17 C46 3 17 18 13 43 C7 69 29 80 48 78 C58 77 65 72 70 66" fill="none" stroke="#477FAE" stroke-width="7.5" stroke-linecap="round" />
+  <path d="M33 27 V61 M33 44 L54 26 M33 44 L54 62" fill="none" stroke="#8BC7E8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="72" cy="13" r="4" fill="#477FAE" />
+</svg>
