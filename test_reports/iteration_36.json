@@ -1,0 +1,26 @@
+{
+  "summary": "Backend-only offline verification of Pix recipients reconcile fix. All 72 tests passed (+9 subtests) across test_pix_recipients_reconcile.py (4), test_p5_pix_checkout_integration.py (1), test_pix_service.py, test_pix_readiness.py, test_p5_rules.py with STRIPE_SECRET_KEY=sk_test_offline and Stripe mocked. Preview GET /api/admin/pix/recipients/c-d42b89cc4c as admin returned 200 with 'sem pix_stripe_account_id' for both partner and influencer. No Stripe calls, no production, no /api/diretor calls.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/pix/recipients/{id}/reconcile", "issue": "Not atomic: if partner is stamped and the influencer retrieve/update then raises 502, response is 502 and partner's success is not reported (still audited). Re-running is safe (idempotent -> 'já associado')."},
+      {"endpoint": "POST /api/admin/pix/recipients/{id}/reconcile", "issue": "No check for partner and influencer sharing the same account id (diagnostic flags it, reconcile does not); second role would then hit 'conflito', so no re-bind, but an explicit early guard would be clearer."},
+      {"endpoint": "POST /api/admin/pix/recipients/{id}/reconcile", "issue": "Conflict message includes the other owner's internal id (admin-only, low risk)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_pix_recipients_reconcile.py", "/app/backend/tests/test_p5_pix_checkout_integration.py", "/app/test_reports/pytest/pytest_results_iter36.xml"],
+  "action_items": ["Optional: add a test for country != BR -> 'conta inesperada' with no accounts.update (code path is correct by review but untested)", "Optional: guard same-account partner/influencer in reconcile"],
+  "critical_code_review_comments": [
+    "recipients_reconcile: accounts.update only reached after (a) metadata has no partner_id/influencer_id, (b) country == BR and info.id == stored acct, (c) email or name evidence matches; empty record name cannot match since '' is removed from the names set. CONFIRMED.",
+    "audit() awaited after successful update. CONFIRMED. Only accounts.retrieve/accounts.update are called; no accounts.create, bank, or commission changes. CONFIRMED.",
+    "recipients_diagnostic: read-only (only accounts.retrieve), masks account ids to last 6 chars, returns evidencia_independente. CONFIRMED.",
+    "Name evidence is weaker than email (Stripe business name can be self-declared), but it's acceptable since the account id must already match the stored one."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped)"},
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && MONGO_URL=mongodb://localhost:27017 DB_NAME=test_database STRIPE_SECRET_KEY=sk_test_offline python -m pytest -c /dev/null tests/test_pix_recipients_reconcile.py tests/test_p5_pix_checkout_integration.py tests/test_pix_service.py tests/test_pix_readiness.py tests/test_p5_rules.py -q -p no:xdist. Campaign c-d42b89cc4c on preview has no pix_stripe_account_id for either recipient."
+}

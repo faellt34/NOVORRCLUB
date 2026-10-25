@@ -341,3 +341,11 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 ## 2026-10-26 — P5 Pix SHEYSO-7182: causa exata
 - Prod: Josicleide p-fc194b8f5c (acct …cSLJUr) e Sheyson if-da6af205f9 (acct …3I0NpA): BR, charges/payouts/transfers active, requirements vazios — APTOS. Bloqueio: metadata das contas Stripe VAZIA (contas criadas antes do onboarding gravar partner_id/influencer_id) → receiving_status recusa titularidade → connect_brasil_associacao_pendente.
 - Novo: GET /admin/pix/recipients/{campaign_id} (read-only, já em prod) e POST /admin/pix/recipients/{campaign_id}/reconcile (grava metadata owner só se vazia e conta = registada; conflito nunca religa; audit). Testes offline 64 passam (3 novos). Aguardando OK para deploy + reconcile + validação do botão Pagar com Pix (CEO no telemóvel; abrir checkout não cobra).
+
+## 2026-10-26 — Reconcile Pix BR pronto (iteration_36: 72/72)
+- reconcile exige evidência independente (email Stripe == email do utilizador OU nome Stripe == nome do cadastro), metadata vazia e conta registada; conflito nunca religa; audit. Diagnóstico devolve evidencia_independente. Integração offline: bloqueado → reconcile → checkout_url Stripe Pix.
+- NÃO está no GitHub mainNNOVO (agente não faz push; usar Save to Github). Aguarda "publica": deploy → reconcile c-bdb38f42d4 → diagnóstico → CEO clica Pagar com Pix (sem pagar).
+
+## 2026-10-26 — Reconcile Pix BR pronto (iteration_36: 72/72)
+- reconcile exige evidência independente (email Stripe == email do utilizador OU nome Stripe == nome do cadastro), metadata vazia e conta registada; conflito nunca religa; audit. Diagnóstico devolve evidencia_independente. Integração offline: bloqueado → reconcile → checkout_url Stripe Pix.
+- Código já commitado pela plataforma (branch integracao-google-rrclub-20261019); NÃO está no GitHub mainNNOVO (agente não faz push; usar Save to Github). Aguarda "publica": deploy → reconcile c-bdb38f42d4 → diagnóstico → CEO clica Pagar com Pix (sem pagar).
