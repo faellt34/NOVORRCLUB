@@ -264,7 +264,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {!isPilot && !isVerified && <AbandonAnalysis events={eventos} />}
+      <AbandonAnalysis events={eventos} includeHistory={view === "history"} pilotSince={pilotSince} />
 
       {!isPilot && !isVerified && <AiAnalyst refreshKey={clicksKey} />}
 
