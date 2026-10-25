@@ -180,7 +180,7 @@ export default function PublicCoupon() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-500">
                   <span className="flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Válido até {new Date(c.validade).toLocaleDateString("pt-PT")}</span>
-                  <span data-testid="public-coupon-claims" className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {num(c.claims)} pessoas já receberam</span>
+                  <span data-testid="public-coupon-claims" className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {num(c.claims)} aberturas registadas</span>
                 </div>
                 {completed && (
                   <div data-testid="public-pay-success" className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-center">
