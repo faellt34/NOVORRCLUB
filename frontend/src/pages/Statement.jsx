@@ -59,8 +59,8 @@ export default function Statement() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div>
-          <h1 data-testid="statement-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Extrato Mensal</h1>
-          <p className="text-sm text-slate-500 mt-1">Comissões consolidadas por mês — taxa travada por redenção, pronto para payout offline</p>
+          <h1 data-testid="statement-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Histórico Mensal de Resgates</h1>
+          <p className="text-sm text-slate-500 mt-1">Registos administrativos antigos: valores não conciliados com pagamentos P5 ou Stripe Connect.</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={monthId} onValueChange={setMonthId}>
@@ -71,6 +71,8 @@ export default function Statement() {
           <button data-testid="statement-export-button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press"><Download className="w-4 h-4" /> Exportar CSV</button>
         </div>
       </div>
+
+      <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Atenção: este histórico pode conter testes, simulações e resgates sem pagamento. Não deve ser usado como comprovativo de receita, dívida ou transferência. Para pagamentos P5 confirmados, consulte o painel do influenciador.</p>
 
       {reportCurrency() === "brl" ? <PixReceivingAccount /> : <div data-testid="influencer-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -91,8 +93,8 @@ export default function Statement() {
       </div>}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard id="extrato-comissao" icon={HandCoins} label={`Comissão · ${label}`} value={eur(+totals.commission.toFixed(2))} />
-        <KpiCard id="extrato-receita" icon={Euro} label="Receita Gerada" value={eur(Math.round(totals.revenue))} />
+        <KpiCard id="extrato-comissao" icon={HandCoins} label={`Comissão registada (não conciliada) · ${label}`} value={eur(+totals.commission.toFixed(2))} />
+        <KpiCard id="extrato-receita" icon={Euro} label="Valor histórico não verificado" value={eur(Math.round(totals.revenue))} />
         <KpiCard id="extrato-redencoes" icon={Ticket} label="Redenções" value={num(totals.uses)} />
       </div>
 
@@ -100,9 +102,9 @@ export default function Statement() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-900">Detalhe por Campanha — {label}</h3>
           {month.status === "Pago" ? (
-            <span data-testid="statement-status-pago" className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full"><CheckCircle2 className="w-3.5 h-3.5" /> Pago em {new Date(month.paidAt).toLocaleDateString("pt-PT")}</span>
+            <span data-testid="statement-status-pago" className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full"><CheckCircle2 className="w-3.5 h-3.5" /> Marcado como pago no registo interno: {new Date(month.paidAt).toLocaleDateString("pt-PT")}</span>
           ) : (
-            <span data-testid="statement-status-pendente" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full"><Clock className="w-3.5 h-3.5" /> Pendente · payout offline</span>
+            <span data-testid="statement-status-pendente" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full"><Clock className="w-3.5 h-3.5" /> Sem confirmação de liquidação neste histórico</span>
           )}
         </div>
         <div className="overflow-x-auto -mx-5 px-5">
