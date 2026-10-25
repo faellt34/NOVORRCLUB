@@ -184,7 +184,38 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
 
 
 @router.get("/dashboard/admin")
-async def admin_dashboard(pilot_since: Optional[str] = None, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+async def admin_dashboard(pilot_since: Optional[str] = None, verified_only: bool = False, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
+    # Financeiros verificáveis no livro P5 local, sem misturar com resgates manuais.
+    # Continua sendo apenas leitura: nunca apaga ou altera pagamentos e histórico.
+    if verified_only:
+        from diretor_estrategia import snapshot_currency
+        report = await snapshot_currency(currency, 30)
+        amounts = report["financeiro"]
+        funnel = report["funil_observado"]
+        paid = report["vendas_p5_pagas"]
+        opened = funnel["aberturas_cupom"]
+        return {
+            "mode": "verified_p5", "currency": currency, "pilot_since": None,
+            "financial_source": "payment_transactions_p5_paid_local",
+            "financial_note": "Pagamentos P5 localmente confirmados após webhook; não comprova depósito bancário ou tarifa Stripe.",
+            "totals": {"count": paid, "revenue": amounts["cobrado"],
+                       "commission": amounts["rrclub"],
+                       "discounts": round(amounts["bruto"] - amounts["cobrado"], 2),
+                       "ticket": round(amounts["cobrado"] / paid, 2) if paid else 0},
+            "trend": {"revenue": None, "commission": None, "count": None},
+            "counts": {
+                "influencers": await db.influencers.count_documents({"status": "Ativo"}),
+                "partners": await db.partners.count_documents({"status": "Ativo"}),
+                "campaigns": await db.campaigns.count_documents({"status": "Ativa"}),
+                "users": await db.users.count_documents({}),
+            },
+            "funnel": {"clicks": opened, "uses": paid, "scans": funnel["scans_p5"],
+                       "not_used": None, "conversion": None,
+                       "ticket": round(amounts["cobrado"] / paid, 2) if paid else 0,
+                       "origins": []},
+            "campaigns": [], "chart": [], "chart_rc": [],
+            "repasses_pendentes": report["pagos_com_repasses_pendentes"],
+        }
     # pilot_since affects presentation ONLY. Historical records, Stripe and audits remain untouched.
     pilot_start = None
     if pilot_since:
