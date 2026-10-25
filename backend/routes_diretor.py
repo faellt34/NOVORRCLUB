@@ -402,7 +402,7 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
     text = (f"Contexto recente:\n{prior}\n\n" if prior else "") + f"Hoje: {datetime.now(timezone.utc).date().isoformat()}\nCEO: {body.mensagem}"
     chamadas, pendentes, resposta = [], [], None
     try:
-      for _ in range(MAX_PASSOS_CONVERSA):
+      for passo in range(MAX_PASSOS_CONVERSA):
         await _llm_guard("diretor")
         out = _parse(await chat.send_message(UserMessage(text=text)))
         if "funcao" in out:
@@ -417,7 +417,7 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
                 except Exception as e:
                     res = {"erro": f"falha interna em {fn}: {type(e).__name__}: {str(e)[:200]}"}
                 chamadas.append({"funcao": fn, "args": args, "resumo": (res.get("analise", "")[:600] if isinstance(res, dict) else "")})
-                text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\nContinua (outra função ou resposta final em JSON)."
+                text = f"RESULTADO de {fn}({json.dumps(args, ensure_ascii=False)}):\n{json.dumps(res, ensure_ascii=False, default=str)[:9000]}\n\n" + ("ÚLTIMA RESPOSTA: não chames mais nenhuma função. Resume já os resultados verificáveis para o CEO; indica o que não ficou comprovado. Responde apenas em JSON com a chave resposta." if passo >= MAX_PASSOS_CONVERSA - 2 else "Continua (outra função ou resposta final em JSON).")
             elif fn in WRITE_ACTIONS:
                 if fn == "propor_correcao":
                     try:
@@ -445,6 +445,11 @@ async def conversar(body: MsgIn, user: dict = Depends(require_role("admin"))):
       resposta = f"Erro técnico ao processar o pedido ({type(e).__name__}). A equipa técnica foi notificada; tente novamente."
       from observability import record
       await record("error", "diretor", f"conversar falhou: {type(e).__name__}: {str(e)[:300]}", caminho="/api/diretor/conversar", status=200)
+    if not resposta and chamadas:
+        ferramentas = ", ".join(dict.fromkeys(item["funcao"] for item in chamadas))
+        resposta = (f"Análise parcial: consultei {ferramentas}, mas o limite de passos de IA foi atingido "
+                    "antes da conclusão. Não foi executada qualquer correção automática. "
+                    "Consulte os resultados no painel ou peça uma análise mais específica.")
     resposta = resposta or "Não consegui concluir a análise. Tente reformular."
     conv = {"id": new_id("cv"), "mensagem_user": body.mensagem, "resposta_diretor": resposta, "chamadas": chamadas, "acoes_ids": [a["id"] for a in pendentes], "timestamp": now_iso(), "user_id": user["id"], "modelo": m["nome"]}
     await db.conversas_diretor.insert_one(dict(conv))
