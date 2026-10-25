@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from diretor_estrategia import is_new_p5, financial_state, amounts_minor, is_synthetic
+from piloto_real import effective_cutoff, read_pilot_since
 
 
 def summarize_partner_transactions(transactions, partner_id, currency):
@@ -79,19 +80,19 @@ async def partner_growth_report(partner, days=30):
     if currency not in ("eur", "brl"):
         raise ValueError("Moeda de parceiro inválida")
     days = max(1, min(int(days), 90))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = effective_cutoff(days, await read_pilot_since())
     txs = await db.payment_transactions.find(
         {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}}, NO_ID
     ).to_list(20000)
     report = summarize_partner_transactions(txs, pid, currency)
     clicks_q = currency_query({"partner_id": pid, "date": {"$gte": cutoff}}, currency)
     claims = await db.coupon_claims.find(
-        clicks_q, {"_id": 0, "is_test": 1, "test_run_id": 1, "origem": 1, "idempotency_key": 1}
+        clicks_q, {"_id": 0, "is_test": 1, "test_run_id": 1, "origem": 1, "idempotency_key": 1, "livemode": 1, "staff": 1}
     ).to_list(20000)
     clicks = sum(not is_synthetic(c) for c in claims)
     sessions = await db.p5_sessions.find(
         {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}},
-        {"_id": 0, "scanned_at": 1, "is_test": 1, "test_run_id": 1}
+        {"_id": 0, "scanned_at": 1, "is_test": 1, "test_run_id": 1, "livemode": 1}
     ).to_list(20000)
     scans = sum(bool(s.get("scanned_at")) for s in sessions if not is_synthetic(s))
     return {

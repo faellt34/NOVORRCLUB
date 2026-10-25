@@ -5,6 +5,7 @@ Não equivale a confirmação bancária ou a consulta live à Stripe.
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from piloto_real import effective_cutoff, read_pilot_since
 
 
 
@@ -116,7 +117,8 @@ async def snapshot_currency(currency, days=30):
     if currency not in ("eur", "brl"):
         raise ValueError("Moeda inválida")
     days = max(1, min(int(days), 90))
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    pilot_since = await read_pilot_since()
+    cutoff = effective_cutoff(days, pilot_since)
     q = {"currency": currency, "created_at": {"$gte": cutoff}}
     transactions = await db.payment_transactions.find(q, NO_ID).to_list(20000)
     p5 = [tx for tx in transactions if is_new_p5(tx, currency)]
@@ -137,21 +139,23 @@ async def snapshot_currency(currency, days=30):
         item["cobrado"] += amounts["cobrado"]
 
     click_q = currency_query({"date": {"$gte": cutoff}}, currency)
-    claims = await db.coupon_claims.find(click_q, {"_id": 0, "is_test": 1, "test_run_id": 1, "origem": 1, "idempotency_key": 1}).to_list(20000)
+    claims = await db.coupon_claims.find(click_q, {"_id": 0, "is_test": 1, "test_run_id": 1, "origem": 1, "idempotency_key": 1, "livemode": 1, "staff": 1}).to_list(20000)
     clicks = sum(not is_synthetic(x) for x in claims)
     p5_sessions = await db.p5_sessions.find(
         {"currency": currency, "created_at": {"$gte": cutoff}},
-        {"_id": 0, "scanned_at": 1, "is_test": 1, "test_run_id": 1}
+        {"_id": 0, "scanned_at": 1, "is_test": 1, "test_run_id": 1, "livemode": 1}
     ).to_list(20000)
-    scanned = sum(bool(x.get("scanned_at")) for x in p5_sessions if not is_synthetic(x))
+    valid_sessions = [s for s in p5_sessions if not is_synthetic(s)]
+    scanned = sum(bool(x.get("scanned_at")) for x in valid_sessions)
     charges = await db.p5_charges.find(
         {"currency": currency, "created_at": {"$gte": cutoff}},
-        {"_id": 0, "status": 1, "checkout_url": 1, "is_test": 1, "test_run_id": 1}
+        {"_id": 0, "status": 1, "checkout_url": 1, "is_test": 1, "test_run_id": 1, "livemode": 1}
     ).to_list(20000)
     prepared = [c for c in charges if not is_synthetic(c)]
     checkout_count = sum(bool(c.get("checkout_url") or c.get("status") in ("checkout", "paid")) for c in prepared)
     result = {
-        "currency": currency, "periodo_dias": days, "fonte": "base_local.payment_transactions + registos QR/P5",
+        "currency": currency, "periodo_dias": days, "piloto_desde": pilot_since,
+        "fonte": "base_local.payment_transactions + registos QR/P5",
         "interpretacao": "Confirmado no registo local pós-webhook; não é extrato Stripe nem crédito no IBAN.",
         "vendas_p5_pagas": sum(states.get(x, 0) for x in ("transferido_connect", "pago_repasses_pendentes")),
         "financeiro": {key: euros_or_reais(value) for key, value in sums.items()},
@@ -167,7 +171,7 @@ async def snapshot_currency(currency, days=30):
         "estados_p5": states,
         "funil_observado": {
             "aberturas_cupom": clicks,
-            "sessoes_p5": len(p5_sessions),
+            "sessoes_p5": len(valid_sessions),
             "scans_p5": scanned,
             "checkouts_p5": checkout_count,
             "pagamentos_p5": sum(states.get(x, 0) for x in ("transferido_connect", "pago_repasses_pendentes")),
@@ -216,6 +220,7 @@ async def resumo_estrategico(days=30):
         })
     return {
         "gerado_em": datetime.now(timezone.utc).isoformat(),
+        "piloto_desde": br.get("piloto_desde"),
         "modo": "somente_leitura_sem_custo_llm",
         "equipa": TEAM,
         "financeiro_por_pais": {"brl": br, "eur": pt},

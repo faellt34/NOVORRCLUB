@@ -37,6 +37,9 @@ export function DiretorEstrategia({ onAsk, refreshKey }) {
             <BrainCircuit className="w-5 h-5 text-purple-600" /> Diretor Executivo · Situação do negócio
           </h3>
           <p className="text-xs text-slate-500 mt-1">Consulta sem consumo de créditos IA. Só pagamentos P5 registados como pagos por webhook local.</p>
+          <p className="text-xs text-purple-700 mt-1">{data?.piloto_desde
+            ? `Piloto real desde ${new Date(data.piloto_desde).toLocaleString("pt-PT")} · testes anteriores excluídos dos indicadores`
+            : "Piloto ainda não iniciado: aberturas antigas podem aparecer. Inicie-o no Dashboard de Administração."}</p>
         </div>
         <div className="flex gap-2 items-center">
           {[

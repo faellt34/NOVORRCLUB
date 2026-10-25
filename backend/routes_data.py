@@ -1,4 +1,5 @@
 from payment_policy import reporting_currency, currency_query
+from piloto_real import effective_cutoff, read_pilot_since, start_pilot_once
 import os
 from partner_access import partner_record
 from diretor_parceiros import partner_growth_report
@@ -71,7 +72,7 @@ async def influencer_dashboard(period: int = 30, verified_only: bool = False, us
         # Registo financeiro P5 local: nunca usar resgates manuais como pagamentos.
         from diretor_estrategia import is_new_p5, financial_state, amounts_minor, is_synthetic
         days = max(1, min(int(period), 90))
-        cutoff = since(days)
+        cutoff = effective_cutoff(days, await read_pilot_since())
         candidates = await db.payment_transactions.find({
             "influencer_id": inf_id, "currency": currency, "created_at": {"$gte": cutoff}
         }, NO_ID).to_list(20000)
@@ -218,15 +219,18 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
     """Read-only, partner-scoped QR activity. A scan/open is not a paid sale."""
     partner = await partner_record(user, db)
     pid = partner["id"]
-    cutoff = since(1)
+    cutoff = effective_cutoff(1, await read_pilot_since())
     claims = await db.coupon_claims.find(
         currency_query({"partner_id": pid, "date": {"$gte": cutoff}}, currency),
-        {"_id": 0, "id": 1, "date": 1, "coupon": 1}
+        {"_id": 0, "id": 1, "date": 1, "coupon": 1, "is_test": 1, "test_run_id": 1, "livemode": 1, "origem": 1}
     ).sort("date", -1).to_list(30)
     sessions = await db.p5_sessions.find(
         {"partner_id": pid, "currency": currency, "created_at": {"$gte": cutoff}},
-        {"_id": 0, "id": 1, "created_at": 1, "code": 1, "scanned_at": 1}
+        {"_id": 0, "id": 1, "created_at": 1, "code": 1, "scanned_at": 1, "is_test": 1, "test_run_id": 1, "livemode": 1}
     ).sort("created_at", -1).to_list(30)
+    from diretor_estrategia import is_synthetic
+    claims = [c for c in claims if not is_synthetic(c)]
+    sessions = [s for s in sessions if not is_synthetic(s)]
     events = [
         {"id": c["id"], "kind": "coupon_opened", "coupon": c.get("coupon"), "at": c["date"]}
         for c in claims
@@ -242,6 +246,17 @@ async def partner_qr_activity(user: dict = Depends(require_role("partner")), cur
     return {"events": events[:20], "window_hours": 24, "financial_confirmation": False}
 
 
+@router.get("/admin/pilot-baseline")
+async def pilot_baseline_status(user: dict = Depends(require_role("admin"))):
+    return {"started_at": await read_pilot_since(), "scope": "RRClub global, BRL e EUR", "history_deleted": False}
+
+
+@router.post("/admin/pilot-baseline")
+async def pilot_baseline_start(user: dict = Depends(require_role("admin"))):
+    started_at = await start_pilot_once(user["id"])
+    return {"started_at": started_at, "scope": "RRClub global, BRL e EUR", "history_deleted": False}
+
+
 @router.get("/dashboard/admin")
 async def admin_dashboard(pilot_since: Optional[str] = None, verified_only: bool = False, user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
     # Financeiros verificáveis no livro P5 local, sem misturar com resgates manuais.
@@ -254,7 +269,7 @@ async def admin_dashboard(pilot_since: Optional[str] = None, verified_only: bool
         paid = report["vendas_p5_pagas"]
         opened = funnel["aberturas_cupom"]
         return {
-            "mode": "verified_p5", "currency": currency, "pilot_since": None,
+            "mode": "verified_p5", "currency": currency, "pilot_since": report["piloto_desde"],
             "financial_source": "payment_transactions_p5_paid_local",
             "financial_note": "Pagamentos P5 localmente confirmados após webhook; não comprova depósito bancário ou tarifa Stripe.",
             "totals": {"count": paid, "revenue": amounts["cobrado"],
