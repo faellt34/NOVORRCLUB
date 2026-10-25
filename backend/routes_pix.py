@@ -143,20 +143,26 @@ async def link_existing_partner_pix_account(
                      ((info.get('individual') or {}).get('email') or '').strip().lower()}
     if not email or email not in stripe_emails:
         raise HTTPException(409, 'Email Stripe diferente do utilizador; revisão manual obrigatória')
-    if existing == account_id:
-        return {'ok': True, 'status': 'já vinculado', 'partner_id': partner_id,
-                'stripe_account_last6': account_id[-6:]}
-    result = await db.partners.update_one(
-        {'id': partner_id, 'user_id': user['id'],
-         'pix_stripe_account_id': {'$in': [None, '']}},
-        {'$set': {'pix_stripe_account_id': account_id}})
-    if not result.modified_count:
-        raise HTTPException(409, 'Associação alterada em simultâneo; nada foi sobrescrito')
+    if existing != account_id:
+        result = await db.partners.update_one(
+            {'id': partner_id, 'user_id': user['id'],
+             'pix_stripe_account_id': {'$in': [None, '']}},
+            {'$set': {'pix_stripe_account_id': account_id}})
+        if not result.modified_count:
+            raise HTTPException(409, 'Associação alterada em simultâneo; nada foi sobrescrito')
+    # Reconcile only ownership metadata. Retrying after a Stripe timeout is safe:
+    # the linked account is revalidated above, and Stripe's idempotency key is stable.
+    if metadata.get('partner_id') != partner_id:
+        await provider('accounts.update', account_id,
+                       metadata={'partner_id': partner_id},
+                       idempotency_key=f'pix-meta-{partner_id}-{account_id}')
     from core import audit
-    await audit('PIX CONNECT', f'Conta existente …{account_id[-6:]} vinculada ao parceiro {partner_id} por email Stripe correspondente e KYC ativo; sem mudanças financeiras', admin, partner_id)
-    return {'ok': True, 'status': 'vinculado', 'partner_id': partner_id,
-            'stripe_account_last6': account_id[-6:],
-            'next_step': 'reconciliar metadata pela rota de campanha existente'}
+    await audit('PIX CONNECT',
+                f'Conta existente …{account_id[-6:]} associada e metadata conciliada com parceiro {partner_id}; email confirmado; sem alterações financeiras',
+                admin, partner_id)
+    return {'ok': True, 'status': 'associado e conciliado',
+            'partner_id': partner_id, 'stripe_account_last6': account_id[-6:]}
+
 
 
 @router.get('/admin/pix/recipients/{campaign_id}')
