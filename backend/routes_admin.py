@@ -92,11 +92,13 @@ async def list_items(kind: str):
         items = [out_user(i) for i in items]
     if kind == "campanhas":
         parts = {p["id"]: p["nome"] async for p in db.partners.find({}, NO_ID)}
+        part_cur = {p["id"]: p.get("currency", "eur") async for p in db.partners.find({}, NO_ID)}
         infs = {i["id"]: i["nome"] async for i in db.influencers.find({}, NO_ID)}
         for c in items:
             c["parceiro"] = parts.get(c.get("parceiro_id"), c.get("parceiro", "—"))
             c["influencer"] = infs.get(c.get("influencer_id"), c.get("influencer", "—"))
-    return items
+            c["currency"] = c.get("currency") or part_cur.get(c.get("parceiro_id"), "eur")
+    return [{k: v for k, v in i.items() if k != "_id"} for i in items]
 
 
 @router.post("/{kind}")
@@ -117,7 +119,7 @@ async def create_item(kind: str, data: dict, user: dict = Depends(require_role("
         from realtime import emit
         emit("cupons_gerados", quantidade=1, cupom=doc.get("cupom"), campanha=label, parceiro=doc.get("parceiro"), por=user["nome"], ref=doc["id"])
         emit("cupom_gerado", cupom=doc.get("cupom"), campanha=label, ref=doc["id"])
-    return out_user(doc) if kind == "usuarios" else doc
+    return out_user(doc) if kind == "usuarios" else {k: v for k, v in doc.items() if k != "_id"}
 
 
 @router.put("/{kind}/{item_id}")
@@ -138,7 +140,7 @@ async def update_item(kind: str, item_id: str, data: dict, user: dict = Depends(
         if data["status"] == "Ativo" and existing.get("status") == "Pendente":
             await notify([doc["user_id"]], "lead_aprovada", "Conta ativada 🎉", f"A sua conta {doc['nome']} foi aprovada. Já pode entrar na plataforma RRclub.", "/login")
     await audit("EDIÇÃO", f"{kind} · {doc.get('nome') or doc.get('titulo') or item_id}", user, item_id)
-    return out_user(doc) if kind == "usuarios" else doc
+    return out_user(doc) if kind == "usuarios" else {k: v for k, v in doc.items() if k != "_id"}
 
 
 @router.delete("/{kind}/{item_id}")

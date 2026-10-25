@@ -187,8 +187,9 @@ export default function PublicCoupon() {
                     <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1" />
                     <p className="text-sm font-bold text-emerald-800">{paid.payment_status === "refunded" ? "Pagamento reembolsado" : paid.payment_status === "partially_refunded" ? "Pagamento parcialmente reembolsado" : paid.payment_status === "disputed" ? "Pagamento em análise" : "Pagamento confirmado"} · {receiptMoney(paid.amount)}</p>
                     <div data-testid="public-receipt" className="mt-2 text-left text-xs text-emerald-900 bg-white/70 rounded-xl p-3 space-y-0.5">
-                      <p className="font-semibold uppercase tracking-wider text-[10px] text-emerald-700">Recibo</p>
+                      <p className="font-semibold uppercase tracking-wider text-[10px] text-emerald-700">{(paid.currency || currency).toLowerCase() === "brl" ? "Recibo Pix" : "Recibo"}{c.p5_eligible ? " · P5" : ""}</p>
                       <p>Conta: <b>{receiptMoney(paid.gross_amount)}</b></p>
+                      {paid.gross_amount > 0 && paid.discount > 0 && <p data-testid="public-receipt-discount-percent">Desconto RRClub: <b>{Math.round((paid.discount / paid.gross_amount) * 100)}%</b></p>}
                       {paid.refunded_amount > 0 && <p data-testid="public-refund-amount">Reembolsado: <b>{receiptMoney(paid.refunded_amount)}</b></p>}
                       <p>Desconto aplicado: <b>−{receiptMoney(paid.discount)}</b></p>
                       <p>Pago: <b>{receiptMoney(paid.amount)}</b> · Ref. {paid.redemption_id || (paid.request_id || paid.session_id || "").slice(-8)}</p>

@@ -158,11 +158,26 @@ async def recipients_reconcile(campaign_id: str, user: dict = Depends(require_ro
         ev = await ownership_evidence(info, entity)
         if not ev['suficiente']:
             result[role] = f"evidência insuficiente de titularidade (pontos={ev['pontos']}, conta_unica={ev['conta_unica_na_base']}); não reconciliado"; continue
+
         proofs = ','.join(k for k in ('email_stripe_igual_ao_cadastro', 'nome_stripe_igual_ao_cadastro', 'kyc_stripe_concluido') if ev[k])
         await provider('accounts.update', acct, metadata={key: entity['id']}, idempotency_key=f'pix-meta-{entity["id"]}-{acct}')
         await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); evidência: {proofs}; conta única na base; sem alterações financeiras", user, campaign_id)
         result[role] = 'associado agora'
     return {'campaign_id': campaign_id, 'cupom': camp.get('cupom'), 'result': result}
+
+
+@router.get('/admin/p5/charges/{campaign_id}')
+async def p5_charges_diagnostic(campaign_id: str, user: dict = Depends(require_role('admin'))):
+    """Read-only: last P5 charges of a campaign; proves checkout opened without touching payments."""
+    rows = await db.p5_charges.find({'campaign_id': campaign_id}, NO_ID).sort('created_at', -1).to_list(10)
+    out = []
+    for r in rows:
+        url = r.get('checkout_url') or ''
+        out.append({'id': r['id'], 'status': r.get('status'), 'currency': r.get('currency'), 'gross_minor': r.get('gross_minor'),
+                    'discount_minor': r.get('discount_minor'), 'net_minor': r.get('net_minor'), 'financial_state': r.get('financial_state'),
+                    'created_at': r.get('created_at'), 'checkout_started_at': r.get('checkout_started_at'),
+                    'checkout_host': url.split('/')[2] if url.startswith('https://') else None, 'pix_request_id': r.get('pix_request_id')})
+    return {'campaign_id': campaign_id, 'charges': out}
 
 
 

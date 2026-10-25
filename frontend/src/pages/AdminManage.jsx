@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Link2, FileUp, FileCheck2, QrCode } from "lucide-react";
+import { Plus, Pencil, Trash2, Link2, FileUp, FileCheck2, QrCode, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api, apiError } from "../lib/api";
 import { StatusBadge } from "../components/KpiCard";
 import { CouponQrDialog } from "../components/CouponQrDialog";
+import { PixRecipientsDialog } from "../components/PixRecipientsDialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
@@ -83,6 +84,7 @@ export default function AdminManage() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(null);
   const [qrCampaign, setQrCampaign] = useState(null);
+  const [pixCampaign, setPixCampaign] = useState(null);
   const [linkTarget, setLinkTarget] = useState(null);
   const [linkUser, setLinkUser] = useState("");
   const [linkBusy, setLinkBusy] = useState(false);
@@ -203,6 +205,9 @@ export default function AdminManage() {
                             {key === "campanhas" && (
                               <button data-testid={`qr-${item.id}`} title="QR do cupão" onClick={() => setQrCampaign(item)} className="p-2 rounded-lg text-purple-600 hover:bg-purple-50 btn-press"><QrCode className="w-4 h-4" /></button>
                             )}
+                            {key === "campanhas" && (item.currency || "").toLowerCase() === "brl" && (
+                              <button data-testid={`pix-recipients-${item.id}`} title="Recebimentos Pix (Connect Brasil)" onClick={() => setPixCampaign(item)} className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 btn-press"><ShieldCheck className="w-4 h-4" /></button>
+                            )}
                             <button data-testid={`edit-${item.id}`} onClick={() => openEdit(item)} className="p-2 rounded-lg text-slate-500 hover:bg-purple-50 hover:text-purple-600 btn-press"><Pencil className="w-4 h-4" /></button>
                             <button data-testid={`delete-${item.id}`} onClick={() => remove(item)} className="p-2 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 btn-press"><Trash2 className="w-4 h-4" /></button>
                           </td>
@@ -236,6 +241,7 @@ export default function AdminManage() {
       </Dialog>
 
       <CouponQrDialog campaign={qrCampaign} open={!!qrCampaign} onOpenChange={(o) => !o && setQrCampaign(null)} />
+      <PixRecipientsDialog campaign={pixCampaign} open={!!pixCampaign} onOpenChange={(o) => !o && setPixCampaign(null)} />
 
       <Dialog open={!!dialog} onOpenChange={() => setDialog(null)}>
         <DialogContent data-testid="entity-dialog" className="max-w-md max-h-[90vh] overflow-y-auto">
