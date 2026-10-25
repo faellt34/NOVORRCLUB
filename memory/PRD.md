@@ -357,3 +357,4 @@ Multi-Tenant SaaS que conecta influencers de experiências de luxo com parceiros
 - Pendente: prova final do checkout em produção exige sessão da parceira (scan+aprovação) — não há credenciais da Josicleide; validado só com Stripe mockado (iteration_38, 74 testes).
 - Resend: pedido ainda pendente.
 - 2026-06: Admin "Recebimentos Pix" (PixRecipientsDialog, botão só em campanhas BRL) + GET /admin/p5/charges/{id} (prova de checkout read-only) + recibo "Recibo Pix · P5" com % desconto. Testado iteration_39. Preview: Loja BR Teste / BRTEST-01 são dados de teste do preview.
+- 2026-06: Alerta admin `connect_bloqueado` (p5_checkout.alert_admins_connect_blocked, 1x por cobrança+motivo, só BRL) + ícone em Notificações. Testado (13 testes). Deploy enviado. Prova real do checkout SHEYSO-7182 aguarda scan+aprovação da Josicleide (monitor: GET /api/admin/p5/charges/c-bdb38f42d4 → status checkout + checkout_host checkout.stripe.com).

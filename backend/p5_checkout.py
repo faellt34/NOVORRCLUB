@@ -66,6 +66,24 @@ def financial_wait_message(reason):
     return messages.get(reason, "O valor está aprovado. O pagamento aguarda a verificação financeira desta operação; nenhum pagamento foi iniciado.")
 
 
+async def alert_admins_connect_blocked(rec, reason):
+    """One admin notification per charge+reason; never blocks the follower response."""
+    from core import admin_ids, notify
+    marked = await db.p5_charges.update_one(
+        {"id": rec["id"], "admin_alerted_reasons": {"$ne": reason}},
+        {"$addToSet": {"admin_alerted_reasons": reason}},
+    )
+    if marked is not None and not marked.matched_count:
+        return
+    try:
+        camp = await db.campaigns.find_one({"id": rec["campaign_id"]}, {"_id": 0, "cupom": 1}) or {}
+        await notify(await admin_ids(), "connect_bloqueado", "Recebimentos Pix bloqueados",
+                     f"Cupom {camp.get('cupom') or rec.get('coupon')}: cobrança P5 de R$ {rec['net_minor'] / 100:.2f} aguarda ({reason}). "
+                     "Abra Gestão › Campanhas › Recebimentos Pix para diagnosticar/reconciliar.", "/admin/gestao")
+    except Exception:
+        pass
+
+
 async def wait_for_connect(rec, reason="recebimentos_em_validacao"):
     """Estado operacional; never open checkout or transfer on a failed check."""
     await db.p5_charges.update_one(
@@ -73,6 +91,8 @@ async def wait_for_connect(rec, reason="recebimentos_em_validacao"):
         {"$set": {"status": "awaiting_connect", "financial_state": reason,
                   "financial_checked_at": now_iso()}},
     )
+    if rec.get("currency") == "brl" and reason.startswith("connect_brasil"):
+        await alert_admins_connect_blocked(rec, reason)
     return {"status": "awaiting_connect", "charge_id": rec["id"],
             "payment_status": "not_started", "financial_state": reason,
             "message": financial_wait_message(reason)}

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Bell, CheckCheck, Ticket, Inbox, MessageSquare, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Bell, CheckCheck, Ticket, Inbox, MessageSquare, ThumbsUp, ThumbsDown, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useApp } from "../context/AppContext";
 import { api, apiError } from "../lib/api";
 
-const ICONS = { redencao: Ticket, lead: Inbox, mensagem: MessageSquare, lead_aprovada: ThumbsUp, lead_rejeitada: ThumbsDown };
+const ICONS = { redencao: Ticket, lead: Inbox, mensagem: MessageSquare, lead_aprovada: ThumbsUp, lead_rejeitada: ThumbsDown, connect_bloqueado: ShieldAlert };
 
 export default function Notifications() {
   const { refreshUnread } = useApp();

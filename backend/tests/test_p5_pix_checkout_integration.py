@@ -28,7 +28,7 @@ def world(monkeypatch):
         monkeypatch.setenv(k, v)
     db = AsyncMongoMockClient().p5pix
     monkeypatch.setattr(pix, 'db', db); monkeypatch.setattr(p5, 'db', db)
-    import core; monkeypatch.setattr(core, 'audit', AsyncMock())
+    import core; monkeypatch.setattr(core, 'audit', AsyncMock()); monkeypatch.setattr(core, 'db', db)
     accounts = {'acct_j': apt('acct_j', 'josi@x.br', business_profile={'name': 'Josicleide'}),
                 'acct_s': apt('acct_s', 'shey@x.br', individual={'first_name': 'Sheyson', 'last_name': '', 'verification': {'status': 'unverified'}})}
     platform = {'country': 'BR', 'default_currency': 'brl', 'charges_enabled': True, 'payouts_enabled': True,
@@ -49,7 +49,7 @@ def world(monkeypatch):
         raise AssertionError(op)
     monkeypatch.setattr(pix, 'provider', provider)
     async def seed():
-        await db.users.insert_many([{'id': 'u-j', 'email': 'josi@x.br', 'role': 'partner'}, {'id': 'u-s', 'email': 'shey@x.br', 'role': 'influencer'}])
+        await db.users.insert_many([{'id': 'u-j', 'email': 'josi@x.br', 'role': 'partner'}, {'id': 'u-s', 'email': 'shey@x.br', 'role': 'influencer'}, {'id': 'adm-1', 'email': 'a@x.br', 'role': 'admin'}])
         await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'currency': 'brl', 'status': 'Ativo', 'user_id': 'u-j', 'pix_stripe_account_id': 'acct_j'})
         await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson', 'status': 'Ativo', 'user_id': 'u-s', 'pix_stripe_account_id': 'acct_s'})
         await db.campaigns.insert_one({'id': 'c1', 'nome': 'SHEYSON', 'cupom': 'SHEYSO-7182', 'parceiro_id': 'p-j', 'influencer_id': 'if-s', 'currency': 'brl', 'desconto': 5, 'comissao': 5, 'status': 'Ativa', 'validade': '2030-01-01'})
@@ -66,6 +66,9 @@ def test_blocked_before_reconcile_then_pix_url_after(world, monkeypatch):
     body = p5.CheckoutCharge(charge_id='p5-integ-0001', origin_url='https://rrclub.online')
     before = asyncio.run(p5.checkout_charge(body, 'x' * 40))
     assert before.get('status') == 'awaiting_connect' and before.get('financial_state') == 'connect_brasil_associacao_pendente'
+    asyncio.run(p5.checkout_charge(body, 'x' * 40))
+    alerts = asyncio.run(db.notifications.find({'tipo': 'connect_bloqueado'}).to_list(10))
+    assert len(alerts) == 1 and alerts[0]['user_id'] == 'adm-1' and 'SHEYSO-7182' in alerts[0]['texto']
     res = asyncio.run(pix.recipients_reconcile('c1', ADMIN))
     assert res['result'] == {'partner': 'associado agora', 'influencer': 'associado agora'}
     after = asyncio.run(p5.checkout_charge(body, 'x' * 40))
