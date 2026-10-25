@@ -40,3 +40,12 @@ Revisar diff da branch, executar CI/staging com ambiente não financeiro, confir
 - 5 testes unitários da Fase 2 aprovados: isolamento por parceiro, exclusão de outra moeda, testes/reembolsos/legado, percentuais devidos e recomendações sem ROI fabricado.
 
 **Pendente:** teste integral autenticado em staging com utilizador parceiro (incluindo Josicleide/Sheyson apenas após consentimento), compilação React e validação do deploy. A interface atual permanece inalterada em produção.
+
+## Etapa 1 da consolidação — testes seguros (25/10/2026)
+
+- `backend/tests/test_iter27_diretor.py` deixa de conter credenciais fixas e de herdar automaticamente o URL de produção. Os testes externos só são executáveis mediante `RRCLUB_RUN_DIRECTOR_INTEGRATION_TESTS=1`, URL definido em `RRCLUB_DIRECTOR_INTEGRATION_BASE_URL` e host local explícito. Os logins vêm de variáveis `RRCLUB_TEST_ADMIN_*` / `RRCLUB_TEST_PARTNER_*`.
+- Removida a limpeza abrangente de campanhas pelo texto `Diretor`. Os testes integrados permanecem opt-in e não devem apontar para a RRClub real; uma base local isolada continua necessária.
+- O verificador `_verify` de correções aprovadas deixa de procurar testes na pasta raiz (que não tinha casos) e executa uma lista curta de `unittest` sem rede nem escrita financeira. A suite externa inteira nunca é chamada automaticamente quando se verifica um patch.
+- Adicionados 2 testes de regressão da segurança dos testes. **17/17 testes unitários de Diretor e Copiloto aprovados**, sem ligação à Stripe/MongoDB real.
+- Credenciais de versões anteriores podem continuar no histórico Git. Se corresponderem a acessos ainda válidos, o titular deve revogá-las ou alterá-las; esta atualização não altera contas nem remove histórico Git.
+- **Ainda pendente:** compilação frontend, testes autenticados em staging e validação de rotas e permissões. Nenhum deploy ou movimento financeiro nesta etapa.

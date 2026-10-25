@@ -732,12 +732,14 @@ def _verify(files: list) -> dict:
         r = _run([sys.executable, "-c", "import server"], cwd=CODE_DIRS["backend"], timeout=90)
         if r.returncode != 0:
             return {"ok": False, "etapa": "import server", "erro": r.stderr[-600:]}
-    tests_dir = os.path.join(ROOT, "tests")
-    if py and any(fn.startswith("test_") for fn in os.listdir(tests_dir)):
-        r = _run([sys.executable, "-m", "pytest", "-q", "-x", tests_dir], timeout=240)
+    # Nunca executar em produção a suite completa: contém testes de integração
+    # que criam campanhas e requerem uma instância local isolada.
+    safe_tests = ("tests.test_diretor_estrategia", "tests.test_diretor_parceiros", "tests.test_diretor_test_safety")
+    if py:
+        r = _run([sys.executable, "-m", "unittest", *safe_tests], cwd=CODE_DIRS["backend"], timeout=60)
         if r.returncode != 0:
-            return {"ok": False, "etapa": "pytest", "erro": (r.stdout + r.stderr)[-800:]}
-        return {"ok": True, "etapa": "pytest", "saida": r.stdout[-300:]}
+            return {"ok": False, "etapa": "unittest_seguro", "erro": (r.stdout + r.stderr)[-800:]}
+        return {"ok": True, "etapa": "unittest_seguro", "saida": (r.stdout + r.stderr)[-300:]}
     return {"ok": True, "etapa": "py_compile + import server" if py else "sem verificação automática para estes ficheiros", "saida": ""}
 
 
