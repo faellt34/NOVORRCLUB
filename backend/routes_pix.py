@@ -86,6 +86,17 @@ async def recipients_diagnostic(campaign_id: str, user: dict = Depends(require_r
                 info = await provider('accounts.retrieve', acct)
                 meta = info.get('metadata') or {}
                 item['metadata_keys'] = {k: ('ok' if v == entity['id'] else 'outro') for k, v in meta.items() if k in ('partner_id', 'influencer_id')}
+                owner_user = await db.users.find_one({'id': entity.get('user_id')}, {'_id': 0, 'email': 1, 'nome': 1}) if entity.get('user_id') else None
+                acct_email = (info.get('email') or '').strip().lower()
+                acct_name = ((info.get('business_profile') or {}).get('name') or '').strip()
+                indiv = info.get('individual') or {}
+                indiv_name = ' '.join(x for x in (indiv.get('first_name'), indiv.get('last_name')) if x).strip()
+                item['evidencia_independente'] = {
+                    'email_stripe_igual_ao_cadastro': bool(acct_email) and acct_email == ((owner_user or {}).get('email') or '').strip().lower(),
+                    'nome_stripe': acct_name or indiv_name or None,
+                    'nome_cadastro': entity.get('nome'),
+                    'criada_em': info.get('created'),
+                }
                 item['country'] = info.get('country'); item['charges_enabled'] = info.get('charges_enabled'); item['payouts_enabled'] = info.get('payouts_enabled')
                 item['transfers_capability'] = (info.get('capabilities') or {}).get('transfers')
                 item['requirements_due'] = ((info.get('requirements') or {}).get('currently_due') or [])[:8]
@@ -126,8 +137,16 @@ async def recipients_reconcile(campaign_id: str, user: dict = Depends(require_ro
             result[role] = f"conflito: conta ligada a outro cadastro ({meta.get('partner_id') or meta.get('influencer_id')})"; continue
         if info.get('country') != 'BR' or info.get('id') != acct:
             result[role] = 'conta inesperada'; continue
+        owner_user = await db.users.find_one({'id': entity.get('user_id')}, {'_id': 0, 'email': 1}) if entity.get('user_id') else None
+        acct_email = (info.get('email') or '').strip().lower()
+        indiv = info.get('individual') or {}
+        names = {((info.get('business_profile') or {}).get('name') or '').strip().lower(), ' '.join(x for x in (indiv.get('first_name'), indiv.get('last_name')) if x).strip().lower()} - {''}
+        email_ok = bool(acct_email) and acct_email == ((owner_user or {}).get('email') or '').strip().lower()
+        name_ok = (entity.get('nome') or '').strip().lower() in names
+        if not (email_ok or name_ok):
+            result[role] = 'sem evidência independente de titularidade (email/nome Stripe ≠ cadastro); não reconciliado'; continue
         await provider('accounts.update', acct, metadata={key: entity['id']}, idempotency_key=f'pix-meta-{entity["id"]}-{acct}')
-        await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); sem alterações financeiras", user, campaign_id)
+        await audit('PIX CONNECT', f"Associação explícita gravada na conta Stripe …{acct[-6:]} → {role} {entity['id']} ({entity.get('nome')}); evidência: {'email' if email_ok else 'nome'}; sem alterações financeiras", user, campaign_id)
         result[role] = 'associado agora'
     return {'campaign_id': campaign_id, 'cupom': camp.get('cupom'), 'result': result}
 

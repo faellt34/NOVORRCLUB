@@ -17,9 +17,10 @@ def env(monkeypatch):
     db = AsyncMongoMockClient().pix
     monkeypatch.setattr(pix, 'db', db)
     calls = []
-    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}},
-                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}},
-                'acct_x': {'id': 'acct_x', 'country': 'BR', 'metadata': {'partner_id': 'p-outro'}}}
+    accounts = {'acct_j': {'id': 'acct_j', 'country': 'BR', 'metadata': {}, 'email': 'j@x.br'},
+                'acct_s': {'id': 'acct_s', 'country': 'BR', 'metadata': {}, 'email': 'other@x.br', 'individual': {'first_name': 'Sheyson', 'last_name': ''}},
+                'acct_x': {'id': 'acct_x', 'country': 'BR', 'metadata': {'partner_id': 'p-outro'}, 'email': 'j@x.br'},
+                'acct_n': {'id': 'acct_n', 'country': 'BR', 'metadata': {}, 'email': 'nobody@x.br', 'business_profile': {'name': 'Loja Z'}}}
     async def provider(op, *a, **kw):
         calls.append((op, a, kw))
         if op == 'accounts.retrieve':
@@ -36,8 +37,9 @@ def env(monkeypatch):
 def seed(db, inf_acct='acct_s'):
     async def go():
         await db.campaigns.insert_one({'id': 'c1', 'cupom': 'SHEYSO-7182', 'parceiro_id': 'p-j', 'influencer_id': 'if-s'})
-        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'pix_stripe_account_id': 'acct_j'})
-        await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson', 'pix_stripe_account_id': inf_acct})
+        await db.users.insert_one({'id': 'u-j', 'email': 'J@x.br'})
+        await db.partners.insert_one({'id': 'p-j', 'nome': 'Josicleide', 'pix_stripe_account_id': 'acct_j', 'user_id': 'u-j'})
+        await db.influencers.insert_one({'id': 'if-s', 'nome': 'Sheyson', 'pix_stripe_account_id': inf_acct, 'user_id': 'u-s'})
     asyncio.run(go())
 
 
@@ -71,3 +73,11 @@ def test_receiving_status_passes_after_stamp(env):
             'capabilities': {'transfers': 'active'}, 'settings': {'payouts': {'schedule': {'interval': 'daily'}}}}
     status = pix.receiving_status(acct, {'id': 'p-j', 'pix_stripe_account_id': 'acct_j'}, 'partner')
     assert status['receiving_ready'] is True
+
+
+def test_no_independent_evidence_is_not_reconciled(env):
+    db, calls, accounts, audit = env
+    seed(db, inf_acct='acct_n')
+    res = asyncio.run(pix.recipients_reconcile('c1', ADMIN))
+    assert res['result']['influencer'].startswith('sem evidência')
+    assert accounts['acct_n']['metadata'] == {}
