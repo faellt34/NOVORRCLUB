@@ -14,9 +14,9 @@ from urllib.parse import urlsplit
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from core import db, NO_ID, now_iso, require_role
-from finance_evidence import connect_account_evidence
 
 router = APIRouter()
 VERSION = "pt-p5-fixed-5-80-5-10-v1"
@@ -171,6 +171,13 @@ async def pt_accounts_inventory(user: dict = Depends(require_role("admin"))):
             partner = await db.partners.find_one({"stripe_account_id": aid}, NO_ID)
             influencer = await db.influencers.find_one({"stripe_account_id": aid}, NO_ID)
             matched = acc.get("metadata") or {}
+            item["metadata_binding"] = {k: v for k, v in matched.items() if k in ("partner_id", "influencer_id")}
+            acc_email = (acc.get("email") or "").strip().lower()
+            item["email_masked"] = (acc_email[:2] + "***@" + acc_email.split("@", 1)[1]) if "@" in acc_email else None
+            if acc_email and not partner and not influencer:
+                owner = await db.users.find_one({"email": acc_email}, {"_id": 0, "id": 1, "role": 1, "partner_id": 1, "influencer_id": 1})
+                if owner:
+                    item["suggested_binding"] = {"role": owner.get("role"), "entity_id": owner.get("partner_id") or owner.get("influencer_id"), "evidence": "email"}
             if partner:
                 item["partner_record"] = {"id": partner.get("id"), "name": partner.get("nome")}
             if influencer:
@@ -256,7 +263,12 @@ async def _mark(session_id, status, reason=None):
 
 
 async def settle_new_p5_payment(session_id):
-    """Webhook-only opt-in: never process old, manual, Pix or unapproved charges."""
+    """Webhook/admin opt-in: never process old, manual, Pix or unapproved charges.
+
+    Each beneficiary is settled independently: a partner with a ready Connect
+    account is paid even if the influencer has not finished onboarding (and
+    vice-versa). Unready shares stay 'held' on the platform for a later retry.
+    """
     if not automatic():
         return {"status": "disabled"}
     tx = await db.payment_transactions.find_one(
@@ -265,9 +277,9 @@ async def settle_new_p5_payment(session_id):
     )
     if not tx:
         return {"status": "not_eligible"}
-    required = ("p5_charge_id", "partner_id", "influencer_id",
-                "partner_destination", "influencer_destination",
-                "gross_minor", "amount")
+    if tx.get("pt_split_status") == "transferred_to_connect":
+        return {"status": "transferred_to_connect", "bank_payout_verified": False}
+    required = ("p5_charge_id", "partner_id", "influencer_id", "gross_minor", "amount")
     if any(tx.get(k) is None for k in required):
         await _mark(session_id, "held", "missing_checkout_snapshot")
         return {"status": "held"}
@@ -279,12 +291,25 @@ async def settle_new_p5_payment(session_id):
     if cents(tx["amount"]) != financial["payment_minor"]:
         await _mark(session_id, "held", "amount_mismatch")
         return {"status": "held"}
-    states = await recipients_ready(tx["partner_id"], tx["influencer_id"])
-    if (not states.get("ok")
-        or states["partner"].get("account_id") != tx["partner_destination"]
-        or states["influencer"].get("account_id") != tx["influencer_destination"]):
-        await _mark(session_id, "held", "beneficiary_account_not_ready_or_changed")
+    # Current destinations: the snapshot taken at checkout, or the account the
+    # beneficiary has bound since (never a different one than the snapshot).
+    partner, creator = await asyncio.gather(
+        db.partners.find_one({"id": tx["partner_id"]}, NO_ID),
+        db.influencers.find_one({"id": tx["influencer_id"]}, NO_ID),
+    )
+    destinations = {}
+    for role, rec, snap_key in (("partner", partner, "partner_destination"), ("influencer", creator, "influencer_destination")):
+        current = (rec or {}).get("stripe_account_id")
+        snap = tx.get(snap_key)
+        destinations[role] = None if (snap and current and snap != current) else (snap or current)
+    if destinations["partner"] and destinations["partner"] == destinations["influencer"]:
+        await _mark(session_id, "held", "duplicate_connected_account")
         return {"status": "held"}
+    p_state, i_state = await asyncio.gather(
+        asyncio.to_thread(_stripe_account, destinations["partner"], tx["partner_id"], "partner"),
+        asyncio.to_thread(_stripe_account, destinations["influencer"], tx["influencer_id"], "influencer"),
+    )
+    states = {"partner": p_state, "influencer": i_state}
     key = os.environ.get("STRIPE_SECRET_KEY", "")
     def verify_remote():
         session = stripe.checkout.Session.retrieve(session_id, api_key=key)
@@ -309,7 +334,6 @@ async def settle_new_p5_payment(session_id):
             or (charge.get("amount_refunded") or 0) > 0
             or charge.get("transfer")):
             raise ValueError("charge_not_safe_for_transfer")
-        # Prevent accidentally adding a transfer to an older/different split.
         previous = stripe.Transfer.list(transfer_group=tx["p5_charge_id"], limit=100, api_key=key)
         found = {}
         for transfer in previous.get("data") or []:
@@ -325,29 +349,26 @@ async def settle_new_p5_payment(session_id):
     except (ValueError, stripe.error.StripeError):
         await _mark(session_id, "held", "stripe_payment_or_transfer_not_verified")
         return {"status": "held"}
-    # Retry the same Stripe idempotency key; never use a new key for the same beneficiary.
-    for role, amount_field, destination_field in (
-        ("partner", "partner_minor", "partner_destination"),
-        ("influencer", "influencer_minor", "influencer_destination"),
-    ):
+    done, held = {}, {}
+    for role, amount_field in (("partner", "partner_minor"), ("influencer", "influencer_minor")):
+        if tx.get(role + "_transfer_status") == "transferred_to_connect" and tx.get(role + "_transfer_id"):
+            done[role] = tx[role + "_transfer_id"]; continue
         prev = existing.get(role)
-        amount, destination = financial[amount_field], tx[destination_field]
+        amount, destination = financial[amount_field], destinations[role]
         if prev:
             if (prev.get("destination") != destination or prev.get("amount") != amount
                 or prev.get("source_transaction") != charge_id
                 or prev.get("reversed") or (prev.get("amount_reversed") or 0)):
-                await _mark(session_id, "held", "existing_transfer_mismatch_or_reversed")
-                return {"status": "held"}
+                held[role] = "existing_transfer_mismatch_or_reversed"; continue
             transfer_id = prev["id"]
         else:
+            if not states[role]["ok"]:
+                held[role] = states[role]["reason"]; continue
             if tx.get(role + "_transfer_started_at"):
-                # A network failure may have created a transfer; never risk
-                # retrying after Stripe's idempotency retention window.
-                await _mark(session_id, "held", "unknown_prior_transfer_attempt")
-                return {"status": "held"}
+                held[role] = "unknown_prior_transfer_attempt"; continue
             await db.payment_transactions.update_one(
                 {"session_id": session_id, "split_version": VERSION},
-                {"$set": {role + "_transfer_started_at": now_iso()}},
+                {"$set": {role + "_transfer_started_at": now_iso(), role + "_destination": destination}},
             )
             def create():
                 return stripe.Transfer.create(
@@ -363,15 +384,31 @@ async def settle_new_p5_payment(session_id):
                 transfer = await asyncio.to_thread(create)
                 transfer_id = transfer["id"]
             except stripe.error.StripeError:
-                await _mark(session_id, "held", "transfer_needs_manual_reconciliation")
-                return {"status": "held"}
+                held[role] = "transfer_needs_manual_reconciliation"; continue
         await db.payment_transactions.update_one(
             {"session_id": session_id, "split_version": VERSION},
             {"$set": {role + "_transfer_id": transfer_id,
-                      role + "_transfer_status": "transferred_to_connect"}},
+                      role + "_transfer_status": "transferred_to_connect",
+                      role + "_destination": destination}},
         )
-    await _mark(session_id, "transferred_to_connect")
-    return {"status": "transferred_to_connect", "bank_payout_verified": False}
+        done[role] = transfer_id
+    for role, reason in held.items():
+        await db.payment_transactions.update_one(
+            {"session_id": session_id, "split_version": VERSION},
+            {"$set": {role + "_transfer_status": "held", role + "_hold_reason": reason}},
+        )
+    if not held:
+        await _mark(session_id, "transferred_to_connect")
+        return {"status": "transferred_to_connect", "transfers": done, "bank_payout_verified": False}
+    status = "partially_transferred" if done else "held"
+    await _mark(session_id, status, "; ".join(f"{r}:{m}" for r, m in held.items()))
+    return {"status": status, "transfers": done, "held": held, "bank_payout_verified": False}
+
+
+@router.post("/admin/finance/pt-split/settle/{session_id}")
+async def settle_retry(session_id: str, user: dict = Depends(require_role("admin"))):
+    """Retries held shares after a beneficiary finishes Connect onboarding. Idempotent."""
+    return await settle_webhook_safely(session_id)
 
 
 async def settle_webhook_safely(session_id):
@@ -458,3 +495,52 @@ async def influencer_connect_status(user: dict = Depends(require_role("influence
         "receiving_ready": bool(info["ok"]),
         "reason": info["reason"],
     }
+
+
+class BindIn(BaseModel):
+    account_id: str = Field(pattern=r"^acct_[A-Za-z0-9]+$")
+    role: str = Field(pattern=r"^(partner|influencer)$")
+    entity_id: str = Field(min_length=3, max_length=40)
+
+
+@router.post("/admin/finance/pt-split/bind")
+async def bind_pt_account(body: BindIn, user: dict = Depends(require_role("admin"))):
+    """Links an EXISTING Portugal Connect account to its owner record. Never creates
+    accounts, never moves money, refuses any conflicting association."""
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not key.startswith("sk_live_"):
+        raise HTTPException(409, "Chave Stripe Portugal live não configurada")
+    coll = db.partners if body.role == "partner" else db.influencers
+    other = db.influencers if body.role == "partner" else db.partners
+    entity = await coll.find_one({"id": body.entity_id}, NO_ID)
+    if not entity:
+        raise HTTPException(404, "Cadastro não encontrado")
+    if str(entity.get("currency") or "eur").lower() != "eur":
+        raise HTTPException(409, "Cadastro não opera em euros")
+    if entity.get("stripe_account_id") and entity["stripe_account_id"] != body.account_id:
+        raise HTTPException(409, "Cadastro já tem outra conta Connect associada")
+    if await coll.find_one({"stripe_account_id": body.account_id, "id": {"$ne": body.entity_id}}, {"_id": 1}) \
+            or await other.find_one({"stripe_account_id": body.account_id}, {"_id": 1}):
+        raise HTTPException(409, "Conta Connect já associada a outro cadastro")
+    try:
+        acc = dict(await asyncio.to_thread(stripe.Account.retrieve, body.account_id, api_key=key))
+    except stripe.error.StripeError:
+        raise HTTPException(502, "Stripe indisponível")
+    if str(acc.get("country", "")).upper() != "PT":
+        raise HTTPException(409, "Conta Connect não é de Portugal")
+    meta = acc.get("metadata") or {}
+    bind_name = "partner_id" if body.role == "partner" else "influencer_id"
+    bound = {k: v for k, v in meta.items() if k in ("partner_id", "influencer_id")}
+    if bound and bound != {bind_name: body.entity_id}:
+        raise HTTPException(409, "Conta Connect ligada a outra entidade na Stripe; não reassociada")
+    owner = await db.users.find_one({"id": entity.get("user_id")}, {"_id": 0, "email": 1}) if entity.get("user_id") else None
+    acc_email = (acc.get("email") or "").strip().lower()
+    if not owner or not acc_email or acc_email != (owner.get("email") or "").strip().lower():
+        raise HTTPException(409, "Sem evidência de titularidade: email da conta Stripe difere do email do cadastro")
+    if not bound:
+        await asyncio.to_thread(stripe.Account.modify, body.account_id, metadata={bind_name: body.entity_id}, api_key=key)
+    await coll.update_one({"id": body.entity_id, "stripe_account_id": {"$in": [None, "", body.account_id]}},
+                          {"$set": {"stripe_account_id": body.account_id, "stripe_payouts_enabled": bool(acc.get("payouts_enabled"))}})
+    from core import audit
+    await audit("PT CONNECT", f"{body.role} {body.entity_id} ligado à conta …{body.account_id[-6:]} (evidência: email); sem alterações financeiras", user, body.entity_id)
+    return {"ok": True, "account_id": body.account_id, "role": body.role, "entity_id": body.entity_id}

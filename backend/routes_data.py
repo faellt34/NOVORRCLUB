@@ -16,6 +16,12 @@ from core import db, NO_ID, get_current_user, require_role, audit, notify, admin
 router = APIRouter()
 
 
+def real_only(records):
+    """Dashboards show real activity only; test/simulated records stay in history."""
+    from diretor_estrategia import is_synthetic
+    return [r for r in records if not is_synthetic(r)]
+
+
 def since(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
@@ -125,7 +131,7 @@ async def influencer_dashboard(period: int = 30, verified_only: bool = False, us
                                "customers": None, "claims": None, "downloads": None}},
             "chart": [], "topPartners": [], "campaigns": camps, "featured": featured,
         }
-    reds = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period)}}, currency), NO_ID).to_list(20000)
+    reds = real_only(await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period)}}, currency), NO_ID).to_list(20000))
     prev = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}}, currency), NO_ID).to_list(20000)
     t, tp = totals(reds), totals(prev)
     camps = await enrich_campaigns(await db.campaigns.find({"influencer_id": inf_id}, NO_ID).to_list(500))
@@ -171,7 +177,7 @@ async def influencer_dashboard(period: int = 30, verified_only: bool = False, us
 async def partner_dashboard(user: dict = Depends(require_role("partner")), currency: str = Depends(reporting_currency)):
     partner = await partner_record(user, db)
     pid = partner["id"]
-    reds = await db.redemptions.find(currency_query({"partner_id": pid}, currency), NO_ID).sort("date", -1).to_list(20000)
+    reds = real_only(await db.redemptions.find(currency_query({"partner_id": pid}, currency), NO_ID).sort("date", -1).to_list(20000))
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
@@ -300,7 +306,7 @@ async def admin_dashboard(pilot_since: Optional[str] = None, verified_only: bool
             pilot_start = pilot_start.astimezone(timezone.utc)
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="Data de início do piloto inválida; use ISO 8601 com fuso horário.")
-    reds = await db.redemptions.find(currency_query({}, currency), NO_ID).to_list(50000)
+    reds = real_only(await db.redemptions.find(currency_query({}, currency), NO_ID).to_list(50000))
     if pilot_start:
         reds = [r for r in reds if _pilot_record_visible(r, pilot_start)]
     cur = [r for r in reds if r["date"] >= since(30)]

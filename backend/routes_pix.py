@@ -95,6 +95,76 @@ async def ownership_evidence(info, entity):
     ev['suficiente'] = ev['conta_unica_na_base'] and ev['pontos'] >= 2
     return ev
 
+class LinkExistingPixAccountIn(BaseModel):
+    stripe_account_id: str = Field(min_length=12, max_length=80)
+
+
+@router.post('/admin/pix/partners/{partner_id}/link-existing-account')
+async def link_existing_partner_pix_account(
+    partner_id: str, body: LinkExistingPixAccountIn,
+    admin: dict = Depends(require_role('admin')),
+):
+    """Attach an EXISTING Brazilian Connect account, never create one or touch payments.
+    Requires a linked partner user, exact Stripe email match, completed KYC, no conflicting
+    ownership metadata, and no reuse by any other partner/influencer.
+    """
+    account_id = body.stripe_account_id.strip()
+    if not account_id.startswith('acct_'):
+        raise HTTPException(400, 'Identificador Stripe Connect inválido')
+    partner = await db.partners.find_one({'id': partner_id}, NO_ID)
+    if not partner or (partner.get('currency') or '').lower() != 'brl':
+        raise HTTPException(409, 'Parceiro BRL não encontrado')
+    if not partner.get('user_id'):
+        raise HTTPException(409, 'Associe primeiro a conta do utilizador ao parceiro')
+    user = await db.users.find_one({'id': partner['user_id']}, NO_ID)
+    if not user or user.get('role') != 'partner' or user.get('partner_id') != partner_id:
+        raise HTTPException(409, 'Associação entre parceiro e utilizador incompleta')
+    existing = partner.get('pix_stripe_account_id')
+    if existing and existing != account_id:
+        raise HTTPException(409, 'Parceiro já possui outra conta Pix: revisão manual obrigatória')
+    if partner.get('stripe_account_id') and partner['stripe_account_id'] != account_id:
+        raise HTTPException(409, 'Parceiro tem outra conta Stripe registada: revisão manual obrigatória')
+    for coll in (db.partners, db.influencers):
+        if await coll.find_one({'id': {'$ne': partner_id},
+                                '$or': [{'pix_stripe_account_id': account_id},
+                                        {'stripe_account_id': account_id}]}, {'_id': 1}):
+            raise HTTPException(409, 'Conta Stripe já associada a outro destinatário')
+    info = await provider('accounts.retrieve', account_id)
+    if info.get('id') != account_id or info.get('country') != 'BR':
+        raise HTTPException(409, 'Conta Stripe não pertence ao Brasil')
+    metadata = info.get('metadata') or {}
+    if metadata.get('partner_id') not in (None, '', partner_id) or metadata.get('influencer_id'):
+        raise HTTPException(409, 'Conta Stripe reivindicada por outro titular')
+    req = info.get('requirements') or {}
+    if not info.get('payouts_enabled') or not info.get('charges_enabled') or (info.get('capabilities') or {}).get('transfers') != 'active' or req.get('currently_due') or req.get('past_due') or req.get('disabled_reason'):
+        raise HTTPException(409, 'Conta Stripe sem habilitação completa; não associada')
+    email = (user.get('email') or '').strip().lower()
+    stripe_emails = {(info.get('email') or '').strip().lower(),
+                     ((info.get('individual') or {}).get('email') or '').strip().lower()}
+    if not email or email not in stripe_emails:
+        raise HTTPException(409, 'Email Stripe diferente do utilizador; revisão manual obrigatória')
+    if existing != account_id:
+        result = await db.partners.update_one(
+            {'id': partner_id, 'user_id': user['id'],
+             'pix_stripe_account_id': {'$in': [None, '']}},
+            {'$set': {'pix_stripe_account_id': account_id}})
+        if not result.modified_count:
+            raise HTTPException(409, 'Associação alterada em simultâneo; nada foi sobrescrito')
+    # Reconcile only ownership metadata. Retrying after a Stripe timeout is safe:
+    # the linked account is revalidated above, and Stripe's idempotency key is stable.
+    if metadata.get('partner_id') != partner_id:
+        await provider('accounts.update', account_id,
+                       metadata={'partner_id': partner_id},
+                       idempotency_key=f'pix-meta-{partner_id}-{account_id}')
+    from core import audit
+    await audit('PIX CONNECT',
+                f'Conta existente …{account_id[-6:]} associada e metadata conciliada com parceiro {partner_id}; email confirmado; sem alterações financeiras',
+                admin, partner_id)
+    return {'ok': True, 'status': 'associado e conciliado',
+            'partner_id': partner_id, 'stripe_account_last6': account_id[-6:]}
+
+
+
 @router.get('/admin/pix/recipients/{campaign_id}')
 async def recipients_diagnostic(campaign_id: str, user: dict = Depends(require_role('admin'))):
     """Read-only: Stripe GETs only. Explains exactly why a P5 BRL checkout would wait."""

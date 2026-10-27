@@ -344,11 +344,7 @@ async def current_charge(code: str, x_p5_session: str | None = Header(default=No
 
 
 def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
-    """Portugal: test-mode P5 only until verified recipient split is implemented.
-
-    Never treat a destination charge / platform receipt as proof of influencer transfer.
-    Do not use a live key for this P5 route before the distribution policy is approved.
-    """
+    """Portugal P5 checkout on the platform account; split runs after the paid webhook."""
     key = os.environ.get("STRIPE_SECRET_KEY", "")
     from pt_split import live_enabled
     if not (key.startswith("sk_test_") or (key.startswith("sk_live_") and live_enabled())):
@@ -383,22 +379,25 @@ def _pt_stripe_checkout(rec, campaign, partner, origin, customer_email):
     )
     if customer_email:
         base["customer_email"] = customer_email
-    # Never silently downgrade an advertised MB WAY checkout to card-only.
-    # On missing Stripe capability/configuration, keep the same charge pending:
-    # the follower can retry after an operator fixes the payment method.
+    # Methods follow Stripe eligibility: MB WAY + card when the account has MB WAY
+    # active; otherwise card (Apple Pay / Google Pay are offered by hosted
+    # Checkout through the card method). Idempotency keys are per method set.
     try:
-        return stripe.checkout.Session.create(
+        session = stripe.checkout.Session.create(
             **base,
             payment_method_types=["card", "mb_way"],
             idempotency_key="p5-" + rec["id"] + "-mbway",
         )
+        return session, "card,mb_way,wallets"
     except stripe.error.InvalidRequestError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail=("MB WAY não está disponível para esta cobrança Portugal. "
-                    "Verifique a configuração de pagamentos Stripe; "
-                    "nenhuma cobrança alternativa por cartão foi criada."),
-        ) from exc
+        if "mb_way" not in str(exc).lower():
+            raise
+    session = stripe.checkout.Session.create(
+        **base,
+        payment_method_types=["card"],
+        idempotency_key="p5-" + rec["id"] + "-card",
+    )
+    return session, "card,wallets"
 
 
 @router.post("/public/p5/charges/checkout")
@@ -413,7 +412,7 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
         raise HTTPException(403, "Cobrança pertence a outra sessão de seguidor")
     if rec["expires_at"] <= now_iso():
         raise HTTPException(409, "Cobrança expirada. Peça ao parceiro para preparar outra.")
-    from routes_pix import trusted_origin, availability_configuration
+    from routes_pix import trusted_origin
     origin = trusted_origin(body.origin_url)
     if rec.get("checkout_url"):
         return {
@@ -527,7 +526,7 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
             result = {"checkout_url": pix["checkout_url"], "pix_request_id": str(request_id)}
         elif rec["currency"] == "eur":
             email = body.email.strip().lower() if body.email and "@" in body.email and len(body.email) <= 254 else None
-            stripe_session = await asyncio.to_thread(
+            stripe_session, methods_offered = await asyncio.to_thread(
                 _pt_stripe_checkout, rec, campaign, partner, origin, email
             )
             tx = {
@@ -558,6 +557,7 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
                     "manual_payout_blocked": True,
                 } if pt_quote else {}),
                 "payment_method": "stripe_checkout_mbway_card",
+                "payment_methods_offered": methods_offered,
                 "split": False,
                 "distribution_status": "manual_reconciliation_required",
                 "commission_settlement_status": "accrued_unpaid",
@@ -571,7 +571,8 @@ async def checkout_charge(body: CheckoutCharge, x_p5_session: str | None = Heade
                 "status": "checkout", "session_id": stripe_session.id,
                 "checkout_url": stripe_session.url,
             }
-            result = {"checkout_url": stripe_session.url, "session_id": stripe_session.id}
+            result = {"checkout_url": stripe_session.url, "session_id": stripe_session.id,
+                      "payment_methods_offered": methods_offered}
         else:
             raise HTTPException(409, "Moeda P5 inválida")
 

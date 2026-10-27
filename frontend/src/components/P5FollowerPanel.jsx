@@ -184,7 +184,7 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
               {checkCurrency === "eur" && (
                 <button type="button" disabled data-testid="p5-mbway-unavailable"
                   className="mt-2 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 font-semibold text-amber-800 opacity-80 cursor-not-allowed">
-                  MB WAY / cartão · a aguardar validação financeira
+                  MB WAY / Apple Pay / cartão · a aguardar validação financeira
                 </button>
               )}
               {checkoutEnabled && status?.charge_id && (
@@ -211,7 +211,7 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
                 data-testid="p5-pay-button"
               >
                 {busy ? "A abrir pagamento..." :
-                  checkCurrency === "brl" ? "Pagar com Pix" : "Pagar com MB WAY / cartão"}
+                  checkCurrency === "brl" ? "Pagar com Pix" : "Pagar com MB WAY, Apple Pay ou cartão"}
               </button>
             </>
           )}

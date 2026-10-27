@@ -1,0 +1,554 @@
+import os
+from partner_access import partner_record, normalized_iban
+from finance_evidence import connect_account_evidence
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query, Header
+from fastapi.responses import Response
+from pydantic import BaseModel
+
+from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
+from storage import put_object, get_object, APP_NAME
+import jwt
+
+stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+TAX_CODE_DIGITAL = "txcd_10302000"
+SUBSCRIPTION = {"lookup_key": "club_monthly", "name": "RRclub Premium (mensal)", "amount": 990, "interval": "month", "emergent_product_id": "club_monthly"}
+
+router = APIRouter()
+_cfg_cache = {"at": 0, "data": None}
+
+
+def _stripe_probe() -> dict:
+    key = os.environ["STRIPE_SECRET_KEY"]
+    info = {"mode": "live" if key.startswith("sk_live") else "test", "account_ok": False, "connect_enabled": False, "webhook_configured": bool(WEBHOOK_SECRET), "account_name": None, "erro": None}
+    try:
+        acct = stripe.Account.retrieve()
+        info.update({"account_ok": True, "account_name": (acct.get("settings") or {}).get("dashboard", {}).get("display_name") or acct.get("business_profile", {}).get("name")})
+    except stripe.error.StripeError as e:
+        info["erro"] = e.user_message or str(e)[:160]
+        return info
+    try:
+        _v2().v2.core.accounts.list({"limit": 1})
+        info["connect_enabled"] = True
+    except stripe.StripeError:
+        info["connect_enabled"] = False
+    # Reading configuration must never create or close connected accounts.
+    # A successful list does not certify acceptance of platform responsibilities.
+    info["platform_profile_ok"] = None
+    return info
+
+
+async def stripe_config(force: bool = False) -> dict:
+    import asyncio, time
+    if force or not _cfg_cache["data"] or time.time() - _cfg_cache["at"] > 120:
+        _cfg_cache.update({"data": await asyncio.to_thread(_stripe_probe), "at": time.time()})
+    return _cfg_cache["data"]
+
+
+@router.get("/payments/config")
+async def payments_config():
+    c = await stripe_config()
+    return {"mode": c["mode"], "available": c["account_ok"], "connect_enabled": c["connect_enabled"]}
+
+
+@router.get("/admin/stripe/status")
+async def admin_stripe_status(user: dict = Depends(require_role("admin"))):
+    c = await stripe_config(force=True)
+    partners = await db.partners.count_documents({"status": "Ativo"})
+    linked_filter = {"status": "Ativo", "stripe_account_id": {"$regex": "^acct_"}}
+    connected = await db.partners.count_documents(linked_filter)
+    missing = [p["nome"] async for p in db.partners.find(
+        {"status": "Ativo", "$nor": [{"stripe_account_id": {"$regex": "^acct_"}}]},
+        {"_id": 0, "nome": 1}
+    )]
+    steps = [
+        {"id": "chave", "label": "Chave Stripe válida" + (f" · {c['account_name']}" if c.get("account_name") else ""), "ok": c["account_ok"], "action": None if c["account_ok"] else f"Verifique STRIPE_SECRET_KEY nos secrets de produção. Erro: {c.get('erro')}"},
+        {"id": "modo", "label": f"Modo: {'PAGAMENTOS REAIS (live)' if c['mode'] == 'live' else 'TESTE (sem dinheiro real)'}", "ok": c["mode"] == "live", "action": None if c["mode"] == "live" else "Para receber dinheiro real: reclame a conta Stripe (email da Emergent) → conclua o KYC em dashboard.stripe.com → copie a chave sk_live_… para STRIPE_SECRET_KEY (Re-publish → Secrets) e a pk_live_… para STRIPE_PUBLISHABLE_KEY."},
+        {"id": "webhook", "label": "Webhook Stripe configurado (confirma pagamentos automaticamente)", "ok": c["webhook_configured"], "action": None if c["webhook_configured"] else f"Em dashboard.stripe.com → Developers → Webhooks → Add endpoint: {os.environ.get('FRONTEND_URL', '').rstrip('/')}/api/stripe/webhook com o evento checkout.session.completed; copie o whsec_… para STRIPE_WEBHOOK_SECRET."},
+        {"id": "connect", "label": "Stripe Connect acessível (aptidão financeira validada por operação)", "ok": c["connect_enabled"], "action": None if c["connect_enabled"] else "Ative Connect em dashboard.stripe.com/connect (tipo Express). Até lá os pagamentos entram na conta RRclub e paga aos hotéis por transferência (IBAN)."},
+        {"id": "perfil", "label": "Perfil da plataforma Connect — estado não confirmado por esta consulta", "ok": c.get("platform_profile_ok"), "action": "Esta consulta não confirma o perfil da plataforma. Este aviso informativo não bloqueia o P5; cada operação verifica os seus destinatários. Consulte o perfil na Stripe se houver um requisito explícito."},
+        {"id": "parceiros", "label": f"Parceiros com conta Connect associada: {connected}/{partners}", "ok": True if partners > 0 and connected == partners else None,
+         "action": None if partners > 0 and connected == partners else f"Sem associação registada: {', '.join(missing[:5])}{'…' if len(missing) > 5 else ''}. A associação não comprova aptidão para receber. Os requisitos são verificados nos destinatários de cada operação; outros parceiros podem continuar." if missing else "Ainda não há parceiros ativos."},
+    ]
+    return {"config": c, "steps": steps, "done": sum(1 for s in steps if s["ok"]), "total": sum(1 for s in steps if s["ok"] is not None), "informational": sum(1 for s in steps if s["ok"] is None)}
+
+
+def _product(entry_id: str, name: str):
+    for p in stripe.Product.list(active=True, limit=100).auto_paging_iter():
+        if (p.get("metadata") or {}).get("emergent_product_id") == entry_id:
+            return p
+    return stripe.Product.create(name=name, tax_code=TAX_CODE_DIGITAL, metadata={"managed_by": "emergent", "emergent_product_id": entry_id})
+
+
+def ensure_price(lookup_key: str, name: str, amount_cents: int, entry_id: str, interval: Optional[str] = None):
+    existing = stripe.Price.list(lookup_keys=[lookup_key], active=True, limit=1).data
+    if existing and existing[0].unit_amount == amount_cents and existing[0].currency == "eur":
+        return existing[0]
+    if existing:
+        stripe.Price.modify(existing[0].id, active=False)
+    product = _product(entry_id, name)
+    kwargs = dict(product=product.id, unit_amount=amount_cents, currency="eur", lookup_key=lookup_key, transfer_lookup_key=True)
+    if interval:
+        kwargs["recurring"] = {"interval": interval}
+    return stripe.Price.create(**kwargs)
+
+
+def ensure_tax_settings():
+    try:
+        s = stripe.tax.Settings.retrieve()
+        if s.head_office and getattr(s.head_office, "address", None):
+            return
+        stripe.tax.Settings.modify(head_office={"address": {"country": "PT", "line1": "Avenida da Liberdade 1", "city": "Lisboa", "postal_code": "1250-096"}}, defaults={"tax_behavior": "exclusive"})
+    except Exception:
+        pass
+
+
+async def price_for_lookup(lookup_key: str):
+    if lookup_key == SUBSCRIPTION["lookup_key"]:
+        return ensure_price(lookup_key, SUBSCRIPTION["name"], SUBSCRIPTION["amount"], SUBSCRIPTION["emergent_product_id"], SUBSCRIPTION["interval"]), None
+    if lookup_key.startswith("ebook_"):
+        eb = await db.ebooks.find_one({"id": lookup_key[6:]}, NO_ID)
+        if not eb or not eb.get("premium") or not eb.get("preco"):
+            raise HTTPException(status_code=404, detail="E-book não disponível para compra")
+        return ensure_price(lookup_key, eb["titulo"], int(round(float(eb["preco"]) * 100)), lookup_key), eb
+    raise HTTPException(status_code=400, detail="Produto desconhecido")
+
+
+class CheckoutIn(BaseModel):
+    lookup_key: str
+    origin_url: str
+
+
+@router.post("/payments/checkout")
+async def checkout(body: CheckoutIn, user: dict = Depends(get_current_user)):
+    price, eb = await price_for_lookup(body.lookup_key)
+    if eb and await db.entitlements.find_one({"user_id": user["id"], "ebook_id": eb["id"]}):
+        raise HTTPException(status_code=409, detail="Já adquiriu este e-book")
+    kwargs = dict(
+        line_items=[{"price": price.id, "quantity": 1}],
+        mode="subscription" if price.recurring else "payment",
+        success_url=f"{body.origin_url}/payment/success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/payment/cancel",
+        customer_email=user["email"],
+        metadata={"user_id": user["id"], "lookup_key": body.lookup_key},
+    )
+    try:
+        session = stripe.checkout.Session.create(**kwargs, managed_payments={"enabled": True})
+    except stripe.error.InvalidRequestError as e:
+        msg = (e.user_message or str(e)).lower()
+        if "managed payments" in msg or "ineligible" in msg:
+            session = stripe.checkout.Session.create(**kwargs, automatic_tax={"enabled": True}, billing_address_collection="required")
+        else:
+            raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=503, detail=f"Pagamentos temporariamente indisponíveis: {e.user_message or str(e)[:120]}")
+    await db.payment_transactions.insert_one({
+        "id": new_id("tx"), "session_id": session.id, "user_id": user["id"], "lookup_key": body.lookup_key, "ebook_id": eb["id"] if eb else None,
+        "amount": (price.unit_amount or 0) / 100, "currency": price.currency, "status": "initiated", "payment_status": "pending",
+        "created_at": now_iso(), "updated_at": now_iso(),
+    })
+    return {"checkout_url": session.url, "session_id": session.id}
+
+
+async def fulfil(session_id: str, extra: dict):
+    res = await db.payment_transactions.find_one_and_update(
+        {"session_id": session_id, "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}},
+        {"$set": {"status": "completed", "payment_status": "paid", "updated_at": now_iso(), **extra}}, projection=NO_ID)
+    if not res:
+        # Retomar uma redação financeira interrompida após marcar pagamento
+        # como recebido; o webhook pode ser repetido sem duplicar comissão.
+        res = await db.payment_transactions.find_one(
+            {"session_id": session_id, "kind": "coupon_pay", "payment_status": "paid"}, NO_ID
+        )
+        if not res:
+            return
+    if res.get("kind") == "coupon_pay":
+        c = await db.campaigns.find_one({"id": res["campaign_id"]}, NO_ID)
+        partner = await db.partners.find_one({"id": res["partner_id"]}, NO_ID) or {}
+        original_influencer_id = res.get("influencer_id")
+        resolved_influencer_id = original_influencer_id or (c.get("influencer_id") if c else None)
+        inf = await db.influencers.find_one({"id": resolved_influencer_id}, NO_ID) if resolved_influencer_id else None
+        rate = float(res.get("commission_percent_snapshot")
+                     if res.get("commission_percent_snapshot") is not None
+                     else c["comissao"] if c else 0) / 100
+        attribution_mismatch = bool(
+            original_influencer_id and
+            (not c or c.get("influencer_id") != original_influencer_id)
+        )
+        gross = float(res["gross_amount"])
+        rec = {"id": new_id("r"), "coupon": res["coupon"], "campaign_id": res["campaign_id"], "campaign": c["nome"] if c else "", "partner_id": res["partner_id"], "partner": partner.get("nome", ""),
+               "influencer_id": resolved_influencer_id, "influencer": inf["nome"] if inf else "—", "amount": round(gross, 2), "discount": round(gross - res["amount"], 2),
+               "commission": round(gross * rate, 2), "rate": rate, "date": now_iso(), "staff": "Pagamento online (QR)", "idempotency_key": session_id, "paid_online": True, "payment_method": res.get("payment_method"),
+               "currency": "eur", "distribution_status": res.get("distribution_status", "unverified"), "commission_settlement_status": "review_required" if attribution_mismatch else "accrued_unpaid",
+               "attribution_hold": attribution_mismatch, "attribution_source": "checkout_snapshot" if original_influencer_id else "legacy_campaign_lookup"}
+        inserted = await db.redemptions.update_one(
+            {"idempotency_key": session_id}, {"$setOnInsert": dict(rec)}, upsert=True
+        )
+        if inserted.upserted_id is None:
+            existing = await db.redemptions.find_one({"idempotency_key": session_id}, NO_ID)
+            if existing:
+                await db.payment_transactions.update_one(
+                    {"session_id": session_id}, {"$set": {"redemption_id": existing["id"]}}
+                )
+            return
+        await audit("REDENÇÃO", f"{rec['coupon']} · pago online {res['amount']:.2f}€ (conta {gross:.2f}€) · taxa travada {c['comissao'] if c else 0}% · {rec['partner']}", {"id": "cliente", "nome": "Cliente (QR)"}, rec["id"])
+        from realtime import emit
+        emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=rec["coupon"], parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="qr",
+             influencer_id=rec["influencer_id"], partner_id=rec["partner_id"], record=rec)
+        from routes_data import mark_converted
+        await mark_converted(rec["campaign_id"], rec)
+        targets = await admin_ids()
+        pu = await db.users.find_one({"partner_id": res["partner_id"]}, {"id": 1}); iu = await db.users.find_one({"influencer_id": rec["influencer_id"]}, {"id": 1}) if rec["influencer_id"] else None
+        targets += [u["id"] for u in (pu, iu) if u]
+        await notify(targets, "redencao", "Pagamento online recebido", f"{rec['coupon']} · cliente pagou {res['amount']:.2f}€ em {rec['partner']} · comissão {rec['commission']:.2f}€", "/parceiro")
+        cust_email = extra.get("customer_email")
+        if cust_email:
+            from mailer import send_email
+            sent = await send_email(cust_email, f"RRclub · Recibo {rec['coupon']} · {res['amount']:.2f}€", "O seu recibo",
+                f"Obrigado! Pagamento confirmado em <b>{rec['partner']}</b>.<br>Conta: {gross:.2f}€ · Desconto ({c['desconto'] if c else 0:g}%): −{rec['discount']:.2f}€ · <b>Pago: {res['amount']:.2f}€</b><br>Cupom {rec['coupon']} · Ref. {rec['id']} · {rec['date'][:16].replace('T', ' ')} UTC",
+                "Ver o cupom", f"{os.environ.get('FRONTEND_URL', '').rstrip('/')}/c/{rec['coupon']}")
+            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"customer_email": cust_email, "receipt_emailed": sent, "redemption_id": rec["id"]}})
+        else:
+            await db.payment_transactions.update_one({"session_id": session_id}, {"$set": {"redemption_id": rec["id"]}})
+        return
+    if res.get("ebook_id"):
+        await db.entitlements.update_one({"user_id": res["user_id"], "ebook_id": res["ebook_id"]}, {"$set": {"id": new_id("ent"), "granted_at": now_iso(), "session_id": session_id}}, upsert=True)
+        eb = await db.ebooks.find_one({"id": res["ebook_id"]}, NO_ID)
+        await audit("COMPRA", f"E-book '{eb['titulo'] if eb else res['ebook_id']}' · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
+        await notify([res["user_id"]], "compra", "Compra confirmada", f"Já pode ler '{eb['titulo']}' na área de E-books.", "/ebooks")
+    else:
+        await db.subscriptions.update_one({"user_id": res["user_id"]}, {"$set": {"id": new_id("sub"), "status": "active", "stripe_subscription_id": extra.get("stripe_subscription_id"), "started_at": now_iso(), "session_id": session_id}}, upsert=True)
+        await audit("SUBSCRIÇÃO", f"RRclub Premium mensal · {res['amount']:.2f}€", {"id": res["user_id"], "nome": res["user_id"]}, session_id)
+        await notify([res["user_id"]], "compra", "Subscrição Premium ativa", "Todos os guias premium estão desbloqueados.", "/ebooks")
+
+
+@router.get("/payments/status/{session_id}")
+async def payment_status(session_id: str, authorization: Optional[str] = Header(None)):
+    rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Transação não encontrada")
+    if rec.get("kind") == "pix_coupon":
+        raise HTTPException(status_code=409, detail="Consulte este pagamento na rota dedicada de estado Pix.")
+    if rec.get("kind") != "coupon_pay":
+        user = await user_from_query_or_header(authorization, None)
+        if user["role"] != "admin" and rec.get("user_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Sem acesso a esta transação")
+    if rec["payment_status"] != "paid":
+        try:
+            s = stripe.checkout.Session.retrieve(session_id)
+            if s.payment_status == "paid":
+                await fulfil(session_id, {"stripe_subscription_id": s.subscription, "stripe_payment_intent_id": s.payment_intent, "customer_email": (s.customer_details.email if getattr(s, "customer_details", None) else None) or s.customer_email})
+                rec = await db.payment_transactions.find_one({"session_id": session_id}, NO_ID)
+        except stripe.error.StripeError:
+            pass
+    out = {"session_id": rec["session_id"], "status": rec["status"], "payment_status": rec["payment_status"], "lookup_key": rec.get("lookup_key"), "kind": rec.get("kind"), "amount": rec.get("amount"), "coupon": rec.get("coupon")}
+    if rec.get("kind") == "coupon_pay":
+        out.update({"gross_amount": rec.get("gross_amount"), "discount": round((rec.get("gross_amount") or 0) - (rec.get("amount") or 0), 2), "redemption_id": rec.get("redemption_id"), "receipt_emailed": rec.get("receipt_emailed"), "customer_email": _mask_email(rec.get("customer_email")), "paid_at": rec.get("updated_at")})
+    return out
+
+
+def _mask_email(e):
+    if not e or "@" not in e:
+        return None
+    n, d = e.split("@", 1)
+    return f"{n[:2]}***@{d}"
+
+
+@router.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    if not WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook Stripe desativado: STRIPE_WEBHOOK_SECRET não configurado")
+    payload = await request.body()
+    try:
+        event = stripe.Webhook.construct_event(payload, request.headers.get("stripe-signature", ""), WEBHOOK_SECRET)
+    except (stripe.error.SignatureVerificationError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    obj, t = event["data"]["object"], event["type"]
+    if (obj.get("metadata") or {}).get("kind") == "pix_coupon":
+        # Pix has a separate signing secret, ledger and transfer workflow.
+        return {"status": "ignored", "reason": "dedicated_pix_webhook_required"}
+    if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+        if obj.get("payment_status") == "paid":
+            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
+            from pt_split import settle_webhook_safely
+            await settle_webhook_safely(obj["id"])
+
+    elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
+        st = "failed" if "failed" in t else "expired"
+        await db.payment_transactions.update_one({"session_id": obj["id"], "kind": {"$ne": "pix_coupon"}, "payment_status": {"$ne": "paid"}}, {"$set": {"status": st, "payment_status": st, "updated_at": now_iso()}})
+        if st == "failed":
+            from realtime import emit
+            emit("erro_transferencia", detalhe=f"Pagamento falhou · sessão {obj['id'][-8:]}", ref=obj["id"])
+    elif t in ("transfer.failed", "payout.failed", "transfer.reversed"):
+        from realtime import emit
+        emit("erro_transferencia", detalhe=f"Stripe {t} · {obj.get('id', '')}", ref=obj.get("id"))
+    elif t == "customer.subscription.deleted":
+        await db.subscriptions.update_one({"stripe_subscription_id": obj["id"]}, {"$set": {"status": "canceled", "canceled_at": now_iso()}})
+    return {"status": "ok"}
+
+
+async def access_info(user: dict):
+    sub = await db.subscriptions.find_one({"user_id": user["id"], "status": "active"}, NO_ID)
+    owned = [e["ebook_id"] async for e in db.entitlements.find({"user_id": user["id"]}, NO_ID)]
+    return {"subscribed": bool(sub), "owned": owned, "subscription_price": SUBSCRIPTION["amount"] / 100}
+
+
+@router.get("/payments/access")
+async def my_access(user: dict = Depends(get_current_user)):
+    return await access_info(user)
+
+
+@router.post("/admin/ebooks/{ebook_id}/pdf")
+async def upload_pdf(ebook_id: str, file: UploadFile = File(...), user: dict = Depends(require_role("admin"))):
+    eb = await db.ebooks.find_one({"id": ebook_id}, NO_ID)
+    if not eb:
+        raise HTTPException(status_code=404, detail="E-book não encontrado")
+    if (file.content_type or "") != "application/pdf" and not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Apenas ficheiros PDF")
+    data = await file.read()
+    if len(data) > 40 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="PDF demasiado grande (máx. 40MB)")
+    try:
+        res = put_object(f"{APP_NAME}/ebooks/{ebook_id}/{uuid.uuid4()}.pdf", data, "application/pdf")
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"Falha no armazenamento: {e}")
+    await db.ebooks.update_one({"id": ebook_id}, {"$set": {"pdf_path": res["path"], "pdf_name": file.filename, "pdf_size": res.get("size", len(data)), "pdf_uploaded_at": now_iso()}})
+    await audit("UPLOAD", f"PDF de '{eb['titulo']}' · {file.filename}", user, ebook_id)
+    return {"ok": True, "pdf_name": file.filename, "pdf_size": res.get("size", len(data))}
+
+
+async def user_from_query_or_header(authorization: Optional[str], auth: Optional[str]):
+    token = auth or (authorization[7:] if authorization and authorization.startswith("Bearer ") else None)
+    if not token:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    try:
+        payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=["HS256"])
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    user = await db.users.find_one({"id": payload["sub"]}, NO_ID)
+    if not user:
+        raise HTTPException(status_code=401, detail="Utilizador não encontrado")
+    return user
+
+
+@router.get("/ebooks/{ebook_id}/pdf")
+async def read_pdf(ebook_id: str, authorization: Optional[str] = Header(None)):
+    user = await user_from_query_or_header(authorization, None)
+    eb = await db.ebooks.find_one({"id": ebook_id}, NO_ID)
+    if not eb or not eb.get("pdf_path"):
+        raise HTTPException(status_code=404, detail="Este guia ainda não tem PDF disponível")
+    if eb.get("premium") and user["role"] != "admin":
+        acc = await access_info(user)
+        if not acc["subscribed"] and ebook_id not in acc["owned"]:
+            raise HTTPException(status_code=403, detail="Conteúdo premium — compre o guia ou subscreva o RRclub")
+    try:
+        data, ct = get_object(eb["pdf_path"])
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"Falha ao obter ficheiro: {e}")
+    return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{eb.get("pdf_name") or ebook_id}.pdf"'})
+
+
+class PublicPayIn(BaseModel):
+    code: str
+    amount: float
+    origin_url: str
+    email: Optional[str] = None
+
+
+@router.post("/public/pay")
+async def public_pay(body: PublicPayIn):
+    code = body.code.strip().upper()
+    c = await db.campaigns.find_one({"cupom": code}, NO_ID)
+    if not c or c["status"] != "Ativa":
+        raise HTTPException(status_code=404, detail="Cupom inválido ou inativo")
+    if c.get("validade") and c["validade"] < datetime.now(timezone.utc).date().isoformat():
+        raise HTTPException(status_code=409, detail="Cupom expirado")
+    if body.amount < 1 or body.amount > 10000:
+        raise HTTPException(status_code=400, detail="Indique o valor da conta (entre 1€ e 10.000€)")
+    partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
+    from p5_checkout import currency_enabled
+    currency = str(c.get("currency") or partner.get("currency") or "eur").lower()
+    if currency != "eur":
+        raise HTTPException(status_code=409, detail="Esta campanha não usa o checkout EUR. Pague pelo fluxo local do parceiro.")
+    if currency_enabled("eur") and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5 and c.get("influencer_id"):
+        raise HTTPException(status_code=409, detail="P5 ativo: o parceiro deve ler o QR individual e confirmar o valor antes do pagamento.")
+    if not 0 <= float(c["desconto"]) < 100:
+        raise HTTPException(status_code=409, detail="Desconto inválido")
+    to_pay = round(body.amount * (1 - float(c["desconto"]) / 100), 2)
+    if to_pay < 0.50:
+        raise HTTPException(status_code=409, detail="Valor a pagar inferior ao mínimo")
+    base = dict(
+        line_items=[{"price_data": {"currency": "eur", "unit_amount": int(round(to_pay * 100)), "product_data": {"name": f"{partner.get('nome', 'Parceiro')} · {c['nome']}", "description": f"Cupom {code} · {c['desconto']:g}% de desconto aplicado sobre {body.amount:.2f}€"}}, "quantity": 1}],
+        mode="payment",
+        success_url=f"{body.origin_url}/c/{code}?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url=f"{body.origin_url}/c/{code}?cancel=1",
+        metadata={"kind": "coupon_pay", "coupon": code, "campaign_id": c["id"],
+                  "partner_id": c.get("parceiro_id", ""),
+                  "influencer_id": c.get("influencer_id") or ""},
+    )
+    if body.email:
+        base["customer_email"] = body.email.strip().lower()
+    # Não confiar numa flag antiga. Ler as capacidades atuais da conta Connect.
+    # Sem aptidão comprovada, o pagamento fica na plataforma aguardando conciliação.
+    split = False
+    destination = partner.get("stripe_account_id")
+    if destination:
+        try:
+            account = stripe.Account.retrieve(destination)
+            connected = connect_account_evidence(account, partner["id"])
+            capable = connected["ready_for_partner_transfer"]
+        except stripe.error.StripeError:
+            capable = False
+        if capable:
+            fee = int(round(body.amount * float(c["comissao"]) / 100 * 100))
+            charge_cents = int(round(to_pay * 100))
+            if not 0 <= fee <= charge_cents:
+                raise HTTPException(status_code=409, detail="Comissão incompatível com o total")
+            base["payment_intent_data"] = {
+                "application_fee_amount": fee,
+                "transfer_data": {"destination": destination},
+                "metadata": base["metadata"],
+                "description": f"{code} · {partner.get('nome')}",
+            }
+            split = True
+    session = None
+    selected_methods = "card"
+    try:
+        for pm in (["card", "mb_way"], ["card"]):
+            try:
+                session = stripe.checkout.Session.create(**base, payment_method_types=pm)
+                selected_methods = "card/mb_way" if len(pm) == 2 else "card"
+                break
+            except stripe.error.InvalidRequestError as e:
+                if pm == ["card"]:
+                    raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or e}")
+    except stripe.error.AuthenticationError:
+        raise HTTPException(status_code=503, detail="Pagamentos temporariamente indisponíveis (configuração Stripe). Pague diretamente ao estabelecimento e mostre o cupão.")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=409, detail=f"Stripe: {e.user_message or str(e)[:120]}")
+    await db.payment_transactions.insert_one({"id": new_id("tx"), "session_id": session.id, "user_id": None, "kind": "coupon_pay", "coupon": code, "campaign_id": c["id"], "partner_id": c.get("parceiro_id"),
+                                              "gross_amount": round(body.amount, 2), "amount": to_pay, "currency": "eur",
+                                              "influencer_id": c.get("influencer_id"),
+                                              "commission_percent_snapshot": float(c["comissao"]),
+                                              "status": "initiated", "payment_status": "pending",
+                                              "payment_method": selected_methods, "split": split,
+                                              "distribution_status": "stripe_transfer_unverified" if split else "manual_reconciliation_required",
+                                              "commission_settlement_status": "accrued_unpaid",
+                                              "created_at": now_iso(), "updated_at": now_iso()})
+    return {"checkout_url": session.url, "session_id": session.id, "to_pay": to_pay, "discount": round(body.amount - to_pay, 2), "split": split}
+
+
+class IbanIn(BaseModel):
+    iban: str
+    titular: Optional[str] = ""
+
+
+@router.post("/partner/iban")
+async def set_iban(body: IbanIn, user: dict = Depends(require_role("partner"))):
+    partner = await partner_record(user, db)
+    partner_id = partner["id"]
+    iban = normalized_iban(body.iban)
+    result = await db.partners.update_one({"id": partner_id, "user_id": partner.get("user_id")}, {"$set": {"iban": iban, "iban_titular": (body.titular or "").strip()}})
+    if not result.matched_count:
+        raise HTTPException(409, "A associação ao estabelecimento mudou. Atualize a página e contacte o administrador.")
+    await audit("CONFIGURAÇÃO", f"IBAN de recebimento atualizado · {user['nome']} · ••••{iban[-4:]}", user, partner_id)
+    return {"ok": True, "iban": iban}
+
+
+CONNECT_INCLUDE = ["configuration.merchant", "configuration.recipient", "requirements"]
+
+
+def _v2():
+    return stripe.StripeClient(os.environ["STRIPE_SECRET_KEY"], http_client=stripe.RequestsClient(timeout=15), max_network_retries=0)
+
+
+def _connect_create(email: str, nome: str, partner_id: str):
+    return _v2().v2.core.accounts.create({
+        "contact_email": email, "display_name": nome, "dashboard": "express",
+        "identity": {"country": "pt", "entity_type": "company", "business_details": {"registered_name": nome}},
+        "defaults": {"responsibilities": {"fees_collector": "application", "losses_collector": "application"}},
+        "configuration": {"merchant": {"capabilities": {"card_payments": {"requested": True}}}, "recipient": {"capabilities": {"stripe_balance": {"stripe_transfers": {"requested": True}}}}},
+        "metadata": {"partner_id": partner_id}, "include": CONNECT_INCLUDE}, options={"idempotency_key": "rrclub-connect-" + partner_id})
+
+
+def _connect_link(acct_id: str, origin: str):
+    return _v2().v2.core.account_links.create({"account": acct_id, "use_case": {"type": "account_onboarding", "account_onboarding": {
+        "configurations": ["merchant", "recipient"], "return_url": f"{origin}/parceiro?connect=return", "refresh_url": f"{origin}/parceiro?connect=refresh"}}})
+
+
+def _connect_status(acct_id: str) -> dict:
+    a = _v2().v2.core.accounts.retrieve(acct_id, {"include": CONNECT_INCLUDE})
+    cfg = a.configuration
+    card = getattr(getattr(getattr(cfg, "merchant", None), "capabilities", None), "card_payments", None)
+    tr = getattr(getattr(getattr(getattr(cfg, "recipient", None), "capabilities", None), "stripe_balance", None), "stripe_transfers", None)
+    summary = getattr(getattr(a, "requirements", None), "summary", None)
+    pending = bool(summary and getattr(summary, "minimum_deadline", None) and summary.minimum_deadline.status in ("past_due", "currently_due", "eventually_due"))
+    return {"connected": True, "charges_enabled": bool(card and card.status == "active"), "payouts_enabled": bool(tr and tr.status == "active"), "details_submitted": not pending,
+            "partner_id": (getattr(a, "metadata", None) or {}).get("partner_id")}
+
+
+@router.post("/partner/connect/onboard")
+async def connect_onboard(body: dict, user: dict = Depends(require_role("partner"))):
+    import asyncio
+    import logging
+    partner = await partner_record(user, db)
+    if partner.get("currency", "eur") != "eur":
+        raise HTTPException(409, "Utilize o fluxo de recebimentos do Brasil para este estabelecimento.")
+    from urllib.parse import urlsplit
+    origin = (body.get("origin_url") or os.environ.get("FRONTEND_URL", "")).rstrip("/")
+    allowed = {url.rstrip("/").strip() for url in os.environ.get("PAYMENT_ALLOWED_ORIGINS", "").split(",") if url.strip()}
+    allowed.add(os.environ.get("FRONTEND_URL", "").rstrip("/"))
+    parsed = urlsplit(origin)
+    local = parsed.hostname in ("localhost", "127.0.0.1")
+    if not origin or origin not in allowed or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment or (parsed.scheme != "https" and not (local and parsed.scheme == "http")):
+        raise HTTPException(400, "Origem de retorno não autorizada.")
+    try:
+        acct_id = partner.get("stripe_account_id")
+        if not acct_id:
+            acct = await asyncio.to_thread(_connect_create, user["email"], partner.get("nome", user["nome"]), user["partner_id"])
+            acct_id = acct.id
+            saved = await db.partners.update_one({"id": partner["id"], "stripe_account_id": partner.get("stripe_account_id"), "user_id": partner.get("user_id")}, {"$set": {"stripe_account_id": acct_id, "stripe_charges_enabled": False}})
+            if not saved.matched_count:
+                raise HTTPException(409, "A associação do estabelecimento mudou. Contacte o administrador antes de continuar.")
+        link = await asyncio.to_thread(_connect_link, acct_id, origin)
+    except HTTPException:
+        raise
+    except Exception as e:
+        msg = (getattr(e, "user_message", None) or str(e) or type(e).__name__)[:300]
+        logging.getLogger(__name__).error("connect_onboard_failed type=%s request_id=%s", type(e).__name__, getattr(e, "request_id", None))
+        if "liability" in msg.lower() or "platform-profile" in msg:
+            return {"available": False, "reason": "O Stripe exige que o administrador da RRclub aceite as responsabilidades da plataforma (perdas de contas ligadas) antes de ligar hotéis. Admin: entrar em dashboard.stripe.com → Settings → Connect → Platform profile e concluir o perfil. Até lá, recebe por transferência para o seu IBAN.", "codigo": "liability_unacknowledged"}
+        if "Connect" in msg and ("signed up" in msg or "not enabled" in msg.lower() or "platform" in msg.lower()):
+            return {"available": False, "reason": "O Stripe Connect ainda não está ativo na conta Stripe da plataforma. O administrador deve ativar Connect em dashboard.stripe.com/connect. Até lá, os pagamentos entram na conta da plataforma e são transferidos para o seu IBAN manualmente."}
+        raise HTTPException(status_code=503, detail="Não foi possível iniciar os recebimentos no Stripe. Tente novamente mais tarde ou contacte o administrador.")
+    await audit("CONFIGURAÇÃO", f"Onboarding Stripe Connect iniciado · {partner.get('nome')}", user, acct_id)
+    return {"available": True, "url": link.url, "account_id": acct_id}
+
+
+@router.get("/partner/connect/status")
+async def connect_status(user: dict = Depends(require_role("partner"))):
+    import asyncio
+    partner = await partner_record(user, db)
+    acct_id = partner.get("stripe_account_id")
+    if not acct_id:
+        return {"connected": False, "charges_enabled": False, "payouts_enabled": False, "status_verified": True}
+    try:
+        info = await asyncio.to_thread(_connect_status, acct_id)
+    except Exception:
+        # Unknown is not a negative confirmation: preserve previously verified flags.
+        return {"connected": True, "charges_enabled": None, "payouts_enabled": None, "status_verified": False,
+                "last_synced_at": partner.get("stripe_status_synced_at"),
+                "reason": "Não foi possível consultar o Stripe. O estado guardado não foi alterado."}
+    if info.get("partner_id") not in (None, "", partner["id"]):
+        raise HTTPException(409, "A conta Stripe pertence a outro estabelecimento. O administrador deve verificar a associação.")
+    updated_at = now_iso()
+    result = await db.partners.update_one({"id": partner["id"], "stripe_account_id": acct_id}, {"$set": {
+        "stripe_charges_enabled": info["charges_enabled"], "stripe_payouts_enabled": info["payouts_enabled"], "stripe_status_synced_at": updated_at}})
+    if not result.matched_count:
+        raise HTTPException(409, "A ligação Stripe mudou durante a consulta. Atualize a página.")
+    return {**info, "status_verified": True, "last_synced_at": updated_at}
