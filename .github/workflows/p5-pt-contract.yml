@@ -1,0 +1,26 @@
+name: P5 Portugal - contract checks
+
+on:
+  pull_request:
+    branches: [mainNNOVO]
+    paths:
+      - 'backend/routes_payments.py'
+      - 'backend/pt_split.py'
+      - 'tests/test_pt_webhook_contract.py'
+      - '.github/workflows/p5-pt-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run zero-network P5 Portugal contract tests
+        run: python -m unittest discover -s tests -p 'test_pt_webhook_contract.py' -v

@@ -274,9 +274,14 @@ async def stripe_webhook(request: Request):
         return {"status": "ignored", "reason": "dedicated_pix_webhook_required"}
     if t in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         if obj.get("payment_status") == "paid":
-            await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
-            from pt_split import settle_webhook_safely
-            await settle_webhook_safely(obj["id"])
+            # Settlement is independent of the redemption/notification workflow:
+            # a downstream fulfilment error must not prevent the P5 EUR ledger
+            # from attempting its own idempotent, guarded Connect settlement.
+            try:
+                await fulfil(obj["id"], {"stripe_subscription_id": obj.get("subscription"), "stripe_payment_intent_id": obj.get("payment_intent"), "customer_email": ((obj.get("customer_details") or {}).get("email")) or obj.get("customer_email")})
+            finally:
+                from pt_split import settle_webhook_safely
+                await settle_webhook_safely(obj["id"])
 
     elif t in ("checkout.session.async_payment_failed", "checkout.session.expired"):
         st = "failed" if "failed" in t else "expired"
