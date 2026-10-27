@@ -1,0 +1,38 @@
+{
+  "summary": "P5 Portugal backend check. Offline pytest: all 8 listed files pass (88 passed, 9 subtests). Code review of pt_split.settle_new_p5_payment, bind_pt_account and p5_checkout._pt_stripe_checkout found the requested behaviour in place. Preview smoke: /api/public/p5/config 200 with currencies.eur=true; admin /pt-split/health 200; /dashboard/admin 200; settle on an unknown session returns 200 not_eligible; bind returns 422 for a bad account id and 409 when the key is not sk_live (preview uses sk_test_, so no money moves). Admin login first returned 429 because the shared-IP login rate limit was exhausted (239 hits); I cleared rate_limits {key:/^login:/} in the preview DB to continue. No new tests were added for bind_pt_account or for the refund and metadata-mismatch paths.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login (core.client_ip)", "issue": "client_ip uses the last X-Forwarded-For entry, which is the ingress/proxy IP (35.244.139.18). Every client shares one login:{ip} bucket (30 per 15 min), so a few users or scripts can lock everyone out. That shared bucket is why the legacy tests get 429. Use the real client IP (first trusted XFF hop or CF-Connecting-IP)."},
+      {"endpoint": "POST /api/admin/finance/pt-split/settle/{session_id}", "issue": "If Transfer.create raises a StripeError (e.g. a network timeout), {role}_transfer_started_at is already saved. Every later retry then returns 'unknown_prior_transfer_attempt' unless Transfer.list finds the transfer, so the admin retry can never recover a transient failure. It is safe but forces manual work. Since the Stripe idempotency key is the same, retrying within 24h would be safe."},
+      {"endpoint": "settle_new_p5_payment", "issue": "If the charge is refunded or disputed after a partial transfer (partner paid, influencer held), a retry marks the whole transaction 'held / stripe_payment_or_transfer_not_verified'. The partner transfer already made is not reversed or flagged for reversal."},
+      {"endpoint": "settle_new_p5_payment", "issue": "The transfer_started_at check-then-set is not atomic: two concurrent webhook replays could both pass it. The shared idempotency key stops a duplicate transfer at Stripe, but only within its 24h window. Consider a conditional update_one ({role}_transfer_started_at: {$exists: false}) used as a claim."},
+      {"endpoint": "POST /api/admin/finance/pt-split/bind", "issue": "stripe.Account.modify is not wrapped in try/except, so a StripeError gives a 500. The final update_one result is not checked: if a race leaves 0 matched rows, it still returns ok:true and logs an audit entry, while Stripe metadata was already changed."},
+      {"endpoint": "POST /api/public/p5/charges/checkout", "issue": "payment_transactions.payment_method is always 'stripe_checkout_mbway_card', even when the fallback offered card only. The correct value is in payment_methods_offered. Cosmetic inconsistency."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_p5_pt_settlement.py", "/app/test_reports/pytest/p5_pt_results.xml"],
+  "action_items": [
+    "Fix core.client_ip so it uses the real client IP and the login rate limit is not shared by everyone behind the proxy",
+    "Make the per-role transfer claim atomic and allow a safe retry after a StripeError (same idempotency key)",
+    "Wrap Account.modify in try/except in bind_pt_account and check matched_count before returning ok",
+    "Add tests for bind_pt_account (non-PT account, metadata bound to another entity, DB conflict, email mismatch) and for settle (refunded/disputed charge, metadata mismatch, webhook replay with no second Transfer.create)",
+    "Optional: set payment_method to match the methods actually offered"
+  ],
+  "critical_code_review_comments": [
+    "settle_new_p5_payment: replay idempotency is OK. It returns early when already transferred_to_connect, skips roles that already have a transfer_id, and reuses existing transfers found by Transfer.list(transfer_group).",
+    "Partial transfer is OK: each role is handled on its own, held reasons are saved per role ({role}_transfer_status=held, {role}_hold_reason), and status becomes partially_transferred.",
+    "Idempotency keys are stable: rrclub-pt-{p5_charge_id}-{role}.",
+    "No transfer happens if the session, PaymentIntent or charge does not match amount, currency or metadata, or if the charge is refunded, disputed, partly refunded or already has a transfer.",
+    "_pt_stripe_checkout tries ['card','mb_way'] with key p5-{id}-mbway. It falls back to ['card'] (key p5-{id}-card) only on an InvalidRequestError that mentions mb_way; other errors are re-raised. payment_methods_offered is saved on the tx and returned.",
+    "bind_pt_account refuses: a non-PT account, a record that already has another account, an account already on another record in DB (same or other collection), Stripe metadata bound to another entity, and email mismatch or missing. It never creates accounts and requires an sk_live key.",
+    "real_only() filters synthetic records via diretor_estrategia.is_synthetic and is used 3 times in routes_data.py."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (88/88 offline tests; 5/5 smoke checks)", "frontend": "not tested (backend only)"},
+  "seed_data_creation": "None. Cleared only login rate_limits rows in the preview test_database to get past the 429.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview STRIPE key is sk_test_; PT_SPLIT live and auto flags are true in preview. bind always returns 409 in preview (needs sk_live). If admin login returns 429, it is the shared ingress-IP bucket: delete db.rate_limits {key:/^login:/} in test_database. Do not call rrclub.online."
+}
