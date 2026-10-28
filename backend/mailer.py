@@ -16,8 +16,10 @@ _settings_cache = {"key": None, "sender": None, "loaded": False}
 
 async def load_settings():
     doc = await db.settings.find_one({"id": "email"}, NO_ID) or {}
-    _settings_cache.update({"key": (doc.get("resend_api_key") or os.environ.get("RESEND_API_KEY") or "").strip(),
-                            "sender": (doc.get("sender_email") or os.environ.get("RESEND_FROM") or os.environ.get("SENDER_EMAIL") or "onboarding@resend.dev").strip(), "loaded": True})
+    # Production environment secrets take precedence over legacy DB settings.
+    # Never silently fall back to the Resend sandbox sender in production.
+    _settings_cache.update({"key": (os.environ.get("RESEND_API_KEY") or doc.get("resend_api_key") or "").strip(),
+                            "sender": (os.environ.get("RESEND_FROM") or os.environ.get("SENDER_EMAIL") or doc.get("sender_email") or "").strip(), "loaded": True})
     return _settings_cache
 
 
@@ -48,7 +50,7 @@ def _wrap(title: str, body: str, cta_label: str = None, cta_url: str = None) -> 
 async def send_email(to: str, subject: str, title: str, body: str, cta_label: str = None, cta_url: str = None) -> bool:
     if not _settings_cache["loaded"]:
         await load_settings()
-    if not configured() or not to or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+    if not configured() or not _settings_cache["sender"] or not to or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
         return False
     from core import rate_limit
     try:
