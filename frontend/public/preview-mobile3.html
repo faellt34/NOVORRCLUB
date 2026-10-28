@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RRClub Mobile 3.0 — Prévia</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:Inter,sans-serif;background:#E9ECF5}
+  .disp{font-family:'Plus Jakarta Sans',sans-serif}.mono{font-family:'JetBrains Mono',monospace}
+  .phone{width:390px;height:844px;border-radius:44px;background:#F8FAFC;overflow:hidden;position:relative;box-shadow:0 30px 80px -20px rgba(7,11,31,.45),0 0 0 10px #0B1220,0 0 0 12px #2a3350}
+  .cosmic{background:linear-gradient(180deg,#070B1F 0%,#0B1220 60%,#131B35 100%);position:relative;overflow:hidden}
+  .cosmic:before{content:"";position:absolute;inset:-40% -20% auto;height:120%;background:radial-gradient(60% 50% at 70% 30%,rgba(124,58,237,.45),transparent 70%)}
+  .cosmic:after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.18) .6px,transparent .6px);background-size:26px 26px;opacity:.35}
+  .card{background:#fff;border:1px solid #F1F5F9;border-radius:20px;box-shadow:0 4px 20px -4px rgba(7,11,31,.06)}
+  .nav{position:absolute;bottom:0;left:0;right:0;background:rgba(255,255,255,.95);backdrop-filter:blur(16px);border-top:1px solid #F1F5F9;box-shadow:0 -8px 25px rgba(7,11,31,.08);padding:10px 14px 22px;display:flex;justify-content:space-around;align-items:flex-end}
+  .nav span{font-size:12px;color:#94A3B8;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .nav .on{color:#7C3AED;font-weight:600}
+  .fab{width:64px;height:64px;margin-top:-30px;border-radius:999px;background:linear-gradient(45deg,#7C3AED,#A78BFA);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(124,58,237,.4);border:4px solid #fff;color:#fff}
+  .btn{background:linear-gradient(90deg,#7C3AED,#6D28D9);color:#fff;font-weight:700;font-size:16px;border-radius:16px;padding:16px;min-height:52px;text-align:center;box-shadow:0 8px 24px rgba(124,58,237,.3)}
+  .scan{position:relative;border-radius:20px;background:#070B1F;height:220px;overflow:hidden}
+  .scan i{position:absolute;left:14%;right:14%;top:30%;height:2px;background:#A78BFA;box-shadow:0 0 14px #A78BFA;animation:sl 2s ease-in-out infinite}
+  @keyframes sl{0%,100%{top:20%}50%{top:78%}}
+  .k{width:34px;height:34px;border-radius:999px;background:#2F6BFF;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
+  svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body class="p-8">
+<h1 class="disp text-2xl font-extrabold text-slate-900 mb-1">RRClub Mobile 3.0 — prévia v2 (não altera o site)</h1>
+<p class="text-sm text-slate-600 mb-8">Branco + azul-universo + roxo · cabeçalho cósmico · navegação inferior por perfil · uma mão</p>
+<div class="flex flex-wrap gap-10 items-start">
+
+<!-- FOLLOWER HOME -->
+<div class="phone">
+  <div class="cosmic text-white px-6 pt-14 pb-8 rounded-b-[36px]">
+    <div class="relative flex items-center justify-between">
+      <div class="flex items-center gap-2"><span class="k">K</span><div class="leading-tight"><p class="disp font-extrabold text-lg">RRClub</p><p class="text-[10px] text-white/55 -mt-0.5">by R-Conekta</p></div></div>
+      <span class="text-[11px] bg-white/10 border border-white/15 rounded-full px-3 py-1">Instalar app</span>
+    </div>
+    <p class="relative disp text-3xl font-extrabold mt-8 leading-[1.05]">Olá, Mariana 👋<br><span class="text-violet-300">Poupe 5% hoje.</span></p>
+    <div class="relative mt-6 flex items-center justify-between bg-white/10 border border-white/15 rounded-2xl p-4">
+      <div><p class="text-[11px] uppercase tracking-wider text-white/60">O meu QR</p><p class="font-semibold">Mostrar ao parceiro</p></div>
+      <span class="w-12 h-12 rounded-xl bg-white text-[#070B1F] flex items-center justify-center"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg></span>
+    </div>
+  </div>
+  <div class="px-5 -mt-4 space-y-5">
+    <div class="card p-4 flex gap-4 items-center">
+      <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=200&q=60" class="w-20 h-20 rounded-2xl object-cover">
+      <div class="flex-1"><span class="text-[10px] font-semibold uppercase tracking-wider text-violet-700 bg-violet-50 rounded-md px-2 py-0.5">Em destaque</span>
+        <p class="disp font-bold text-slate-900 mt-1">TREM FOOD · Lisboa</p><p class="text-xs text-slate-500">5% de desconto com @diogo</p></div>
+      <span class="disp text-2xl font-extrabold text-[#7C3AED]">-5%</span>
+    </div>
+    <div>
+      <div class="flex items-center justify-between mb-3"><p class="disp font-bold text-slate-900">Parceiros perto de si</p><span class="text-xs text-violet-700 font-semibold">Ver mapa</span></div>
+      <div class="flex gap-2 text-xs mb-3"><span class="bg-[#070B1F] text-white rounded-full px-3 py-1.5">Todos</span><span class="bg-white border rounded-full px-3 py-1.5">Restaurantes</span><span class="bg-white border rounded-full px-3 py-1.5">Hotéis</span><span class="bg-white border rounded-full px-3 py-1.5">Beleza</span></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="card overflow-hidden"><img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=300&q=60" class="h-24 w-full object-cover"><div class="p-3"><p class="font-semibold text-sm">Casa do Bacalhau</p><p class="text-[11px] text-slate-500">350 m · -5%</p></div></div>
+        <div class="card overflow-hidden"><img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=300&q=60" class="h-24 w-full object-cover"><div class="p-3"><p class="font-semibold text-sm">Hotel Marina</p><p class="text-[11px] text-slate-500">1,2 km · -5%</p></div></div>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center justify-between"><div><p class="font-semibold text-sm">Cupão SHEYSO-7182</p><p class="text-xs text-slate-500">Josicleide · Recife · Pix</p></div><span class="btn !py-2 !px-4 text-sm">Usar</span></div>
+  </div>
+  <div class="nav"><span class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg>Início</span><span><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Campanhas</span><span class="fab"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>Descontos</span><span><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Perfil</span></div>
+</div>
+
+<!-- PARTNER -->
+<div class="phone">
+  <div class="cosmic text-white px-6 pt-14 pb-7 rounded-b-[36px]">
+    <div class="relative flex items-center justify-between"><div class="flex items-center gap-3"><img src="https://images.unsplash.com/photo-1552566626-52f8b828add9?w=100&q=60" class="w-11 h-11 rounded-2xl object-cover border-2 border-white/30"><div><p class="text-[11px] text-white/60">Parceiro</p><p class="disp font-bold leading-tight">TREM FOOD</p></div></div><span class="text-[11px] inline-flex items-center gap-1 bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 rounded-full px-3 py-1"><i class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></i> ao vivo</span></div>
+    <div class="relative grid grid-cols-3 gap-3 mt-6">
+      <div><p class="text-[10px] uppercase tracking-wider text-white/50">Hoje</p><p class="disp text-2xl font-extrabold">7</p><p class="text-[11px] text-white/60">validações</p></div>
+      <div><p class="text-[10px] uppercase tracking-wider text-white/50">Vendas</p><p class="disp text-2xl font-extrabold">312 €</p><p class="text-[11px] text-white/60">confirmadas</p></div>
+      <div><p class="text-[10px] uppercase tracking-wider text-white/50">Recebe</p><p class="disp text-2xl font-extrabold text-violet-300">80%</p><p class="text-[11px] text-white/60">249,60 €</p></div>
+    </div>
+  </div>
+  <div class="px-5 -mt-4 space-y-4">
+    <div class="scan shadow-xl"><i></i><div class="absolute inset-0 flex flex-col items-center justify-center text-white/80 text-sm gap-2"><svg viewBox="0 0 24 24" style="width:40px;height:40px"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/></svg>Aponte para o QR do cliente</div><span class="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-white"><svg viewBox="0 0 24 24"><path d="M8 2h8l-2 7h4l-8 13 2-9H6z"/></svg></span></div>
+    <div class="card p-5">
+      <p class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Valor da conta</p>
+      <p class="disp text-4xl font-extrabold text-slate-900 mt-1">40,00 <span class="text-xl text-slate-400">€</span></p>
+      <div class="flex justify-between text-sm mt-3"><span class="text-slate-500">Cliente paga (-5%)</span><b class="text-emerald-600">38,00 €</b></div>
+      <div class="flex justify-between text-sm"><span class="text-slate-500">Recebe (80%)</span><b>32,00 €</b></div>
+      <div class="btn mt-4">Confirmar valor</div>
+    </div>
+    <div class="card divide-y">
+      <div class="p-4 flex justify-between items-center"><div><p class="font-semibold text-sm">CLUB-10 · Mariana</p><p class="text-xs text-slate-500">há 4 min · MB WAY</p></div><div class="text-right"><p class="font-semibold">38,00 €</p><span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 rounded-md px-2 py-0.5">Confirmado</span></div></div>
+      <div class="p-4 flex justify-between items-center"><div><p class="font-semibold text-sm">CLUB-10 · Rui</p><p class="text-xs text-slate-500">há 12 min · Apple Pay</p></div><div class="text-right"><p class="font-semibold">24,70 €</p><span class="text-[10px] font-semibold text-amber-700 bg-amber-50 rounded-md px-2 py-0.5">Pendente</span></div></div>
+    </div>
+  </div>
+  <div class="nav"><span class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg>Painel</span><span><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Vendas</span><span class="fab"><svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat</span><span><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>Alertas</span></div>
+</div>
+
+<!-- INFLUENCER -->
+<div class="phone">
+  <div class="cosmic text-white px-6 pt-14 pb-7 rounded-b-[36px]">
+    <div class="relative flex items-center justify-between"><div class="flex items-center gap-3"><img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=60" class="w-11 h-11 rounded-full object-cover border-2 border-violet-300"><div><p class="text-[11px] text-white/60">Influenciadora</p><p class="disp font-bold leading-tight">@diogo</p></div></div><div class="text-right leading-tight"><p class="disp font-extrabold">RRClub</p><p class="text-[10px] text-white/55">by R-Conekta</p></div></div>
+    <p class="relative text-[11px] uppercase tracking-wider text-white/50 mt-6">Comissões confirmadas · outubro</p>
+    <p class="relative disp text-4xl font-extrabold mt-1">126,50 €</p>
+    <div class="relative flex gap-5 text-xs text-white/70 mt-3"><span><b class="text-white">2 310</b> visualizações</span><span><b class="text-white">184</b> conversões</span><span><b class="text-emerald-300">+18%</b></span></div>
+  </div>
+  <div class="px-5 -mt-4 space-y-4">
+    <div class="card p-4 flex gap-4 items-center">
+      <div class="w-24 h-24 rounded-2xl bg-white border-2 border-violet-100 p-1 flex items-center justify-center"><svg viewBox="0 0 24 24" style="width:70px;height:70px;color:#070B1F"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg></div>
+      <div class="flex-1"><p class="mono text-lg font-semibold text-slate-900">CLUB-10</p><p class="text-xs text-slate-500">TREM FOOD · -5% · 5% comissão</p>
+        <div class="grid grid-cols-3 gap-2 mt-3 text-[11px] font-semibold text-center"><span class="bg-slate-100 rounded-xl py-2">Baixar</span><span class="bg-slate-100 rounded-xl py-2">Copiar</span><span class="btn !py-2 !px-0 !rounded-xl text-[11px]">Partilhar</span></div></div>
+    </div>
+    <div class="card p-5"><div class="flex items-center justify-between mb-3"><p class="disp font-bold">Desempenho · 30 dias</p><span class="text-xs text-slate-400">cliques → compras</span></div>
+      <div class="flex items-end gap-1.5 h-24">
+        <i class="flex-1 bg-violet-100 rounded-t" style="height:30%"></i><i class="flex-1 bg-violet-200 rounded-t" style="height:45%"></i><i class="flex-1 bg-violet-300 rounded-t" style="height:38%"></i><i class="flex-1 bg-violet-400 rounded-t" style="height:62%"></i><i class="flex-1 bg-violet-500 rounded-t" style="height:55%"></i><i class="flex-1 bg-violet-600 rounded-t" style="height:80%"></i><i class="flex-1 bg-[#7C3AED] rounded-t" style="height:100%"></i>
+      </div></div>
+    <div class="card divide-y">
+      <div class="p-4 flex justify-between items-center"><div><p class="font-semibold text-sm">Compra confirmada</p><p class="text-xs text-slate-500">TREM FOOD · 38,00 € · hoje</p></div><b class="text-emerald-600">+1,90 €</b></div>
+      <div class="p-4 flex justify-between items-center"><div><p class="font-semibold text-sm">Transferência Connect</p><p class="text-xs text-slate-500">Stripe · segue calendário</p></div><span class="text-[10px] font-semibold text-violet-700 bg-violet-50 rounded-md px-2 py-0.5">Enviada</span></div>
+    </div>
+  </div>
+  <div class="nav"><span class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg>Painel</span><span><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Cupões</span><span class="fab"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Extrato</span><span><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>Alertas</span></div>
+</div>
+
+<!-- P5 FLOW -->
+<div class="phone" style="height:auto;min-height:844px">
+  <div class="cosmic text-white px-6 pt-14 pb-6 rounded-b-[36px]">
+    <div class="relative flex items-center justify-between"><div class="flex items-center gap-2"><span class="k">K</span><div class="leading-tight"><p class="disp font-extrabold text-lg">RRClub</p><p class="text-[10px] text-white/55 -mt-0.5">by R-Conekta</p></div></div><span class="text-[11px] bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 rounded-full px-3 py-1">Cupão verificado</span></div>
+    <p class="relative disp text-2xl font-extrabold mt-5">Fluxo P5 · 5 passos</p>
+    <p class="relative text-xs text-white/60">QR → valor → desconto → checkout → confirmação</p>
+  </div>
+  <div class="px-5 -mt-3 space-y-3 pb-10">
+    <div class="card p-4 flex items-center gap-4"><span class="w-9 h-9 rounded-full bg-[#070B1F] text-white flex items-center justify-center disp font-bold">1</span><div class="flex-1"><p class="font-semibold">Seguidor mostra o QR</p><p class="text-xs text-slate-500">Cupão CLUB-10 · TREM FOOD · QR pessoal, válido 15 min</p></div><div class="w-14 h-14 rounded-xl border-2 border-violet-100 flex items-center justify-center text-[#070B1F]"><svg viewBox="0 0 24 24" style="width:34px;height:34px"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg></div></div>
+    <div class="card p-4 flex items-center gap-4"><span class="w-9 h-9 rounded-full bg-[#070B1F] text-white flex items-center justify-center disp font-bold">2</span><div class="flex-1"><p class="font-semibold">Parceiro lê e confirma o valor</p><p class="text-xs text-slate-500">Conta: <b class="text-slate-900">40,00 €</b> · confirmado às 13:42</p></div><span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 rounded-md px-2 py-1">Lido ✓</span></div>
+    <div class="card p-4"><div class="flex items-center gap-4"><span class="w-9 h-9 rounded-full bg-[#7C3AED] text-white flex items-center justify-center disp font-bold">3</span><div class="flex-1"><p class="font-semibold">Desconto aplicado automaticamente</p><p class="text-xs text-slate-500">Atualiza no telemóvel do seguidor sem recarregar</p></div></div>
+      <div class="mt-3 rounded-2xl bg-slate-50 p-4 grid grid-cols-3 text-center"><div><p class="text-[10px] uppercase text-slate-400">Conta</p><p class="disp font-bold">40,00 €</p></div><div><p class="text-[10px] uppercase text-slate-400">Desconto 5%</p><p class="disp font-bold text-emerald-600">-2,00 €</p></div><div><p class="text-[10px] uppercase text-slate-400">A pagar</p><p class="disp font-extrabold text-[#7C3AED] text-lg">38,00 €</p></div></div></div>
+    <div class="card p-4"><div class="flex items-center gap-4"><span class="w-9 h-9 rounded-full bg-[#7C3AED] text-white flex items-center justify-center disp font-bold">4</span><div class="flex-1"><p class="font-semibold">Checkout seguro (Stripe)</p><p class="text-xs text-slate-500">Métodos conforme país e dispositivo</p></div></div>
+      <div class="mt-3 space-y-2">
+        <div class="rounded-2xl bg-[#E30613] text-white font-bold py-4 text-center text-base">MB WAY <span class="text-[11px] font-medium opacity-80 ml-1">Portugal</span></div>
+        <div class="rounded-2xl bg-black text-white font-semibold py-4 text-center text-base"> Apple Pay <span class="text-[11px] font-medium opacity-70 ml-1">só se disponível no dispositivo</span></div>
+        <div class="rounded-2xl bg-white border-2 border-slate-200 text-slate-900 font-semibold py-4 text-center text-base">Cartão</div>
+        <div class="rounded-2xl bg-[#32BCAD] text-white font-bold py-4 text-center text-base opacity-60">Pix <span class="text-[11px] font-medium opacity-90 ml-1">só em campanhas Brasil (BRL)</span></div>
+      </div></div>
+    <div class="card p-4 border-2 border-emerald-100"><div class="flex items-center gap-4"><span class="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center disp font-bold">5</span><div class="flex-1"><p class="font-semibold">Pagamento confirmado</p><p class="text-xs text-slate-500">Confirmação real do webhook Stripe · recibo digital</p></div><svg viewBox="0 0 24 24" style="width:30px;height:30px;color:#10B981"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <div class="mt-3 rounded-2xl bg-slate-50 p-4 text-sm space-y-1"><div class="flex justify-between"><span class="text-slate-500">Pago</span><b>38,00 €</b></div><div class="flex justify-between"><span class="text-slate-500">Poupou</span><b class="text-emerald-600">2,00 €</b></div><div class="flex justify-between"><span class="text-slate-500">Ref.</span><span class="mono">p5-5d06…</span></div><p class="text-[11px] text-slate-400 pt-1">Repartição a parceiro e influenciador só após confirmação; mostrada como "enviada", nunca "concluída", até à Stripe depositar.</p></div>
+      <div class="btn mt-3">Guardar recibo</div></div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

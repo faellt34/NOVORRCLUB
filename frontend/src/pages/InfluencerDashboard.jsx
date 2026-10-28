@@ -117,9 +117,38 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-        <div>
-          <h1 data-testid="influencer-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Olá, {user.nome.split(" ")[0]}! 👋</h1>
+      <CosmicHeader testId="influencer-header">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 font-semibold">Influenciador</p>
+            <h1 data-testid="influencer-greeting" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight truncate">Olá, {user.nome.split(" ")[0]}! 👋</h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {live && <span data-testid="influencer-live-badge" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/20 px-3 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot" /> ao vivo</span>}
+            <Link to="/notificacoes" data-testid="notifications-bell" className="relative w-11 h-11 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center btn-press">
+              <Bell className="w-5 h-5 text-white" />
+              {unread.notifications > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
+            </Link>
+          </div>
+        </div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-white/50 font-semibold mt-6">Comissão atribuída P5 · {kpis.rate}%</p>
+        <p data-testid="influencer-header-commission" className="font-display text-4xl font-extrabold tabular-nums mt-1">{eur(+(kpis.commission || 0).toFixed(2))}</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-white/70 mt-3">
+          <span><b className="text-white">{num(kpis.customers || 0)}</b> aberturas</span>
+          <span><b className="text-white">{num(kpis.uses || 0)}</b> pagamentos confirmados</span>
+          {kpis.conversion != null && <span className="text-emerald-300 font-semibold">{String(kpis.conversion).replace(".", ",")}% conversão</span>}
+        </div>
+        <div className="mt-5">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger data-testid="period-selector" className="w-[170px] h-10 bg-white/10 border-white/15 text-white rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+              <SelectItem value="90">Últimos 90 dias</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </CosmicHeader>
           <p className="text-sm text-slate-500 mt-1">Painel de desempenho P5 confirmado por registo local, sem misturar valores de demonstração {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
         </div>
         <div className="flex items-center gap-3">

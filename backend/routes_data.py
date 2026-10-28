@@ -518,6 +518,21 @@ async def admin_clicks(period: str = "7", user: dict = Depends(require_role("adm
         converted = any(cl["date"] <= d <= window_end for d in by_camp.get(cl["campaign_id"], []))
         items.append({"id": cl["id"], "date": cl["date"], "origem": cl.get("origem", "QR / direto"), "influencer": cl.get("influencer") or infs.get(cl.get("influencer_id"), "—"),
                       "campanha": cl.get("campaign") or camps.get(cl["campaign_id"], {}).get("nome", "—"), "cupom": cl["coupon"], "status": "Converteu" if converted else "Só clicou"})
+@router.get("/public/campaigns")
+async def public_campaigns(cidade: str = "", limit: int = 24):
+    """Follower home: active campaigns with partner card data. Read-only, no tracking."""
+    camps = await enrich_campaigns(await db.campaigns.find({"status": "Ativa"}, NO_ID).sort("created_at", -1).to_list(200))
+    if cidade:
+        camps = [c for c in camps if (c.get("cidade") or "").lower() == cidade.lower()]
+    cities = sorted({c.get("cidade") for c in camps if c.get("cidade") and c.get("cidade") != "—"})
+    items = [{"cupom": c["cupom"], "nome": c.get("nome"), "desconto": c.get("desconto"), "parceiro": c.get("parceiro"), "cidade": c.get("cidade"),
+              "categoria": c.get("categoria"), "parceiro_foto": c.get("parceiro_foto"), "currency": c.get("currency", "eur"), "influencer": c.get("influencer"),
+              "p5": bool(c.get("influencer_id")) and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5}
+             for c in camps[:max(1, min(limit, 60))]]
+    return {"items": items, "cities": cities}
+
+
+
     return {"items": items, "total": len(items), "converted": sum(1 for i in items if i["status"] == "Converteu")}
 
 

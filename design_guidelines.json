@@ -1,136 +1,155 @@
 {
-  "project_name": "Robson Club — Multi-Tenant Luxury Experience SaaS",
-  "archetype": "LUXURY_PRECISION_HYBRID",
-  "theme_strategy": {
-    "default_mode": "light",
-    "background_canvas": "#F8F9FC",
-    "surface_cards": "#FFFFFF",
-    "sidebar_surface": "#0C0A14",
-    "sidebar_surface_border": "#1E1A2E",
-    "accent_primary": "#7C3AED",
-    "accent_primary_hover": "#6D28D9",
-    "accent_soft_purple": "#F3E8FF",
-    "accent_pill_badge": "#EDE9FE",
-    "positive_trend": "#10B981",
-    "warning_badge": "#F59E0B",
-    "neutral_text_primary": "#0F172A",
-    "neutral_text_secondary": "#64748B",
+  "project_name": "RRClub Mobile 3.0 — Redesign Premium",
+  "archetype": "LUXURY & PERFORMANCE HYBRID",
+  "theme": {
+    "mode": "light_with_cosmic_accents",
+    "background": "#F8FAFC",
+    "surface_white": "#FFFFFF",
+    "primary_cosmic": "#070B1F",
+    "primary_cosmic_light": "#0B1220",
+    "brand_purple": "#7C3AED",
+    "brand_violet": "#A78BFA",
+    "brand_violet_soft": "#DDD6FE",
+    "accent_emerald": "#10B981",
+    "accent_amber": "#F59E0B",
+    "neutral_slate_900": "#0F172A",
+    "neutral_slate_600": "#475569",
+    "neutral_slate_400": "#94A3B8",
+    "neutral_slate_100": "#F1F5F9",
     "border_subtle": "#E2E8F0"
   },
   "typography": {
-    "font_family_heading": "Cabinet Grotesk, Plus Jakarta Sans, system-ui, sans-serif",
-    "font_family_body": "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
-    "font_family_mono": "JetBrains Mono, monospace",
+    "heading_font": "Plus Jakarta Sans, sans-serif",
+    "body_font": "Inter, sans-serif",
+    "coupon_mono_font": "JetBrains Mono, monospace",
     "scale": {
-      "h1": "text-2xl sm:text-3xl font-bold tracking-tight text-slate-900",
-      "h2": "text-xl sm:text-2xl font-semibold tracking-tight text-slate-900",
-      "h3": "text-lg font-semibold text-slate-900",
-      "kpi_value": "text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900",
-      "kpi_label": "text-xs font-semibold uppercase tracking-wider text-slate-500",
-      "body": "text-sm text-slate-600 leading-relaxed",
-      "badge": "text-xs font-medium px-2.5 py-1 rounded-full",
-      "coupon_pill": "font-mono font-bold tracking-widest text-sm uppercase px-3 py-1.5 rounded-lg"
+      "h1": "text-3xl font-extrabold tracking-tight leading-none",
+      "h2": "text-2xl font-bold tracking-tight leading-tight",
+      "h3": "text-xl font-semibold tracking-tight leading-snug",
+      "h4": "text-lg font-semibold leading-snug",
+      "body_large": "text-base font-medium leading-relaxed",
+      "body_normal": "text-sm font-normal leading-normal",
+      "caption": "text-xs font-medium tracking-wide uppercase text-slate-500"
     }
   },
-  "visual_enhancers": {
-    "sidebar": {
-      "background": "bg-[#0C0A14]",
-      "border": "border-r border-[#1E1A2E]",
-      "active_item": "bg-gradient-to-r from-purple-600/20 to-purple-500/10 text-purple-300 border-l-2 border-purple-500 font-medium",
-      "hover_item": "hover:bg-white/5 hover:text-white transition-colors",
-      "user_profile_card": "p-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between",
-      "referral_card": "p-4 rounded-2xl bg-gradient-to-br from-purple-900/40 via-purple-950/30 to-[#120F24] border border-purple-500/20 text-white"
+  "elevation_and_borders": {
+    "radius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "pill": "rounded-full",
+      "badge": "rounded-lg"
     },
-    "cards": {
-      "kpi_card": "bg-white rounded-2xl border border-slate-100/90 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-5 hover:shadow-[0_8px_30px_-6px_rgba(124,58,237,0.08)] transition-all",
-      "icon_wrapper": "w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-semibold",
-      "badge_growth": "inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md"
+    "shadows": {
+      "header": "0 10px 30px -10px rgba(7, 11, 31, 0.15)",
+      "card_soft": "0 4px 20px -4px rgba(7, 11, 31, 0.05)",
+      "card_hover": "0 12px 32px -8px rgba(124, 58, 237, 0.18)",
+      "bottom_nav": "0 -8px 25px rgba(7, 11, 31, 0.08)",
+      "floating_cta": "0 8px 24px rgba(124, 58, 237, 0.35)"
     },
-    "charts": {
-      "area_gradient_id": "purpleGradient",
-      "stroke_color": "#7C3AED",
-      "fill_start": "rgba(124, 58, 237, 0.35)",
-      "fill_end": "rgba(124, 58, 237, 0.0)"
+    "borders": {
+      "subtle": "border border-slate-100",
+      "accent_purple": "border border-purple-200",
+      "cosmic_glass": "border border-white/10"
     }
   },
-  "roles_and_views": {
-    "role_switcher": {
-      "description": "Simulated multi-tenant selector (Admin, Influencer 'Robson', Partner 'Restaurante Tivoli Lisboa')",
-      "default_role": "influencer"
+  "header_gradient_spec": {
+    "background": "bg-gradient-to-b from-[#070B1F] via-[#0B1220] to-[#131B35]",
+    "decorations": "radial-gradient light bleed with #7C3AED at 20% opacity",
+    "text_color": "text-white",
+    "badge_glow": "shadow-[0_0_15px_rgba(167,139,250,0.4)]"
+  },
+  "button_specs": {
+    "primary": "bg-gradient-to-r from-[#7C3AED] to-[#6D28D9] hover:from-[#6D28D9] hover:to-[#5B21B6] text-white font-semibold shadow-md active:scale-95 transition-all duration-150 py-3.5 px-6 rounded-xl flex items-center justify-center gap-2",
+    "secondary": "bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold active:scale-95 transition-all duration-150 py-3.5 px-6 rounded-xl",
+    "cosmic": "bg-[#070B1F] hover:bg-[#0B1220] text-white font-semibold shadow-lg active:scale-95 transition-all rounded-xl",
+    "mbway": "bg-[#E30613] text-white font-bold py-3.5 rounded-xl shadow-sm hover:bg-[#c90511]",
+    "pix": "bg-[#32BCAD] text-white font-bold py-3.5 rounded-xl shadow-sm hover:bg-[#2aa89a]",
+    "apple_pay": "bg-black text-white font-semibold py-3.5 rounded-xl shadow-sm hover:bg-neutral-900"
+  },
+  "bottom_navigation_spec": {
+    "container": "fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-slate-100 px-3 py-2 flex items-center justify-around shadow-[0_-8px_25px_rgba(7,11,31,0.08)] max-w-md mx-auto",
+    "active_tab": "text-[#7C3AED] font-semibold flex flex-col items-center gap-1 text-xs transition-colors duration-200",
+    "inactive_tab": "text-slate-400 font-normal hover:text-slate-600 flex flex-col items-center gap-1 text-xs transition-colors duration-200",
+    "center_scan_button": "w-14 h-14 -mt-6 rounded-full bg-gradient-to-tr from-[#7C3AED] to-[#A78BFA] text-white flex items-center justify-center shadow-[0_8px_24px_rgba(124,58,237,0.4)] border-4 border-white active:scale-90 transition-transform"
+  },
+  "motion_spec": {
+    "micro_interactions": "active:scale-95 transition-transform duration-150 ease-out",
+    "page_transitions": "fade-up entry animation 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+    "scanner_line": "linear vertical loop 2s ease-in-out infinite",
+    "live_indicator": "pulse opacity 1.6s ease-in-out infinite"
+  },
+  "screen_layout_blueprints": {
+    "follower_home": {
+      "path": "/",
+      "target_viewport": "Mobile 390px width",
+      "components": [
+        "Header: Cosmic gradient background (#070B1F) with circular logo 'K' + wordmark 'R-Conekta by RRClub', user greeting, PWA install badge.",
+        "Quick Action Banner: Instant access to Member QR Pass with one-touch modal trigger.",
+        "Featured Campaigns Carousel: High-impact hero card showcasing top discount offer with percentage badge, partner thumbnail, and remaining time counter.",
+        "Nearby Partners Section: Filterable pill tags (Restaurantes, Beleza, Moda, Experiências) followed by partner cards with distance badges (e.g., '350m Lisboa').",
+        "Instant Discounts & Coupon Grid: Quick coupon cards with single-tap 'Resgatar Cupão' CTA leading to /c/:code.",
+        "Bottom Navigation: 4 tabs (Início, Campanhas, Meu QR, Perfil) optimized for thumb navigation."
+      ]
     },
-    "influencer_dashboard": {
-      "greeting": "Olá, Robson!",
-      "subheading": "Painel de desempenho e atribuição de parcerias de luxo",
-      "kpis": [
-        {"id": "coupons_used", "label": "Cupons Utilizados", "value": "1.284", "trend": "+18.4%", "period": "vs mês anterior"},
-        {"id": "clients_impacted", "label": "Clientes Impactados", "value": "8.420", "trend": "+12.1%", "period": "vs mês anterior"},
-        {"id": "generated_revenue", "label": "Receita Gerada", "value": "€ 84.350", "trend": "+24.8%", "period": "vs mês anterior"},
-        {"id": "commission", "label": "Sua Comissão (10%)", "value": "€ 8.435", "trend": "+24.8%", "period": "vs mês anterior"}
-      ],
-      "featured_coupon": {
-        "code": "ROBSON-LUXE-25",
-        "discount": "15% OFF em experiências selecionadas",
-        "qr_display": true,
-        "share_actions": ["Copiar Link", "Download QR", "Partilhar WhatsApp"]
-      },
-      "active_campaigns_columns": ["Parceiro / Local", "Cidade", "Categoria", "Comissão", "Cupons", "Receita Gerada", "Status", "Ações"]
+    "public_coupon_pay": {
+      "path": "/c/:code",
+      "target_viewport": "Mobile 390px width",
+      "components": [
+        "Header: Compact cosmic header with back button and verification badge.",
+        "Coupon Detail Card: Partner logo, offer title, discount value tag (e.g. '-20% em Refeições'), rules and expiry countdown.",
+        "Dynamic P5 QR Pass: Sharp monochrome SVG/Canvas QR Code with copyable reference code in font-coupon.",
+        "Payment Selector: Switcher tabs for MB WAY (Portugal), Pix (Brasil), Apple Pay (Stripe), and Credit Card.",
+        "Payment Form / Quick Checkout: Phone number input for MB WAY, Copy-Paste key for Pix, or instant Stripe card element.",
+        "Digital Receipt Card: Post-payment breakdown with instant confirmation checkmark and share button."
+      ]
     },
-    "partner_dashboard": {
-      "name": "Tivoli Sky Bar Lisboa",
-      "kpis": [
-        {"id": "attributed_revenue", "label": "Receita Atribuída", "value": "€ 42.180", "trend": "+16.2%"},
-        {"id": "redemptions", "label": "Redenções / Cupons", "value": "392", "trend": "+9.5%"},
-        {"id": "discounts_granted", "label": "Descontos Concedidos", "value": "€ 6.320", "trend": "-2.1%"},
-        {"id": "commission_due", "label": "Comissão Devida a Influencers", "value": "€ 4.218", "trend": "+16.2%"},
-        {"id": "average_ticket", "label": "Ticket Médio", "value": "€ 107,60", "trend": "+6.8%"}
-      ],
-      "validation_tool": {
-        "title": "Validação Rápida de Cupom",
-        "fields": ["Código do Cupom", "Valor da Conta (€)", "Cálculo Dinâmico de Comissão e Desconto", "Botão Validar Venda"],
-        "simulated_scanner_modal": true
-      }
+    "partner_home": {
+      "path": "/parceiro",
+      "target_viewport": "Mobile 390px width",
+      "components": [
+        "Header: Dark cosmic header with partner business name, today's total validations counter, and quick status indicator.",
+        "Hero QR Scanner Scanner Module: Full-width interactive QR scanner camera viewport with animated scanner line and manual code fallback.",
+        "Amount Confirmation Card: Large numeric keypad or touch input for validation amount, auto-calculating commission and discount.",
+        "Recent Transactions Feed: Live feed of validated customer coupons with status badges (Confirmado, Pendente) and tabular amounts.",
+        "Top Influencers Leaderboard: Quick list of top driving influencers with conversion counts.",
+        "Bottom Navigation: 3 tabs (Scanner, Histórico, Definicações)."
+      ]
+    },
+    "influencer_home": {
+      "path": "/influencer",
+      "target_viewport": "Mobile 390px width",
+      "components": [
+        "Header: Premium cosmic header displaying confirmed wallet balance in EUR/BRL and quick cashout CTA.",
+        "KPI Cards Row: 3 metric widgets (Visualizações, Conversões, Comissões Confirmadas) with growth arrows.",
+        "Active Campaigns Grid: Campaign cards with customized referral links and quick 'Partilhar WhatsApp' / 'Partilhar Instagram' triggers.",
+        "Personal QR Code Share Card: Customizable QR card ready for instant downloading or story sharing.",
+        "Earnings Statement Preview: Link to detailed statement (/influencer/extrato) with breakdown per partner.",
+        "Bottom Navigation: 4 tabs (Painel, Links, Extrato, Perfil)."
+      ]
+    },
+    "admin_home": {
+      "path": "/admin",
+      "target_viewport": "Mobile 390px width",
+      "components": [
+        "Header: Dark executive cosmic header with system status indicator and notification bell.",
+        "Financial Executive KPIs: GMV total, platform fee revenue, active partner count, pending payouts total.",
+        "Partner & Campaign Management Quick Table: Compact responsive cards for instant approval or status toggles.",
+        "Payout Approval Queue: Fast action list to confirm influencer commission payouts.",
+        "Bottom Navigation: 4 tabs (Dashboard, Gestão, Pagamentos, Definições)."
+      ]
     }
   },
   "image_urls": {
-    "lisbon_rooftop_cocktail": {
-      "url": "https://images.unsplash.com/photo-1786520403993-e1dfdc0864b5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwyfHxmaW5lJTIwZGluaW5nJTIwcmVzdGF1cmFudCUyMGNvY2t0YWlsJTIwcm9vZnRvcHxlbnwwfHx8fDE3ODg5MDgxNTB8MA&ixlib=rb-4.1.0&q=85",
-      "description": "Rooftop com vista panorâmica ao pôr do sol em Lisboa",
-      "category": "partner_card_cover"
-    },
-    "fine_dining_dish": {
-      "url": "https://images.unsplash.com/photo-1786520403836-bbb95ed8904f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxmaW5lJTIwZGluaW5nJTIwcmVzdGF1cmFudCUyMGNvY2t0YWlsJTIwcm9vZnRvcHxlbnwwfHx8fDE3ODg5MDgxNTB8MA&ixlib=rb-4.1.0&q=85",
-      "description": "Prato de alta gastronomia com atum braseado e pimenta rosa",
-      "category": "partner_experience_detail"
-    },
-    "porto_heritage_architecture": {
-      "url": "https://images.unsplash.com/photo-1634057306449-51bc02166e3d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHw0fHxsdXh1cnklMjBob3RlbCUyMGxpc2JvbiUyMHBvcnRvfGVufDB8fHx8MTc4ODkwODE1MHww&ixlib=rb-4.1.0&q=85",
-      "description": "Arquitetura histórica do Porto com telhados e azulejos clássicos",
-      "category": "partner_location_porto"
-    },
-    "lisbon_azulejo_hotel": {
-      "url": "https://images.unsplash.com/photo-1589125753960-3793f25d50dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBob3RlbCUyMGxpc2JvbiUyMHBvcnRvfGVufDB8fHx8MTc4ODkwODE1MHww&ixlib=rb-4.1.0&q=85",
-      "description": "Fachada nobre com azulejos e varandas de ferro forjado",
-      "category": "partner_boutique_hotel"
-    }
+    "dining": "https://images.unsplash.com/photo-1575373162495-a9390f1905e0?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "lifestyle": "https://images.unsplash.com/photo-1785951166125-7de8a097d862?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "mobile_qr": "https://images.unsplash.com/photo-1595079676339-1534801ad6cf?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "mobile_payment": "https://images.unsplash.com/photo-1571867424488-4565932edb41?crop=entropy&cs=srgb&fm=jpg&q=85"
   },
   "instructions_to_main_agent": [
-    "Use JavaScript (.js / .jsx), NOT TypeScript (.tsx), as per project specifications.",
-    "Implement the full Robson Club Multi-Tenant SaaS UI with interactive role switching: 'Influencer (Robson)', 'Parceiro (Tivoli Lisboa)', and 'Admin Geral'.",
-    "Follow the user locked visual direction strictly: Light canvas (#F8F9FC / white cards), rich purple accent (#7C3AED / #6D28D9 / soft #EDE9FE), deep obsidian-purple sidebar (#0C0A14), soft card drop shadows, rounded pill badges.",
-    "Provide responsive drawer / mobile navigation toggle for smaller screens.",
-    "Include high fidelity Recharts AreaChart with purple gradient fill for 'Evolução de Utilizações'.",
-    "Interactive Coupon Redemption validator with live discount calculation, receipt modal, and mock camera scanner modal.",
-    "Ensure every interactive and key informational element contains a clear data-testid attribute in kebab-case (e.g. data-testid='role-switcher-dropdown', data-testid='kpi-revenue-card', data-testid='validate-coupon-button', data-testid='qr-code-featured-card').",
-    "Set language strictly to PT-PT ('Regiões: Lisboa, Porto, Algarve, Douro', 'Partilhar', 'Receita Gerada', 'Comissão Devida', currency '€').",
-    "Export to CSV simulated functionality with Sonner toast feedback."
-  ],
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": {
-    "tone": "Ultra-clean European luxury SaaS for high-end hospitality & lifestyle creators",
-    "forbidden_colors": ["#7351B7 (flat default AI purple)", "#1B93A4 (teal dashboard cliché)"],
-    "toast_library": "sonner (use Sonner toast for copy link, coupon validation, partner referral actions)",
-    "no_universal_transition": true,
-    "no_centered_app_container": true,
-    "interactive_feedback": "Every button has active press scales and hover tint states with high contrast",
-    "contrast_compliance": "APCA and WCAG AA standard met for all dark sidebar text and light card text"
-  }
+    "Strictly follow JavaScript (.js / .jsx) file standards.",
+    "Ensure all interactive elements have kebab-case data-testid attributes (e.g., data-testid='partner-qr-scan-btn').",
+    "Prioritize single-handed mobile usability: touch targets minimum 44x44px, key action buttons placed in lower screen reach zone.",
+    "Never use generic centered layouts or unstyled select inputs.",
+    "Maintain high APCA text contrast over the dark cosmic header backgrounds."
+  ]
 }
