@@ -1,0 +1,34 @@
+name: P5 Mobile Safety Checks
+on:
+  push:
+    branches: ["conflict_281026_0056"]
+  workflow_dispatch:
+jobs:
+  p5-mobile-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate P5 QR session handling (no payments)
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const src = fs.readFileSync('frontend/src/lib/p5Scan.js', 'utf8');
+          const { parseCustomerQr } = await import('data:text/javascript;base64,' + Buffer.from(src).toString('base64'));
+          const origin = 'https://rrclub.online';
+          const ref = 'a'.repeat(32);
+          assert.deepEqual(parseCustomerQr(origin + '/c/LUCAS2027?p5_ref=' + ref, origin), { code:'LUCAS2027', scanRef:ref, isP5Url:true });
+          assert.equal(parseCustomerQr(origin + '/c/LUCAS2027?p5_ref=invalid', origin).scanRef, '');
+          assert.equal(parseCustomerQr('https://evil.example/c/LUCAS2027?p5_ref=' + ref, origin).scanRef, '');
+          assert.equal(parseCustomerQr('LUCAS2027', origin).scanRef, '');
+          const partner = fs.readFileSync('frontend/src/pages/PartnerDashboard.jsx','utf8');
+          for (const required of ['/partner/p5/scans','/partner/p5/charges','p5ScanRejected','idempotency_key']) {
+            assert.ok(partner.includes(required), 'Missing mandatory P5 flow: '+required);
+          }
+          console.log('P5 QR safety checks passed; no real charge or webhook triggered.');
+          NODE
+      - name: Validate backend Python syntax (no service startup)
+        run: python3 -m compileall -q backend
