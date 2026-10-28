@@ -1,10 +1,9 @@
 import re
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from core import db, NO_ID, require_role, audit, notify, admin_ids, new_id, now_iso, hash_password, public_user
+from core import db, NO_ID, require_role, audit, notify, new_id, now_iso, hash_password, public_user
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_role("admin"))])
 
@@ -93,11 +92,13 @@ async def list_items(kind: str):
     if kind == "campanhas":
         parts = {p["id"]: p["nome"] async for p in db.partners.find({}, NO_ID)}
         part_cur = {p["id"]: p.get("currency", "eur") async for p in db.partners.find({}, NO_ID)}
+        part_foto = {p["id"]: p.get("avatar") async for p in db.partners.find({}, NO_ID)}
         infs = {i["id"]: i["nome"] async for i in db.influencers.find({}, NO_ID)}
         for c in items:
             c["parceiro"] = parts.get(c.get("parceiro_id"), c.get("parceiro", "—"))
             c["influencer"] = infs.get(c.get("influencer_id"), c.get("influencer", "—"))
             c["currency"] = c.get("currency") or part_cur.get(c.get("parceiro_id"), "eur")
+            c["parceiro_foto"] = part_foto.get(c.get("parceiro_id"))
     return [{k: v for k, v in i.items() if k != "_id"} for i in items]
 
 

@@ -15,6 +15,7 @@ import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { StatusBadge } from "../components/KpiCard";
 import { PixBillStatus } from "../components/PixBillStatus";
+import { PartnerPhotoButton } from "../components/PartnerPhotoButton";
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -232,9 +233,12 @@ export default function PartnerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 data-testid="partner-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{user.nome}</h1>
-        <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers {live && <span data-testid="partner-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
+      <div className="flex items-center gap-4">
+        <PartnerPhotoButton current={data.partner?.avatar} onSaved={load} />
+        <div className="min-w-0">
+          <h1 data-testid="partner-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 truncate">{user.nome}</h1>
+          <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers {live && <span data-testid="partner-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
+        </div>
       </div>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />

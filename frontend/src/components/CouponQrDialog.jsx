@@ -7,21 +7,43 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 
 const round = (ctx, x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); };
 
-export const renderCouponPng = (qrCanvas, c, link) => {
+const loadImg = (src) => new Promise((res) => { if (!src) return res(null); const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+
+const fitText = (ctx, text, maxW, size, font) => { let s = size; do { ctx.font = `${font} ${s}px Inter, Arial, sans-serif`; s -= 2; } while (ctx.measureText(text).width > maxW && s > 20); };
+
+export const renderCouponPng = async (qrCanvas, c, link) => {
   const W = 1080, H = 1350;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const ctx = cv.getContext("2d");
-  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#5B21B6"); g.addColorStop(1, "#08061A");
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-  ctx.font = "bold 92px Georgia, serif"; ctx.fillText("RRclub", W / 2, 150);
-  ctx.font = "600 34px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.fillText(`EXPERIÊNCIAS PREMIUM · ${link.replace(/^https?:\/\//, "").split("/")[0]}`, W / 2, 205);
-  ctx.fillStyle = "#fff"; round(ctx, 140, 270, 800, 800, 48);
-  ctx.drawImage(qrCanvas, 190, 320, 700, 700);
-  ctx.fillStyle = "#7C3AED"; round(ctx, 190, 1110, 700, 96, 24);
-  ctx.fillStyle = "#fff"; ctx.font = "bold 54px Courier New, monospace"; ctx.fillText(c.cupom, W / 2, 1176);
-  ctx.font = "bold 44px Inter, Arial, sans-serif"; ctx.fillText(`${c.desconto}% OFF · ${c.parceiro || ""}`, W / 2, 1265);
-  ctx.font = "30px Inter, Arial, sans-serif"; ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillText(link.replace(/^https?:\/\//, ""), W / 2, 1315);
+  ctx.fillStyle = "#0B1220"; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W / 2, 330, 40, W / 2, 330, 700); glow.addColorStop(0, "rgba(124,58,237,.55)"); glow.addColorStop(1, "rgba(11,18,32,0)");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  const photo = await loadImg(c.parceiro_foto || c.avatar);
+  ctx.textAlign = "center";
+  // brand
+  ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.font = "600 26px Inter, Arial, sans-serif"; ctx.fillText("R-CONEKTA  ·  BY RRCLUB", W / 2, 70);
+  // partner header (photo + name)
+  let y = 130;
+  if (photo) {
+    ctx.save(); ctx.beginPath(); ctx.arc(W / 2, y + 80, 80, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+    ctx.drawImage(photo, W / 2 - 80, y, 160, 160); ctx.restore();
+    ctx.strokeStyle = "#A78BFA"; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(W / 2, y + 80, 83, 0, Math.PI * 2); ctx.stroke();
+    y += 200;
+  }
+  ctx.fillStyle = "#fff"; fitText(ctx, c.parceiro || "", 900, 60, "bold"); ctx.fillText(c.parceiro || "", W / 2, y + 40);
+  ctx.fillStyle = "#C4B5FD"; ctx.font = "600 30px Inter, Arial, sans-serif"; ctx.fillText([c.categoria, c.cidade].filter((x) => x && x !== "—").join("  ·  "), W / 2, y + 85);
+  // discount pill
+  ctx.fillStyle = "#7C3AED"; round(ctx, W / 2 - 220, y + 115, 440, 84, 42);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 44px Inter, Arial, sans-serif"; ctx.fillText(`${c.desconto}% DE DESCONTO`, W / 2, y + 173);
+  // QR card
+  const qy = Math.max(y + 240, 520), qs = 620;
+  ctx.fillStyle = "#fff"; round(ctx, W / 2 - qs / 2 - 30, qy - 30, qs + 60, qs + 60, 44);
+  ctx.drawImage(qrCanvas, W / 2 - qs / 2, qy, qs, qs);
+  // code + CTA
+  ctx.fillStyle = "rgba(255,255,255,.08)"; round(ctx, W / 2 - 300, qy + qs + 60, 600, 90, 20);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 52px Courier New, monospace"; ctx.fillText(c.cupom, W / 2, qy + qs + 123);
+  ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.font = "600 28px Inter, Arial, sans-serif"; ctx.fillText("Aponte a câmara · pague com MB WAY, Apple Pay, cartão ou Pix", W / 2, qy + qs + 190);
+  ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.font = "26px Inter, Arial, sans-serif"; ctx.fillText(link.replace(/^https?:\/\//, ""), W / 2, H - 40);
   return new Promise((res) => cv.toBlob(res, "image/png"));
 };
 
@@ -76,8 +98,10 @@ export const CouponQrDialog = ({ campaign: c, open, onOpenChange }) => {
         </DialogHeader>
         <div className="flex flex-col items-center gap-4">
           <div ref={ref} data-testid="coupon-qr-canvas" className="p-3 bg-white rounded-2xl border-2 border-purple-100">
-            <QRCodeCanvas value={link} size={700} fgColor="#3B0764" level="M" includeMargin style={{ width: 200, height: 200 }} />
+            <QRCodeCanvas value={link} size={700} fgColor="#0B1220" level="H" includeMargin style={{ width: 200, height: 200 }}
+              imageSettings={{ src: c.parceiro_foto || c.avatar || "/icon-192.png", height: 140, width: 140, excavate: true, crossOrigin: "anonymous" }} />
           </div>
+          {c.parceiro_foto || c.avatar ? null : <p className="text-[11px] text-slate-400 text-center">Dica: o parceiro pode adicionar a foto do espaço no painel para aparecer no centro do QR e no cartaz.</p>}
           <p className="text-xs text-slate-500 break-all text-center" data-testid="coupon-qr-link">{link}</p>
           <div className="grid grid-cols-4 gap-2 w-full">
             {[

@@ -16,6 +16,12 @@ from core import db, NO_ID, get_current_user, require_role, audit, notify, admin
 router = APIRouter()
 
 
+def clean(x):
+    if isinstance(x, list):
+        return [clean(i) for i in x]
+    return {k: v for k, v in x.items() if k != "_id"} if isinstance(x, dict) else x
+
+
 def real_only(records):
     """Dashboards show real activity only; test/simulated records stay in history."""
     from diretor_estrategia import is_synthetic
@@ -64,6 +70,7 @@ async def enrich_campaigns(camps):
         c["parceiro"] = p.get("nome", c.get("parceiro", "—"))
         c["cidade"] = p.get("cidade", "—")
         c["categoria"] = p.get("categoria", "—")
+        c["parceiro_foto"] = p.get("avatar")
         c["currency"] = c.get("currency", p.get("currency", "eur"))
         c["influencer"] = i.get("nome", "—")
     return camps
@@ -190,6 +197,7 @@ async def partner_dashboard(user: dict = Depends(require_role("partner")), curre
     t["online_paid"] = round(sum(r["amount"] - r["discount"] for r in reds if r.get("paid_online")), 2)
     camps = await enrich_campaigns(await db.campaigns.find({"parceiro_id": pid}, NO_ID).to_list(200))
     camps = [c for c in camps if c.get("currency", "eur") == currency]
+    partner = {k: v for k, v in (partner or {}).items() if k != "_id"}
     return {"partner": partner, "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "count": trend(tc["count"], tp["count"]), "commission": trend(tc["commission"], tp["commission"])},
             "leaderboard": leaderboard, "redemptions": reds[:100], "campaigns": camps}
 
@@ -355,7 +363,7 @@ async def revenue_clicks_series(days: int):
 
 @router.get("/audit")
 async def audit_list(limit: int = 100, user: dict = Depends(require_role("admin"))):
-    return await db.audit_log.find({}, NO_ID).sort("date", -1).to_list(limit)
+    return clean(await db.audit_log.find({}, NO_ID).sort("date", -1).to_list(limit))
 
 
 @router.get("/coupons/preview/{code}")
@@ -366,7 +374,7 @@ async def preview_coupon(code: str, user: dict = Depends(require_role("partner")
         return None
     inf = await db.influencers.find_one({"id": c.get("influencer_id")}, NO_ID)
     partner = await db.partners.find_one({"id": c.get("parceiro_id")}, NO_ID) or {}
-    return {**c, "currency": c.get("currency", partner.get("currency", "eur")), "influencer": inf["nome"] if inf else "—"}
+    return {**clean(c), "currency": c.get("currency", partner.get("currency", "eur")), "influencer": inf["nome"] if inf else "—"}
 
 
 class RedeemIn(BaseModel):
@@ -383,7 +391,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
     if existing:
         if existing.get("partner_id") != linked["id"] or existing.get("coupon") != code or existing.get("amount") != round(body.amount, 2):
             raise HTTPException(409, "Identificador de venda já utilizado noutro pedido.")
-        return {"record": existing, "duplicate": True}
+        return {"record": clean(existing), "duplicate": True}
     import math
     if not math.isfinite(body.amount) or body.amount <= 0:
         raise HTTPException(status_code=400, detail="Informe um valor de compra válido.")
@@ -410,7 +418,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
         existing = await db.redemptions.find_one({"idempotency_key": body.idempotency_key}, NO_ID)
         if not existing or existing.get("partner_id") != linked["id"] or existing.get("coupon") != code or existing.get("amount") != round(body.amount, 2):
             raise HTTPException(409, "Identificador de venda já utilizado noutro pedido.")
-        return {"record": existing, "duplicate": True}
+        return {"record": clean(existing), "duplicate": True}
     await audit("REDENÇÃO", f"{code} · {rec['amount']:.2f}€ · taxa travada {c['comissao']}% · {rec['partner']}", user, rec["id"])
     from realtime import emit
     emit("redencao_registada", valor_plataforma=rec["commission"], valor_total=rec["amount"], cupom=code, parceiro=rec["partner"], influencer=rec["influencer"], ref=rec["id"], origem="loja",
@@ -425,7 +433,7 @@ async def redeem(body: RedeemIn, user: dict = Depends(require_role("partner"))):
 @router.get("/redemptions")
 async def list_redemptions(user: dict = Depends(get_current_user), currency: str = Depends(reporting_currency)):
     q = {"partner_id": user["partner_id"]} if user["role"] == "partner" else {"influencer_id": user["influencer_id"]} if user["role"] == "influencer" else {}
-    return await db.redemptions.find(currency_query(q, currency), NO_ID).sort("date", -1).to_list(2000)
+    return clean(await db.redemptions.find(currency_query(q, currency), NO_ID).sort("date", -1).to_list(2000))
 
 
 @router.get("/statements")
@@ -455,13 +463,13 @@ async def ebooks(user: dict = Depends(get_current_user)):
         e["owned"] = e["id"] in owned
         e["unlocked"] = (not e.get("premium")) or user["role"] == "admin" or bool(sub) or e["id"] in owned
         e.pop("pdf_path", None)
-    return items
+    return clean(items)
 
 
 @router.get("/notifications")
 async def notifications(user: dict = Depends(get_current_user)):
     items = await db.notifications.find({"user_id": user["id"]}, NO_ID).sort("date", -1).to_list(50)
-    return {"items": items, "unread": sum(1 for i in items if not i["lido"])}
+    return {"items": clean(items), "unread": sum(1 for i in items if not i["lido"])}
 
 
 @router.post("/notifications/read")

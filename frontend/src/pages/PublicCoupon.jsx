@@ -216,7 +216,7 @@ export default function PublicCoupon() {
                   <div data-testid="public-pay-card" className="rounded-2xl border border-slate-200 p-4 space-y-2">
                     <StripeModeBanner compact />
                     <p className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Pagar já com desconto aplicado</p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <input data-testid="public-pay-amount" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={`Valor da conta (${currency === "brl" ? "R$" : "€"})`} className="flex-1 h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm" />
                       <button data-testid="public-pay-button" disabled={paying || !Number.isFinite(parsed) || parsed < 1 || parsed > 10000} onClick={pay} className="h-10 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold btn-press">{paying ? "A abrir..." : "Pagar"}</button>
                     </div>

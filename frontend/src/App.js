@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppProvider, useApp } from "@/context/AppContext";
 import { I18nProvider } from "@/context/I18nContext";
 import Privacy from "@/pages/Privacy";
+import Landing from "@/pages/Landing";
 import Register from "@/pages/Register";
 import PublicCoupon from "@/pages/PublicCoupon";
 import AppLayout from "@/components/layout/AppLayout";
@@ -35,6 +36,13 @@ const RoleRedirect = () => {
   return <Navigate to={ROLE_HOME[user.role]} replace />;
 };
 
+const Home = () => {
+  const { user } = useApp();
+  if (user === undefined) return <Splash />;
+  if (user) return <Navigate to={ROLE_HOME[user.role]} replace />;
+  return <Landing />;
+};
+
 const Protected = ({ roles }) => {
   const { user } = useApp();
   if (user === undefined) return <Splash />;
@@ -56,6 +64,7 @@ function App() {
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<Home />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
@@ -66,7 +75,6 @@ function App() {
           </Route>
           <Route element={<Protected />}>
             <Route element={<AppLayout />}>
-              <Route path="/" element={<RoleRedirect />} />
               <Route path="/payment/success" element={<PaymentResult />} />
               <Route path="/payment/cancel" element={<PaymentResult cancelled />} />
               <Route path="/mensagens" element={<Messages />} />

@@ -92,7 +92,7 @@ export default function Login() {
           </form>
 
           <div className="mt-8 p-4 rounded-2xl bg-white border border-slate-200">
-            <p className="text-sm text-slate-600 text-center">Ainda não tem conta? <Link to="/registar" data-testid="register-link" className="font-semibold text-purple-700 hover:underline">Criar conta</Link></p>
+            <p className="text-sm text-slate-600 text-center">Ainda não tem conta? <Link to="/registar" data-testid="register-link" className="font-semibold text-purple-700 hover:underline">Criar conta</Link> · <Link to="/" data-testid="how-it-works-link" className="font-semibold text-slate-700 hover:underline">Como funciona</Link></p>
           </div>
 
         </div>

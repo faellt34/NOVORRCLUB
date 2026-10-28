@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Query, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Header
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import re
 
 from core import db, NO_ID, get_current_user, require_role, audit, notify, new_id, now_iso, admin_ids
 from storage import put_object, get_object, APP_NAME
@@ -448,6 +449,21 @@ async def public_pay(body: PublicPayIn):
 class IbanIn(BaseModel):
     iban: str
     titular: Optional[str] = ""
+
+
+class PhotoIn(BaseModel):
+    foto: str = Field(min_length=32, max_length=260_000)
+
+
+@router.post("/partner/foto")
+async def partner_photo(body: PhotoIn, user: dict = Depends(require_role("partner"))):
+    """Partner photo for coupon/QR poster: compressed data URL (≤ ~190 KB), stored on the partner record."""
+    if not re.match(r"^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$", body.foto):
+        raise HTTPException(400, "Imagem inválida (PNG, JPEG ou WEBP)")
+    partner = await partner_record(user)
+    await db.partners.update_one({"id": partner["id"]}, {"$set": {"avatar": body.foto}})
+    return {"ok": True}
+
 
 
 @router.post("/partner/iban")
