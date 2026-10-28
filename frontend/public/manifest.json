@@ -1,20 +1,48 @@
 {
-  "name": "R-Conekta by RRClub",
-  "short_name": "R-Conekta",
-  "description": "Cupons, QR e comissões para influencers e parceiros de experiências de luxo.",
+  "name": "RRClub — Conecta pessoas e negócios",
+  "short_name": "RRClub",
+  "description": "Campanhas, descontos e QR Code para seguidores, parceiros e influenciadores.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#08040E",
-  "theme_color": "#203047",
+  "background_color": "#F8F9FC",
+  "theme_color": "#070B1F",
   "lang": "pt-PT",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Validar Cupom", "url": "/parceiro#validar", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Dashboard", "url": "/", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Validar Cupom",
+      "url": "/parceiro#validar",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }
