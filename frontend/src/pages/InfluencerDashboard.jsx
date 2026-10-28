@@ -149,23 +149,6 @@ export default function InfluencerDashboard() {
           </Select>
         </div>
       </CosmicHeader>
-          <p className="text-sm text-slate-500 mt-1">Painel de desempenho P5 confirmado por registo local, sem misturar valores de demonstração {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger data-testid="period-selector" className="w-[160px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Últimos 7 dias</SelectItem>
-              <SelectItem value="30">Últimos 30 dias</SelectItem>
-              <SelectItem value="90">Últimos 90 dias</SelectItem>
-            </SelectContent>
-          </Select>
-          <Link to="/notificacoes" data-testid="notifications-bell" className="relative w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-purple-50 btn-press">
-            <Bell className="w-[18px] h-[18px] text-slate-600" />
-            {unread.notifications > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
-          </Link>
-        </div>
-      </div>
 
       <div data-testid="influencer-iban-card" className={`card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${profile && !profile.iban ? "border-l-4 border-amber-400" : ""}`}>
         <div className="flex items-center gap-3">
