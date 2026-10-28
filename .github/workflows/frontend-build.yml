@@ -2,7 +2,7 @@ name: Frontend Build
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "conflict_281026_0056"]
   pull_request:
     branches: ["main"]
 
