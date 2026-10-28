@@ -1,0 +1,32 @@
+{
+  "summary": "RRClub Mobile 2.0 pass. BLOCKER found+fixed: PartnerDashboard called useHashScroll after an early return (rules-of-hooks ESLint ERROR -> webpack 'Compiled with problems' overlay blocking all clicks in preview; would also fail CI builds). Moved hook above early return; recompiled clean. After fix: partner/influencer/admin bottom-nav tabs correct, hash navigation works, scanner modal + upload opens, QR PNG download works with no JS errors, desktop hides bottom-nav and shows the sidebar, PWA manifest/meta OK, the 12 backend P5 tests pass. Remaining issues are minor UX ones: hash targets land under the sticky header, tapping the same hash tab again does nothing, and two tabs show as active at once.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PartnerDashboard", "issue": "FIXED: useHashScroll(!!data) was called after `if (!data && loadError) return` -> react-hooks/rules-of-hooks compile error, dev overlay iframe intercepted all pointer events", "selector": "#webpack-dev-server-client-overlay", "priority": "CRITICAL (fixed)"},
+      {"component": "useHashScroll", "issue": "scrollIntoView({block:'start'}) puts the target at top=0, under the 56px sticky mobile header, so the #validar card title and the 'Campanhas' heading are hidden. Add scroll-margin-top (e.g. scroll-mt-20) to #validar and #campanhas, or offset the scroll.", "selector": "#validar, #campanhas", "priority": "MEDIUM"},
+      {"component": "BottomNav / useHashScroll", "issue": "Tapping 'Ler QR' (or 'Cupões') again while the hash is already #validar does not scroll, because the effect depends only on hash. After the user scrolls up, the shortcut does nothing. Use location.key as a dependency or an onClick handler that scrolls.", "selector": "[data-testid=bottom-nav-ler-qr]", "priority": "MEDIUM"},
+      {"component": "BottomNav", "issue": "NavLink ignores the hash, so on /parceiro#validar both Painel and Ler QR are active (and Painel and Cupões for influencer). Base the active state on location.hash.", "selector": "[data-testid=bottom-nav-painel]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [{"screen": "Partner Top Influencers", "issues": ["Influencer avatar image broken (alt text 'Influ' rendered)"]}]
+  },
+  "test_report_links": ["/app/backend/tests/test_p5_pt_settlement.py", "/app/backend/tests/test_p5_rules.py", "/app/backend/tests/test_p5_pix_checkout_integration.py"],
+  "action_items": [
+    "Add a scroll offset for the sticky header on hash targets (#validar, #campanhas)",
+    "Make a repeated tap on a hash bottom-nav tab re-scroll",
+    "Fix the dual-active state for hash tabs in BottomNav",
+    "Fix the broken influencer avatar in partner Top Influencers"
+  ],
+  "critical_code_review_comments": [
+    "Hooks must never be placed after conditional returns. Check other pages that use useHashScroll (InfluencerDashboard is OK).",
+    "The torch button appears only when getRunningTrackCapabilities reports torch; not verifiable in headless.",
+    "pt_split notify('repasse') is present at line 398; tests pass"
+  ],
+  "updated_files": ["/app/frontend/src/pages/PartnerDashboard.jsx"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "~90% (core flows pass after fix; 3 minor UX issues)"},
+  "seed_data_creation": "none; cleared rate_limits login:* keys",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Mobile 390x844 verified for all 3 roles. Admin tables overflow only inside their scroll containers (document scrollWidth=390). Desktop 1920: bottom-nav hidden, aside visible. Manifest: standalone, icons 192/512 return 200, single theme-color #203047."
+}

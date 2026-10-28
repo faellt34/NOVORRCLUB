@@ -239,7 +239,7 @@ export default function InfluencerDashboard() {
 
         <div data-testid="active-campaigns-card" className="card-soft p-5 xl:col-span-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-semibold text-slate-900" id="campanhas">Campanhas</h3>
+            <h3 className="text-lg font-semibold text-slate-900 scroll-mt-20" id="campanhas">Campanhas</h3>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
