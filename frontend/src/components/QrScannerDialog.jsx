@@ -113,7 +113,7 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected, preserveRaw = 
         </div>
         <label data-testid="scanner-upload-photo" className="w-full py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer btn-press">
           <ImageUp className="w-4 h-4" /> Usar foto do QR (galeria / captura)
-          <input type="file" accept="image/*" capture="environment" className="hidden" data-testid="scanner-upload-input" onChange={(e) => { scanFile(e.target.files?.[0]); e.target.value = ""; }} />
+          <input type="file" accept="image/*" className="hidden" data-testid="scanner-upload-input" onChange={(e) => { scanFile(e.target.files?.[0]); e.target.value = ""; }} />
         </label>
       </DialogContent>
     </Dialog>
