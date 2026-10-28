@@ -38,14 +38,14 @@ export const BottomNav = () => {
   const { user, unread } = useApp();
   const { pathname, hash } = useLocation();
   const tabs = TABS[user?.role] || [];
-  if (!tabs.length) return null;
   const current = pathname + hash;
   useEffect(() => {
-    if (!hash) return;
+    if (!hash || !tabs.length) return;
     const id = decodeURIComponent(hash.slice(1));
     const frame = window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
     return () => window.cancelAnimationFrame(frame);
-  }, [pathname, hash]);
+  }, [pathname, hash, tabs.length]);
+  if (!tabs.length) return null;
   return (
     <nav data-testid="bottom-nav" aria-label="Navegação principal" className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-100 shadow-[0_-8px_25px_rgba(7,11,31,0.08)] pb-[env(safe-area-inset-bottom)]">
       <ul className="flex items-end justify-around px-2 pt-2 pb-2">
