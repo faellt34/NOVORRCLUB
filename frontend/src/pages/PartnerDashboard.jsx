@@ -3,6 +3,7 @@ import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, Che
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { useHashScroll } from "../lib/useHashScroll";
 import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -228,6 +229,7 @@ export default function PartnerDashboard() {
   };
 
   if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
+  useHashScroll(!!data);
   if (!data) return <PageSkeleton />;
   const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
@@ -325,7 +327,7 @@ export default function PartnerDashboard() {
                 if (raw.startsWith("https://")) onDetected(raw);
                 else { scanSequence.current += 1; setCode(raw); setP5ScanRef(""); setP5ScanState("idle"); setP5ScanRejected(false); setP5Bill(null); setIdemKey(newKey()); }
               }} placeholder="Ex.: ROBSON-LUXE-25" className="font-coupon uppercase rounded-xl bg-slate-50" />
-              <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 w-10 h-10 rounded-xl bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center btn-press" title="Escanear QR">
+              <button type="button" data-testid="open-scanner-button" onClick={() => setScannerOpen(true)} className="shrink-0 h-11 px-4 sm:w-11 sm:px-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-2 text-xs font-semibold shadow-lg shadow-violet-900/30 btn-press" title="Escanear QR"><span className="sm:hidden">Ler QR</span>
                 <ScanLine className="w-[18px] h-[18px]" />
               </button>
             </div>

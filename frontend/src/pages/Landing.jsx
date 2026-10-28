@@ -55,7 +55,7 @@ export default function Landing() {
     <div className="min-h-screen bg-[#F8F9FC] text-slate-900 overflow-x-clip">
       <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <BrandLogo />
+          <Link to="/" aria-label="R-Conekta"><BrandLogo dark /></Link>
           <nav className="flex items-center gap-2 text-sm">
             <Link to="/login" data-testid="landing-login" className="px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">Entrar</Link>
             <Link to="/registar" data-testid="landing-register" className="px-3 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800">Criar conta</Link>

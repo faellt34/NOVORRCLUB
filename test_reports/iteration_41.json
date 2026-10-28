@@ -1,0 +1,37 @@
+{
+  "summary": "Iter41: mobile landing, Home gate, mobile layout, partner photo, QR dialog and P5 regression. Found and fixed 1 critical backend bug: POST /api/partner/foto returned 500 for every request (TypeError: partner_record() missing 'database' arg). After the fix all requested checks pass.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/partner/foto", "issue": "FIXED by testing agent: called partner_record(user) without db, so every valid upload returned 500 'Erro interno' and the avatar never reached GET /api/public/coupon/CLUB-10. Changed it to partner_record(user, db).", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Sonner Toaster (mobile)", "issue": "Toasts sit at top-right and cover the mobile header, including mobile-menu-toggle. Example: the 'Bem-vindo' toast after login. While the toast is hovered or expanded, the hamburger cannot be clicked. Suggest position='top-center' with an offset, or bottom on mobile.", "selector": "[data-sonner-toast]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing header (390px)", "issues": ["The 'R-Conekta' wordmark next to the logo is light blue/white on a near-white background, so contrast is very low. When scrolled, the header looks transparent and content shows through behind it."]},
+      {"screen": "/c/CLUB-10 mobile", "issues": ["The 'Valor da conta (€)' input looks vertically squashed (low height) compared with the email input below it.", "The email placeholder is cut off ('Email para receber o recibo (opcion')."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter41_landing_photo.py", "/app/test_reports/pytest/iter41.xml"],
+  "action_items": [
+    "Review the partner_photo fix in routes_payments.py (partner_record(user, db)) and grep for any other partner_record calls missing the db arg",
+    "Move Sonner toasts so they don't cover the mobile header/hamburger",
+    "Improve contrast of the landing header wordmark; consider a solid header background",
+    "Fix the height of the 'Valor da conta' input on the public coupon page on mobile"
+  ],
+  "critical_code_review_comments": [
+    "routes_payments.partner_photo: replaces the avatar without an audit() entry, unlike the IBAN change",
+    "The PhotoIn regex accepts any base64 data and does not check that the image actually decodes. Acceptable, since the max_length of 260k caps the size."
+  ],
+  "updated_files": ["/app/backend/routes_payments.py", "/app/backend/tests/test_iter41_landing_photo.py"],
+  "success_rate": {"backend": "100% after fix (5/5 + offline P5 11/11)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "The partner 'Parceiro Exemplo' avatar was set to a test image (pink 64x64 square JPEG via the UI). Rate-limit keys login:* were cleared.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified at 390x844: landing testids (simulator, step-1..4, CTAs) present; at ticket 100 and 50 clients the partner value = 4000,00 EUR, and switching currency shows R$ 4.000,00; scrollWidth is 390 on /, /login, /admin, /admin/gestao, /admin/pagamentos, /parceiro, /influencer, /c/CLUB-10; mobile-menu-toggle opens mobile-sidebar; a logged-in admin on / is redirected to /admin; the QR dialog in the Gestão Campanhas tab shows the canvas, and PNG download cupao-CLUB-10.png works with no JS errors; /api/public/p5/config returns enabled with eur true; test_p5_rules + test_p5_pt_settlement pass 11/11.",
+  "rca of the issue": "partner_access.partner_record has the signature (user, database), but the new partner_photo endpoint called it with only one argument, which raised a TypeError and a 500 response."
+}

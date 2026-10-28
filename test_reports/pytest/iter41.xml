@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="5" time="2.489" timestamp="2026-10-28T00:42:52.467610+00:00" hostname="agent-env-7a106069-1c0a-422e-b6ad-47ce9670c74c"><testcase classname="tests.test_iter41_landing_photo" name="test_photo_upload_ok" time="0.703"><failure message="AssertionError: {&quot;detail&quot;:&quot;Erro interno&quot;}&#10;assert 500 == 200&#10; +  where 500 = &lt;Response [500]&gt;.status_code">tests/test_iter41_landing_photo.py:29: in test_photo_upload_ok
+    assert r.status_code == 200, r.text
+E   AssertionError: {"detail":"Erro interno"}
+E   assert 500 == 200
+E    +  where 500 = &lt;Response [500]&gt;.status_code</failure></testcase><testcase classname="tests.test_iter41_landing_photo" name="test_public_coupon_avatar" time="0.573"><failure message="AssertionError: assert False&#10; +  where False = &lt;built-in method startswith of str object at 0xfadc75807bf0&gt;('data:image')&#10; +    where &lt;built-in method startswith of str object at 0xfadc75807bf0&gt; = 'None'.startswith&#10; +      where 'None' = str(None)&#10; +        where None = &lt;built-in method get of dict object at 0xfadc75536ec0&gt;('avatar', '')&#10; +          where &lt;built-in method get of dict object at 0xfadc75536ec0&gt; = {'p5_eligible': False, 'cupom': 'CLUB-10', 'campanha': 'VALENTIS  DAYS', 'desconto': 10.0, ...}.get&#10; +            where {'p5_eligible': False, 'cupom': 'CLUB-10', 'campanha': 'VALENTIS  DAYS', 'desconto': 10.0, ...} = json()&#10; +              where json = &lt;Response [200]&gt;.json">tests/test_iter41_landing_photo.py:36: in test_public_coupon_avatar
+    assert str(r.json().get("avatar", "")).startswith("data:image")
+E   AssertionError: assert False
+E    +  where False = &lt;built-in method startswith of str object at 0xfadc75807bf0&gt;('data:image')
+E    +    where &lt;built-in method startswith of str object at 0xfadc75807bf0&gt; = 'None'.startswith
+E    +      where 'None' = str(None)
+E    +        where None = &lt;built-in method get of dict object at 0xfadc75536ec0&gt;('avatar', '')
+E    +          where &lt;built-in method get of dict object at 0xfadc75536ec0&gt; = {'p5_eligible': False, 'cupom': 'CLUB-10', 'campanha': 'VALENTIS  DAYS', 'desconto': 10.0, ...}.get
+E    +            where {'p5_eligible': False, 'cupom': 'CLUB-10', 'campanha': 'VALENTIS  DAYS', 'desconto': 10.0, ...} = json()
+E    +              where json = &lt;Response [200]&gt;.json</failure></testcase><testcase classname="tests.test_iter41_landing_photo" name="test_photo_invalid_400" time="0.190" /><testcase classname="tests.test_iter41_landing_photo" name="test_photo_influencer_403" time="0.515" /><testcase classname="tests.test_iter41_landing_photo" name="test_p5_config" time="0.129" /></testsuite></testsuites>

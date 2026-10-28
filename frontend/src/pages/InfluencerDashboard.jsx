@@ -9,6 +9,7 @@ import { StoryImageDialog } from "../components/StoryImageDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { useHashScroll } from "../lib/useHashScroll";
 import { api, apiError, dashboardMoney as eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
@@ -83,6 +84,7 @@ export default function InfluencerDashboard() {
 
   const chart = useMemo(() => (data?.chart || []).map((d) => ({ ...d, label: new Date(d.date).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) })), [data]);
 
+  useHashScroll(!!data);
   if (!data) return <PageSkeleton />;
 
   const { kpis, campaigns, topPartners, featured } = data;
@@ -195,9 +197,9 @@ export default function InfluencerDashboard() {
                 <QRCodeSVG value={link} size={148} fgColor="#3B0764" />
               </div>
               <div className="grid grid-cols-3 gap-2 w-full mt-4">
-                <button data-testid="coupon-copy-link" onClick={() => share("copiar")} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Copy className="w-4 h-4" /><span className="text-[10px] font-semibold">Copiar</span></button>
-                <button data-testid="coupon-download-qr" onClick={() => share("download")} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Download className="w-4 h-4" /><span className="text-[10px] font-semibold">QR</span></button>
-                <button data-testid="coupon-share-whatsapp" onClick={() => share("whatsapp")} className="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Share2 className="w-4 h-4" /><span className="text-[10px] font-semibold">Partilhar</span></button>
+                <button data-testid="coupon-copy-link" onClick={() => share("copiar")} className="flex flex-col items-center gap-1 py-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Copy className="w-5 h-5" /><span className="text-[11px] font-semibold">Copiar link</span></button>
+                <button data-testid="coupon-download-qr" onClick={() => share("download")} className="flex flex-col items-center gap-1 py-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 btn-press"><Download className="w-5 h-5" /><span className="text-[11px] font-semibold">Baixar QR</span></button>
+                <button data-testid="coupon-share-whatsapp" onClick={() => share("whatsapp")} className="flex flex-col items-center gap-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/30 btn-press"><Share2 className="w-5 h-5" /><span className="text-[11px] font-semibold">WhatsApp · Instagram</span></button>
               </div>
               <button data-testid="coupon-story-video" disabled={videoBusy} onClick={downloadStory} className="w-full mt-2 py-2.5 rounded-xl bg-gradient-to-r from-[#5B21B6] to-[#08061A] hover:opacity-90 disabled:opacity-60 text-white text-xs font-semibold inline-flex items-center justify-center gap-2 btn-press">
                 <Clapperboard className="w-4 h-4" /> {videoBusy ? "A preparar o seu vídeo..." : "Vídeo Story personalizado (MP4)"}

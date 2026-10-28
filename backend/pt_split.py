@@ -16,7 +16,7 @@ import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from core import db, NO_ID, now_iso, require_role
+from core import db, NO_ID, now_iso, require_role, notify
 
 router = APIRouter()
 VERSION = "pt-p5-fixed-5-80-5-10-v1"
@@ -392,6 +392,13 @@ async def settle_new_p5_payment(session_id):
                       role + "_destination": destination}},
         )
         done[role] = transfer_id
+        owner = (partner if role == "partner" else creator) or {}
+        if owner.get("user_id"):
+            try:
+                await notify([owner["user_id"]], "repasse", "Transferência Connect criada",
+                             f"{amount / 100:.2f} € da compra {tx['p5_charge_id']} enviados para a sua conta Stripe · depósito bancário segue o calendário Stripe", "/notificacoes")
+            except Exception:
+                pass
     for role, reason in held.items():
         await db.payment_transactions.update_one(
             {"session_id": session_id, "split_version": VERSION},

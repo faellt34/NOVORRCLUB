@@ -460,7 +460,7 @@ async def partner_photo(body: PhotoIn, user: dict = Depends(require_role("partne
     """Partner photo for coupon/QR poster: compressed data URL (≤ ~190 KB), stored on the partner record."""
     if not re.match(r"^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$", body.foto):
         raise HTTPException(400, "Imagem inválida (PNG, JPEG ou WEBP)")
-    partner = await partner_record(user)
+    partner = await partner_record(user, db)
     await db.partners.update_one({"id": partner["id"]}, {"$set": {"avatar": body.foto}})
     return {"ok": True}
 

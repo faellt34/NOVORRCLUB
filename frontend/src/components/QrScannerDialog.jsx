@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
-import { Camera, CameraOff, ImageUp } from "lucide-react";
+import { Camera, CameraOff, ImageUp, Flashlight, FlashlightOff } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 
 export const extractCoupon = (text) => {
@@ -20,6 +20,13 @@ const cameraError = (e) => {
 export const QrScannerDialog = ({ open, onOpenChange, onDetected, preserveRaw = false }) => {
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
+  const [torch, setTorch] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const toggleTorch = async () => {
+    const s = scannerRef.current;
+    if (!s) return;
+    try { await s.applyVideoConstraints({ advanced: [{ torch: !torch }] }); setTorch(!torch); } catch { setTorchAvailable(false); }
+  };
   const scannerRef = useRef(null);
   const doneRef = useRef(false);
 
@@ -44,6 +51,7 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected, preserveRaw = 
         await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: (w, h) => { const s = Math.min(w, h) * 0.75; return { width: s, height: s }; } }, finish, () => {});
         clearTimeout(fallback);
         setStarting(false);
+        try { setTorchAvailable(!!scanner.getRunningTrackCapabilities?.()?.torch); } catch { setTorchAvailable(false); }
       } catch (e) {
         clearTimeout(fallback);
         setStarting(false);
@@ -97,6 +105,11 @@ export const QrScannerDialog = ({ open, onOpenChange, onDetected, preserveRaw = 
             </div>
           )}
           {!starting && !error && <div className="scanner-line absolute left-[15%] right-[15%] h-0.5 bg-purple-400 shadow-[0_0_12px_rgba(167,139,250,0.9)] pointer-events-none" />}
+          {!starting && !error && torchAvailable && (
+            <button type="button" data-testid="scanner-torch" aria-pressed={torch} aria-label="Lanterna" onClick={toggleTorch} className={`absolute top-3 right-3 w-11 h-11 rounded-full flex items-center justify-center shadow-lg btn-press ${torch ? "bg-amber-400 text-slate-900" : "bg-white/15 text-white backdrop-blur"}`}>
+              {torch ? <FlashlightOff className="w-5 h-5" /> : <Flashlight className="w-5 h-5" />}
+            </button>
+          )}
         </div>
         <label data-testid="scanner-upload-photo" className="w-full py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold inline-flex items-center justify-center gap-2 cursor-pointer btn-press">
           <ImageUp className="w-4 h-4" /> Usar foto do QR (galeria / captura)
