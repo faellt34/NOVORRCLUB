@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, ScanLine, Bell, MessageSquare, FileText, Settings, Wallet, Megaphone, Share2, Users } from "lucide-react";
 import { useApp } from "../../context/AppContext";
@@ -39,6 +40,12 @@ export const BottomNav = () => {
   const tabs = TABS[user?.role] || [];
   if (!tabs.length) return null;
   const current = pathname + hash;
+  useEffect(() => {
+    if (!hash) return;
+    const id = decodeURIComponent(hash.slice(1));
+    const frame = window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname, hash]);
   return (
     <nav data-testid="bottom-nav" aria-label="Navegação principal" className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-100 shadow-[0_-8px_25px_rgba(7,11,31,0.08)] pb-[env(safe-area-inset-bottom)]">
       <ul className="flex items-end justify-around px-2 pt-2 pb-2">
@@ -47,7 +54,7 @@ export const BottomNav = () => {
           const active = current === t.to || (!t.to.includes("#") && !hash && pathname === t.to);
           return (
             <li key={t.to} className="flex-1">
-              <Link to={t.to} aria-current={active ? "page" : undefined} onClick={() => current === t.to && scrollToHash(t.to)}
+              <Link to={t.to} aria-current={active ? "page" : undefined} onClick={() => scrollToHash(t.to)}
                 data-testid={`bottom-nav-${t.label.toLowerCase().replace(/\s/g, "-")}`}
                 className={`relative flex flex-col items-center justify-end gap-1 text-[12px] min-h-[52px] transition-colors duration-200 ${active ? "text-[#7C3AED] font-semibold" : "text-slate-400 font-medium hover:text-slate-600"}`}>
                 <span className={`relative flex items-center justify-center transition-transform active:scale-90 ${t.primary ? "w-16 h-16 -mt-8 rounded-full bg-gradient-to-tr from-[#7C3AED] to-[#A78BFA] text-white border-4 border-white shadow-[0_8px_24px_rgba(124,58,237,0.4)]" : "w-10 h-7"}`}>
