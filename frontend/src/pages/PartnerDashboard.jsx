@@ -3,6 +3,7 @@ import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, Che
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { CosmicHeader, HeaderStat } from "../components/CosmicHeader";
 import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -190,10 +191,22 @@ export default function PartnerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 data-testid="partner-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{user.nome}</h1>
-        <p className="text-sm text-slate-500 mt-1">Receita atribuída, redenções e comissões devidas a influencers {live && <span data-testid="partner-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
-      </div>
+      <CosmicHeader testId="partner-header">
+        <div className="flex items-center gap-4">
+          <span className="h-12 w-12 shrink-0 rounded-2xl bg-white/10 grid place-items-center font-bold text-xl" aria-hidden="true">{String(user.nome || "P").charAt(0)}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 font-semibold">Parceiro</p>
+            <h1 data-testid="partner-greeting" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight truncate">{user.nome}</h1>
+          </div>
+          {live && <span data-testid="partner-live-badge" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/20 px-3 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot" /> ao vivo</span>}
+        </div>
+        <div className="grid grid-cols-3 gap-3 mt-6">
+          <HeaderStat testId="partner-stat-count" label="Redenções" value={num(totals.count || 0)} sub="registadas" />
+          <HeaderStat testId="partner-stat-revenue" label="Receita" value={eur(Math.round(totals.revenue || 0))} sub="histórico" />
+          <HeaderStat testId="partner-stat-share" label="Parcela prevista" value="80%" sub={eur(Math.round((totals.revenue || 0) * 0.8))} accent />
+        </div>
+        <p className="text-[11px] text-white/50 mt-4">Receita atribuída, redenções e comissões devidas a influencers.</p>
+      </CosmicHeader>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
@@ -237,7 +250,7 @@ export default function PartnerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div data-testid="coupon-validation-card" className="card-soft p-5" id="validar">
+        <div id="validar" data-testid="coupon-validation-card" className="card-soft p-5" id="validar">
           <h3 className="text-lg font-semibold text-slate-900 mb-1">{p5Mode ? "P5 · Aprovar conta do cliente" : "Validação de Cupom"}</h3>
           <p className="text-xs text-slate-500 mb-4">{p5Mode ? "Leia o QR P5 do telemóvel do cliente; confirme o valor original da conta. O cliente paga depois." : "Escaneie o QR do cliente ou digite o código"}</p>
           <form onSubmit={handleValidate} className="space-y-3">
@@ -334,7 +347,7 @@ export default function PartnerDashboard() {
           </div>
         </div>
 
-        <div data-testid="redemption-history-card" className="card-soft p-5">
+        <div id="historico" data-testid="redemption-history-card" className="card-soft p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Histórico</h3>
             <button data-testid="export-csv-button" onClick={exportCsv} className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg btn-press">
