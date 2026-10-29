@@ -200,7 +200,7 @@ export default function InfluencerDashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div data-testid="featured-coupon-card" className="card-soft p-5 flex flex-col items-center text-center">
+        <div id="partilhar" data-testid="featured-coupon-card" className="card-soft p-5 flex flex-col items-center text-center">
           <h3 className="text-lg font-semibold text-slate-900 self-start mb-1">Seu Cupom em Destaque</h3>
           {featured ? (
             <>
