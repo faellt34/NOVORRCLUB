@@ -9,6 +9,7 @@ import { StoryImageDialog } from "../components/StoryImageDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { useHashScroll } from "../lib/useHashScroll";
 import { CosmicHeader } from "../components/CosmicHeader";
 import { api, apiError, dashboardMoney as eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -86,6 +87,7 @@ export default function InfluencerDashboard() {
 
   const chart = useMemo(() => (data?.chart || []).map((d) => ({ ...d, label: new Date(d.date).toLocaleDateString("pt-PT", { day: "2-digit", month: "short" }) })), [data]);
 
+  useHashScroll(!!data);
   if (!data) return <PageSkeleton />;
 
   const { kpis, campaigns, topPartners, featured } = data;
