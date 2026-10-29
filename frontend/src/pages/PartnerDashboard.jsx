@@ -204,19 +204,19 @@ export default function PartnerDashboard() {
         </div>
         <div className="grid grid-cols-3 gap-3 mt-6">
           <HeaderStat testId="partner-stat-count" label="Redenções" value={num(totals.count || 0)} sub="registadas" />
-          <HeaderStat testId="partner-stat-revenue" label="Receita" value={eur(Math.round(totals.revenue || 0))} sub="histórico" />
-          <HeaderStat testId="partner-stat-share" label="Parcela prevista" value="80%" sub={eur(Math.round((totals.revenue || 0) * 0.8))} accent />
+          <HeaderStat testId="partner-stat-revenue" label="Valor registado" value={eur(Math.round(totals.revenue || 0))} sub="não conciliado" />
+          <HeaderStat testId="partner-stat-share" label="Parcela teórica" value="80%" sub={eur(Math.round((totals.revenue || 0) * 0.8))} accent />
         </div>
-        <p className="text-[11px] text-white/50 mt-4">Receita atribuída, redenções e comissões devidas a influencers.</p>
+        <p className="text-[11px] text-white/50 mt-4">Histórico de resgates; não representa necessariamente pagamentos ou transferências confirmados.</p>
       </CosmicHeader>
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-atribuida" icon={Euro} label="Receita Atribuída" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
+        <KpiCard id="receita-atribuida" icon={Euro} label="Valor de resgates registados" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
         <KpiCard id="redencoes" icon={Ticket} label="Redenções" live={totals.count} format={num} flash={flash.count} trend={trend.count} />
         <KpiCard id="descontos" icon={BadgePercent} label="Descontos Concedidos" live={totals.discounts} format={(v) => eur(Math.round(v))} flash={flash.discounts} />
-        <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão Devida" live={totals.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={trend.commission} />
+        <KpiCard id="comissao-devida" icon={HandCoins} label="Comissão registada (não conciliada)" live={totals.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={trend.commission} />
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={totals.ticket} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
@@ -252,7 +252,7 @@ export default function PartnerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div id="validar" data-testid="coupon-validation-card" className="card-soft p-5" id="validar">
+        <div id="validar" data-testid="coupon-validation-card" className="card-soft p-5">
           <h3 className="text-lg font-semibold text-slate-900 mb-1">{p5Mode ? "P5 · Aprovar conta do cliente" : "Validação de Cupom"}</h3>
           <p className="text-xs text-slate-500 mb-4">{p5Mode ? "Leia o QR P5 do telemóvel do cliente; confirme o valor original da conta. O cliente paga depois." : "Escaneie o QR do cliente ou digite o código"}</p>
           <form onSubmit={handleValidate} className="space-y-3">
