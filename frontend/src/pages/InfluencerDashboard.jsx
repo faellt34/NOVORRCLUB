@@ -134,7 +134,7 @@ export default function InfluencerDashboard() {
             </Link>
           </div>
         </div>
-        <p className="text-[10px] uppercase tracking-[0.14em] text-white/50 font-semibold mt-6">Comissão apresentada · {kpis.rate}%</p>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-white/50 font-semibold mt-6">Comissão registada (não conciliada) · {kpis.rate}%</p>
         <p data-testid="influencer-header-commission" className="font-display text-4xl font-extrabold tabular-nums mt-1">{eur(+(kpis.commission || 0).toFixed(2))}</p>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-white/70 mt-3">
           <span><b className="text-white">{num(kpis.customers || 0)}</b> aberturas</span>
@@ -172,11 +172,11 @@ export default function InfluencerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-utilizados" icon={Ticket} label="Cupons Utilizados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
+        <KpiCard id="cupons-utilizados" icon={Ticket} label="Resgates registados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
         <KpiCard id="clientes-impactados" icon={Users} label="Clientes que receberam cupom" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
         <KpiCard id="qr-descarregados" icon={QrCode} label="QR codes descarregados" live={kpis.downloads || 0} format={num} flash={flash.downloads} trend={kpis.trend.downloads} period="guardaram o QR no telemóvel" />
-        <KpiCard id="receita-gerada" icon={Euro} label="Receita Gerada" live={kpis.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={kpis.trend.revenue} />
-        <KpiCard id="sua-comissao" icon={Percent} label={`Sua Comissão (~${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={kpis.trend.commission} />
+        <KpiCard id="receita-gerada" icon={Euro} label="Valor dos resgates registados" live={kpis.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={kpis.trend.revenue} />
+        <KpiCard id="sua-comissao" icon={Percent} label={`Comissão registada (~${kpis.rate}%)`} live={kpis.commission} format={(v) => eur(Math.round(v))} flash={flash.commission} trend={kpis.trend.commission} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
