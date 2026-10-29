@@ -425,7 +425,7 @@ export default function PartnerDashboard() {
           </div>
         </div>
 
-        <div data-testid="redemption-history-card" className="card-soft p-5">
+        <div id="historico" data-testid="redemption-history-card" className="card-soft p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Histórico</h3>
             <button data-testid="export-csv-button" onClick={exportCsv} className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-lg btn-press">
