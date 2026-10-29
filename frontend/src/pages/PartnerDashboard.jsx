@@ -3,6 +3,7 @@ import { Euro, Ticket, BadgePercent, HandCoins, Receipt, ScanLine, Download, Che
 import { toast } from "sonner";
 import { KpiCard } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { useHashScroll } from "../lib/useHashScroll";
 import { CosmicHeader, HeaderStat } from "../components/CosmicHeader";
 import { api, apiError, dashboardMoney as eur, moneyIn, reportCurrency, num, downloadCsv } from "../lib/api";
 import { Input } from "../components/ui/input";
@@ -186,6 +187,7 @@ export default function PartnerDashboard() {
   };
 
   if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
+  useHashScroll(!!data);
   if (!data) return <PageSkeleton />;
   const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
