@@ -9,7 +9,6 @@ import { api, apiError, dashboardMoney as eur } from "../lib/api";
 import { useRealtime } from "../services/ws";
 import { useFlash } from "../services/live";
 import { AbandonAnalysis } from "../components/AbandonAnalysis";
-import { TestRunDialog } from "../components/TestRunDialog";
 import { AiAnalyst } from "../components/AiAnalyst";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../components/ui/dialog";
@@ -29,7 +28,6 @@ export default function AdminDashboard() {
   const [flash, triggerFlash] = useFlash();
   const [wsState, setWsState] = useState("a ligar");
   const [clicksKey, setClicksKey] = useState(0);
-  const [testOpen, setTestOpen] = useState(false);
   const [leads, setLeads] = useState([]);
   const [resets, setResets] = useState([]);
   const [feedback, setFeedback] = useState([]);
@@ -51,7 +49,7 @@ export default function AdminDashboard() {
   const pushAudit = (action, detail, amount, extra = {}) =>
     setAudit((prev) => [{ id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, action, detail, amount, date: new Date().toISOString(), actor: "tempo real", enter: true, ...extra }, ...prev].slice(0, 50));
 
-  const { status: wsStatus, eventos } = useRealtime((ev) => {
+  const { status: wsStatus } = useRealtime((ev) => {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
@@ -105,7 +103,7 @@ export default function AdminDashboard() {
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600">Dashboard</p>
           <h1 data-testid="admin-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Visão Geral da Plataforma</h1>
-          <p className="text-sm text-slate-500 mt-1">Performance operacional e financeira da RRClub</p>
+          <p className="text-sm text-slate-500 mt-1">Visão operacional · cliques, campanhas e histórico de resgates</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <div data-testid="platform-status-pill" className="hidden sm:inline-flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-[11px] font-semibold text-slate-600">
@@ -113,24 +111,25 @@ export default function AdminDashboard() {
             <span className="w-px h-4 bg-slate-200" />
             <span className={`inline-flex items-center gap-1.5 ${wsStatus === "conectado" ? "text-emerald-700" : "text-amber-700"}`} data-testid="ws-indicator" data-status={wsStatus}><span className={`w-2 h-2 rounded-full ${wsStatus === "conectado" ? "bg-emerald-500 live-dot" : "bg-amber-500"}`} /> {wsStatus === "conectado" ? "Sistema operacional" : wsStatus === "reconectando" ? "Reconectando" : "Offline"}</span>
           </div>
-          <button data-testid="new-test-button" onClick={() => setTestOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold btn-press">+ Novo teste</button>
         </div>
       </div>
 
+      <p data-testid="admin-historical-notice" role="note" className="text-xs text-slate-600">Indicadores históricos de resgates, que podem incluir testes anteriores. Estes valores não comprovam pagamentos Stripe nem transferências bancárias. Os cliques e as campanhas são apresentados separadamente.</p>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-sistema" icon={Euro} label="Receita do Sistema" live={stats.receita} format={(v) => eur(Math.round(v))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
-        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões Agregadas" live={stats.comissoes} format={(v) => eur(Math.round(v))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
+        <KpiCard id="receita-sistema" icon={Euro} label="Valor de resgates registados" live={stats.receita} format={(v) => eur(Math.round(v))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
+        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões registadas (não conciliadas)" live={stats.comissoes} format={(v) => eur(Math.round(v))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
         <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" live={stats.influencers} />
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="cupons-usados" icon={Ticket} label="Pessoas que usaram cupom" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
+        <KpiCard id="cupons-usados" icon={Ticket} label="Resgates registados" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
         <KpiCard id="cliques-total" icon={MousePointerClick} label="Cliques no cupom" live={stats.cliques} flash={flash.cliques} />
         <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
         <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
-        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
+        <KpiCard id="ticket-medio" icon={Receipt} label="Ticket médio dos resgates" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -318,7 +317,6 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      <TestRunDialog open={testOpen} onOpenChange={setTestOpen} eventos={eventos} onDone={load} />
 
     </div>
   );
