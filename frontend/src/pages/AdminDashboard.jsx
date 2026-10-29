@@ -98,7 +98,7 @@ export default function AdminDashboard() {
   const pending = leads.filter((l) => l.status === "Novo").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-rrclub-ui-version="mobile3-production-20261029">
       <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600">Dashboard</p>
