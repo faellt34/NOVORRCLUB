@@ -9,6 +9,7 @@ import { StoryImageDialog } from "../components/StoryImageDialog";
 import { toast } from "sonner";
 import { KpiCard, StatusBadge } from "../components/KpiCard";
 import { useApp } from "../context/AppContext";
+import { CosmicHeader } from "../components/CosmicHeader";
 import { api, apiError, dashboardMoney as eur, num, getSiteUrl, couponLink } from "../lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Input } from "../components/ui/input";
@@ -117,26 +118,38 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
-        <div>
-          <h1 data-testid="influencer-greeting" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Olá, {user.nome.split(" ")[0]}! 👋</h1>
-          <p className="text-sm text-slate-500 mt-1">Painel de desempenho e atribuição das suas parcerias de luxo {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
+      <CosmicHeader testId="influencer-header">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 font-semibold">Influenciador</p>
+            <h1 data-testid="influencer-greeting" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight truncate">Olá, {user.nome.split(" ")[0]}! 👋</h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {live && <span data-testid="influencer-live-badge" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/20 px-3 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot" /> ao vivo</span>}
+            <Link to="/notificacoes" data-testid="notifications-bell" className="relative w-11 h-11 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center btn-press">
+              <Bell className="w-5 h-5 text-white" />
+              {unread.notifications > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
+            </Link>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-white/50 font-semibold mt-6">Comissão apresentada · {kpis.rate}%</p>
+        <p data-testid="influencer-header-commission" className="font-display text-4xl font-extrabold tabular-nums mt-1">{eur(+(kpis.commission || 0).toFixed(2))}</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-white/70 mt-3">
+          <span><b className="text-white">{num(kpis.customers || 0)}</b> aberturas</span>
+          <span><b className="text-white">{num(kpis.uses || 0)}</b> utilizações</span>
+          {kpis.conversion != null && <span className="text-emerald-300 font-semibold">{String(kpis.conversion).replace(".", ",")}% conversão</span>}
+        </div>
+        <div className="mt-5">
           <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger data-testid="period-selector" className="w-[160px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectTrigger data-testid="period-selector" className="w-[170px] h-10 bg-white/10 border-white/15 text-white rounded-xl"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="7">Últimos 7 dias</SelectItem>
               <SelectItem value="30">Últimos 30 dias</SelectItem>
               <SelectItem value="90">Últimos 90 dias</SelectItem>
             </SelectContent>
           </Select>
-          <Link to="/notificacoes" data-testid="notifications-bell" className="relative w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center hover:bg-purple-50 btn-press">
-            <Bell className="w-[18px] h-[18px] text-slate-600" />
-            {unread.notifications > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
-          </Link>
         </div>
-      </div>
+      </CosmicHeader>
 
       <div data-testid="influencer-iban-card" className={`card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${profile && !profile.iban ? "border-l-4 border-amber-400" : ""}`}>
         <div className="flex items-center gap-3">
@@ -187,7 +200,7 @@ export default function InfluencerDashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div data-testid="featured-coupon-card" className="card-soft p-5 flex flex-col items-center text-center">
+        <div id="partilhar" data-testid="featured-coupon-card" className="card-soft p-5 flex flex-col items-center text-center">
           <h3 className="text-lg font-semibold text-slate-900 self-start mb-1">Seu Cupom em Destaque</h3>
           {featured ? (
             <>
