@@ -1,14 +1,24 @@
 import GoogleSignIn from "../GoogleSignIn";
 import { reportCurrency } from "../../lib/api";
 import { useState } from "react";
-import { Outlet } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Outlet, useNavigate } from "react-router-dom";
+import { Menu, X, LogOut } from "lucide-react";
 import { BrandLogo } from "../BrandLogo";
 import { SidebarContent } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
+import { useApp } from "../../context/AppContext";
+import { toast } from "sonner";
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { logout } = useApp();
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    setMobileOpen(false);
+    await logout();
+    toast.success("Sessão terminada");
+    navigate("/login", { replace: true });
+  };
   const handleRoleNavigate = () => setMobileOpen(false);
 
   return (
@@ -19,9 +29,15 @@ export default function AppLayout() {
 
       <header className="lg:hidden sticky top-0 z-50 bg-[#070B1F] text-white flex items-center justify-between px-4 h-14">
         <BrandLogo size="sm" />
-        <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-white/10 btn-press">
+        <div className="flex items-center gap-1 shrink-0">
+          <button type="button" data-testid="mobile-logout-button" aria-label="Terminar sessão" title="Terminar sessão" onClick={handleLogout}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2.5 py-2 text-[11px] font-semibold text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white btn-press">
+            <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" /> Terminar sessão
+          </button>
+          <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-white/10 btn-press">
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+          </button>
+        </div>
       </header>
 
       {mobileOpen && (
