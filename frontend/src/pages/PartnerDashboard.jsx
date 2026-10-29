@@ -186,8 +186,8 @@ export default function PartnerDashboard() {
     toast.success("CSV exportado com sucesso");
   };
 
-  if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
   useHashScroll(!!data);
+  if (!data && loadError) return <div role="alert" data-testid="partner-access-error" className="card-soft p-6 space-y-3"><h1 className="text-xl font-semibold">Acesso ao estabelecimento indisponível</h1><p className="text-sm text-slate-600">{loadError}</p><p className="text-sm text-slate-500">Peça ao administrador para verificar a associação da sua conta em Gestão → Parceiros → Associar conta.</p><button onClick={load} className="px-4 py-2 rounded-xl bg-purple-600 text-white">Tentar novamente</button></div>;
   if (!data) return <PageSkeleton />;
   const { totals, trend, leaderboard, redemptions, campaigns = [] } = data;
 
