@@ -22,7 +22,7 @@
         Learn how to configure a non-root public URL by running `npm run build`.
         -->
         <title>R-Conekta | RRClub</title>
-        <meta name="rrclub-ui-build" content="mobile3-production-recovery-20261029" />
+        <meta name="rrclub-ui-build" content="mobile3-stable-network-20261029" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#7C3AED" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -31,63 +31,16 @@
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="description" content="RRclub — cupons, QR e comissões para influencers e parceiros de experiências de luxo." />
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
-        <script>
-        // Recovery is restricted to stale admin UI and never touches user records or payments.
-        (function () {
-          var version = "mobile3-production-20261029";
-          var key = "rrclub-admin-recovery-" + version;
-          var started = false;
-          var observer;
-          function check() {
-            if (started || !/^\/admin(?:\/|$)/.test(window.location.pathname)) return;
-            if (!document.querySelector('[data-testid="admin-greeting"]')) return;
-            if (document.querySelector('[data-rrclub-ui-version="' + version + '"]')) {
-              if (observer) observer.disconnect();
-              return;
-            }
-            started = true;
-            if (observer) observer.disconnect();
-            try {
-              if (window.sessionStorage.getItem(key) === "done") return;
-              window.sessionStorage.setItem(key, "done");
-            } catch (_) { /* private browsing can restrict storage */ }
-            var tasks = [];
-            if ("caches" in window) {
-              tasks.push(window.caches.keys().then(function (keys) {
-                return Promise.all(keys.filter(function (name) {
-                  return name.indexOf("club-shell-") === 0 ||
-                    name.indexOf("rrclub-static-mobile3-") === 0;
-                }).map(function (name) { return window.caches.delete(name); }));
-              }));
-            }
-            if ("serviceWorker" in navigator) {
-              tasks.push(navigator.serviceWorker.getRegistration().then(function (reg) {
-                return reg && reg.update();
-              }));
-            }
-            Promise.allSettled(tasks).then(function () {
-              var url = new URL(window.location.href);
-              url.searchParams.set("_rr_ui", version);
-              window.location.replace(url.toString());
-            });
-          }
-          document.addEventListener("DOMContentLoaded", function () {
-            var pending = false;
-            observer = new MutationObserver(function () {
-              if (pending || started) return;
-              pending = true;
-              setTimeout(function () { pending = false; check(); }, 200);
-            });
-            observer.observe(document.getElementById("root"), { childList: true, subtree: true });
-            check();
-          });
-        })();
-        </script>
         <script src="https://assets.emergent.sh/scripts/emergent-main.js"></script>
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
-        <div id="root"></div>
+        <div id="root">
+          <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:#F8F9FC;color:#1E1B4B;font:600 16px system-ui,sans-serif;text-align:center;padding:24px">
+            <span>R-Conekta · A iniciar aplicação</span>
+            <a href="/login" style="color:#5B21B6;font-size:14px">Abrir novamente</a>
+          </div>
+        </div>
         <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
