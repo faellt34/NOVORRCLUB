@@ -5,6 +5,7 @@ import { Outlet } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { BrandLogo } from "../BrandLogo";
 import { SidebarContent } from "./Sidebar";
+import { BottomNav } from "./BottomNav";
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -32,7 +33,7 @@ export default function AppLayout() {
         </div>
       )}
 
-      <main className="lg:pl-[268px]">
+      <main className="lg:pl-[268px] pb-24 lg:pb-0">
         <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
           <div className="flex justify-end mb-4">
             <label className="text-xs text-slate-600">Moeda dos relatórios
@@ -45,6 +46,7 @@ export default function AppLayout() {
           <details className="mt-8 rounded-xl border bg-white p-4 text-sm text-slate-600"><summary className="cursor-pointer">Segurança da conta · Associar Google</summary><p className="mt-3 text-xs">Associe uma conta Google com o mesmo email para a usar nos próximos acessos.</p><GoogleSignIn linkAccount /></details>
         </div>
       </main>
+      <BottomNav />
     </div>
   );
 }
