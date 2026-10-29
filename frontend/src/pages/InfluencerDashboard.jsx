@@ -149,7 +149,8 @@ export default function InfluencerDashboard() {
           </Select>
         </div>
       </CosmicHeader>
-          <p className="text-sm text-slate-500 mt-1">Painel de desempenho P5 confirmado por registo local, sem misturar valores de demonstração {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
+          <div className="space-y-4">
+<p className="text-sm text-slate-500 mt-1">Painel de desempenho P5 confirmado por registo local, sem misturar valores de demonstração {live && <span data-testid="influencer-live-badge" className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 live-dot" /> ao vivo</span>}</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={setPeriod}>
@@ -164,10 +165,7 @@ export default function InfluencerDashboard() {
             <Bell className="w-[18px] h-[18px] text-slate-600" />
             {unread.notifications > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">{unread.notifications}</span>}
           </Link>
-        </div>
-      </div>
-
-      <div data-testid="influencer-iban-card" className={`card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${profile && !profile.iban ? "border-l-4 border-amber-400" : ""}`}>
+<div data-testid="influencer-iban-card" className={`card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${profile && !profile.iban ? "border-l-4 border-amber-400" : ""}`}>
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
           <div>
@@ -185,7 +183,8 @@ export default function InfluencerDashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      </div>
+<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="cupons-utilizados" icon={Ticket} label="Pagamentos P5 confirmados" live={kpis.uses} format={num} flash={flash.uses} trend={kpis.trend.uses} />
         <KpiCard id="clientes-impactados" icon={Users} label="Aberturas de cupom registadas" live={kpis.customers} format={num} flash={flash.customers} trend={kpis.trend.customers} period={kpis.conversion != null ? `conversão em compra: ${String(kpis.conversion).replace(".", ",")}%` : "abriram o link/QR do cupom"} />
         <KpiCard id="qr-descarregados" icon={QrCode} label="QR codes descarregados" live={kpis.downloads || 0} format={num} flash={flash.downloads} trend={kpis.trend.downloads} period="guardaram o QR no telemóvel" />
