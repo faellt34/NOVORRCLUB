@@ -47,17 +47,7 @@ export default function PartnerDashboard() {
     if (ev.tipo === "ligado") { setLive(true); return; }
     if (ev.tipo === "desligado") { setLive(false); return; }
     if (ev.tipo === "pagamento_atualizado") { load(); return; }
-    if (ev.tipo === "redencao_registada" && ev.record) {
-      const r = ev.record;
-      setData((d) => {
-        if (!d || d.redemptions.some((x) => x.id === r.id)) return d;
-        const t = d.totals, count = t.count + 1, revenue = t.revenue + r.amount;
-        return { ...d, totals: { ...t, count, revenue, discounts: t.discounts + r.discount, commission: t.commission + r.commission, ticket: revenue / count, online_paid: (t.online_paid || 0) + (r.paid_online ? r.amount - r.discount : 0) },
-          redemptions: [{ ...r, enter: true }, ...d.redemptions].slice(0, 100) };
-      });
-      ["revenue", "count", "discounts", "commission", "ticket"].forEach(triggerFlash);
-      if (ev.origem === "qr") toast.success(`Pagamento por QR recebido · ${r.coupon} · ${eur(r.amount - r.discount)}`);
-    }
+    if (ev.tipo === "redencao_registada") { load(); return; }
   });
 
   useEffect(() => {
