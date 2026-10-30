@@ -13,6 +13,38 @@ from core import db, NO_ID, get_current_user, require_role, audit, notify, admin
 
 router = APIRouter()
 
+# Read-only reporting: preserve manual and demo history, but show as sales only
+# coupon redemptions proven paid through live Stripe Checkout sessions.
+_DEMO_INFLUENCERS = ("if1", "if2", "if3", "if4")
+_DEMO_PARTNERS = ("p1", "p2", "p3", "p4", "p5")
+_DEMO_CAMPAIGNS = ("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8")
+
+
+async def live_paid_redemptions(records, currency):
+    """Read-only: validate paid coupon ledger entries against live sessions."""
+    if not records:
+        return []
+    query = currency_query({
+        "kind": {"$in": ["coupon_pay", "pix_coupon"]},
+        "payment_status": "paid",
+        "session_id": {"$regex": "^cs_live_"},
+    }, currency)
+    fields = {"_id": 0, "id": 1, "session_id": 1, "redemption_id": 1}
+    transactions = await db.payment_transactions.find(query, fields).to_list(50000)
+    ids = {tx["redemption_id"] for tx in transactions if tx.get("redemption_id")}
+    keys = set()
+    for tx in transactions:
+        if tx.get("session_id"):
+            keys.add(tx["session_id"])  # PT coupon_pay
+        if tx.get("id"):
+            keys.add(tx["id"])  # BR pix_coupon
+            keys.add("refund-" + tx["id"])  # BR refund adjustment
+    return [
+        rec for rec in records
+        if rec.get("paid_online") is True
+        and (rec.get("id") in ids or rec.get("idempotency_key") in keys)
+    ]
+
 
 def since(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
@@ -66,6 +98,8 @@ async def influencer_dashboard(period: int = 30, user: dict = Depends(require_ro
     inf_id = user.get("influencer_id")
     reds = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period)}}, currency), NO_ID).to_list(20000)
     prev = await db.redemptions.find(currency_query({"influencer_id": inf_id, "date": {"$gte": since(period * 2), "$lt": since(period)}}, currency), NO_ID).to_list(20000)
+    reds = await live_paid_redemptions(reds, currency)
+    prev = await live_paid_redemptions(prev, currency)
     t, tp = totals(reds), totals(prev)
     camps = await enrich_campaigns(await db.campaigns.find({"influencer_id": inf_id}, NO_ID).to_list(500))
     camps = [c for c in camps if c.get("currency", "eur") == currency]
@@ -111,6 +145,7 @@ async def partner_dashboard(user: dict = Depends(require_role("partner")), curre
     partner = await partner_record(user, db)
     pid = partner["id"]
     reds = await db.redemptions.find(currency_query({"partner_id": pid}, currency), NO_ID).sort("date", -1).to_list(20000)
+    reds = await live_paid_redemptions(reds, currency)
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
@@ -130,11 +165,12 @@ async def partner_dashboard(user: dict = Depends(require_role("partner")), curre
 @router.get("/dashboard/admin")
 async def admin_dashboard(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
     reds = await db.redemptions.find(currency_query({}, currency), NO_ID).to_list(50000)
+    reds = await live_paid_redemptions(reds, currency)
     cur = [r for r in reds if r["date"] >= since(30)]
     prev = [r for r in reds if since(60) <= r["date"] < since(30)]
     t, tc, tp = totals(reds), totals(cur), totals(prev)
     camps = await enrich_campaigns(await db.campaigns.find({}, NO_ID).sort("validade", -1).to_list(50))
-    camps = [c for c in camps if c.get("currency", "eur") == currency]
+    camps = [c for c in camps if c.get("currency", "eur") == currency and c.get("id") not in _DEMO_CAMPAIGNS]
     claims = await db.coupon_claims.find(currency_query({}, currency), {"_id": 0, "origem": 1}).to_list(100000)
     clicks = len(claims)
     uses = t["count"]
@@ -143,20 +179,21 @@ async def admin_dashboard(user: dict = Depends(require_role("admin")), currency:
         origins[cl.get("origem") or "QR / direto"] += 1
     return {
         "totals": t, "trend": {"revenue": trend(tc["revenue"], tp["revenue"]), "commission": trend(tc["commission"], tp["commission"]), "count": trend(tc["count"], tp["count"])},
-        "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo"}), "partners": await db.partners.count_documents({"status": "Ativo"}),
-                   "campaigns": await db.campaigns.count_documents({"status": "Ativa"}), "users": await db.users.count_documents({})},
+        "counts": {"influencers": await db.influencers.count_documents({"status": "Ativo", "id": {"$nin": _DEMO_INFLUENCERS}}), "partners": await db.partners.count_documents({"status": "Ativo", "id": {"$nin": _DEMO_PARTNERS}}),
+                   "campaigns": await db.campaigns.count_documents({"status": "Ativa", "id": {"$nin": _DEMO_CAMPAIGNS}}), "users": await db.users.count_documents({})},
         "funnel": {"clicks": clicks, "uses": uses, "not_used": max(clicks - uses, 0), "conversion": round(uses / clicks * 100, 1) if clicks else 0, "ticket": round(t["ticket"], 2),
                    "origins": sorted([{"origem": k, "clicks": v} for k, v in origins.items()], key=lambda x: -x["clicks"])[:6]},
-        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30),
+        "campaigns": camps[:8], "chart": daily_series(cur, 30), "chart_rc": await revenue_clicks_series(30, reds, currency),
     }
 
 
-async def revenue_clicks_series(days: int):
+async def revenue_clicks_series(days: int, verified_redemptions, currency: str):
     s = since(days)
     rev, clk = defaultdict(float), defaultdict(int)
-    async for r in db.redemptions.find({"date": {"$gte": s}}, {"_id": 0, "date": 1, "amount": 1}):
-        rev[r["date"][:10]] += r.get("amount", 0)
-    async for c in db.coupon_claims.find({"date": {"$gte": s}}, {"_id": 0, "date": 1}):
+    for r in verified_redemptions:
+        if r["date"] >= s:
+            rev[r["date"][:10]] += r.get("amount", 0)
+    async for c in db.coupon_claims.find(currency_query({"date": {"$gte": s}}, currency), {"_id": 0, "date": 1}):
         clk[c["date"][:10]] += 1
     today = datetime.now(timezone.utc).date()
     return [{"date": (d := (today - timedelta(days=i)).isoformat()), "receita": round(rev.get(d, 0), 2), "cliques": clk.get(d, 0)} for i in range(days - 1, -1, -1)]
@@ -307,7 +344,8 @@ async def admin_clicks(period: str = "7", user: dict = Depends(require_role("adm
     claims = await db.coupon_claims.find(currency_query({"date": {"$gte": start}}, currency), NO_ID).sort("date", -1).to_list(100)
     if not claims:
         return {"items": [], "total": 0, "converted": 0}
-    reds = await db.redemptions.find(currency_query({"date": {"$gte": start}}, currency), {"_id": 0, "campaign_id": 1, "date": 1}).to_list(50000)
+    reds = await db.redemptions.find(currency_query({"date": {"$gte": start}}, currency), NO_ID).to_list(50000)
+    reds = await live_paid_redemptions(reds, currency)
     by_camp = defaultdict(list)
     for r in reds:
         by_camp[r["campaign_id"]].append(r["date"])
