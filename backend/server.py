@@ -23,6 +23,14 @@ from observability import RequestLogMiddleware, ensure_indexes as ensure_log_ind
 
 app = FastAPI(title="Robson Club API")
 app.add_middleware(RequestLogMiddleware)
+
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    """Lightweight liveness endpoint for the hosting platform."""
+    return {"status": "ok"}
+
+
 api_router = APIRouter(prefix="/api")
 
 
