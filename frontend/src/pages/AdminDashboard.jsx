@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   const pushAudit = (action, detail, amount, extra = {}) =>
     setAudit((prev) => [{ id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, action, detail, amount, date: new Date().toISOString(), actor: "tempo real", enter: true, ...extra }, ...prev].slice(0, 50));
 
-  const { status: wsStatus } = useRealtime((ev) => {
+  const { status: wsStatus, eventos } = useRealtime((ev) => {
     if (ev.tipo === "ligado") { setWsState("ao vivo"); return; }
     if (ev.tipo === "desligado") { setWsState("a religar"); return; }
     if (ev.tipo === "pagamento_atualizado" || ev.tipo === "reset_all" || ev.tipo === "teste_limpo") { load(); return; }
