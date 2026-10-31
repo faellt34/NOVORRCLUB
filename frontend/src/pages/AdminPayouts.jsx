@@ -40,26 +40,45 @@ export default function AdminPayouts() {
 
   if (!rows) return <PageSkeleton />;
   const shown = rows.filter((r) => filter === "todos" || r.status === filter);
-  const pending = rows.filter((r) => r.status === "Pendente").reduce((s, r) => s + r.commission, 0);
-  const unresolved = rows.filter((r) => ["Atribuição por confirmar", "Pagamento por confirmar"].includes(r.status))
-    .reduce((s, r) => s + r.commission, 0);
-  const paid = rows.filter((r) => r.status === "Pago").reduce((s, r) => s + r.commission, 0);
+  const isBrazil = reportCurrency() === "brl";
+  const pending = isBrazil
+    ? rows.reduce((sum, r) => sum + (r.awaiting_split_amount || 0), 0)
+    : rows.filter((r) => r.status === "Pendente").reduce((sum, r) => sum + r.commission, 0);
+  const unresolved = isBrazil
+    ? rows.reduce((sum, r) => sum + (r.unverified_amount || 0), 0)
+    : rows.filter((r) => ["Atribuição por confirmar", "Pagamento por confirmar"].includes(r.status))
+      .reduce((sum, r) => sum + r.commission, 0);
+  const paid = isBrazil
+    ? rows.reduce((sum, r) => sum + (r.transferred_amount || 0), 0)
+    : rows.filter((r) => r.status === "Pago").reduce((sum, r) => sum + r.commission, 0);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 data-testid="payouts-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">Pagamentos de Comissões</h1>
-          <p className="text-sm text-slate-500 mt-1">{reportCurrency() === "brl" ? "Comissões Pix com divisão automática: confira os repasses na Stripe antes de qualquer ação manual." : "Comissões sem provas suficientes ficam bloqueadas. A marcação manual não comprova um payout bancário."}</p>
+          <p className="text-sm text-slate-500 mt-1">{reportCurrency() === "brl" ? "Comissões Pix conciliadas por pagamento e transferência Stripe Connect. Depósitos bancários continuam sujeitos ao calendário automático da Stripe." : "Comissões sem provas suficientes ficam bloqueadas. A marcação manual não comprova um payout bancário."}</p>
         </div>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger data-testid="payouts-filter" className="w-[160px] bg-white rounded-xl"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
-            <SelectItem value="Pendente">Pendentes conciliados</SelectItem>
-            {reportCurrency() === "eur" && <SelectItem value="Atribuição por confirmar">Atribuição por confirmar</SelectItem>}
-            {reportCurrency() === "eur" && <SelectItem value="Pagamento por confirmar">Pagamento por confirmar</SelectItem>}
-            <SelectItem value="Pago">Declarados pagos</SelectItem>
+            {isBrazil ? (
+              <>
+                <SelectItem value="Transferido para Connect">Transferido para Connect</SelectItem>
+                <SelectItem value="Pagamento por confirmar">Pagamento por confirmar</SelectItem>
+                <SelectItem value="Divisão pendente">Divisão pendente</SelectItem>
+                <SelectItem value="Parcialmente conciliado">Parcialmente conciliado</SelectItem>
+                <SelectItem value="Em revisão">Em revisão</SelectItem>
+              </>
+            ) : (
+              <>
+                <SelectItem value="Pendente">Pendentes conciliados</SelectItem>
+                <SelectItem value="Atribuição por confirmar">Atribuição por confirmar</SelectItem>
+                <SelectItem value="Pagamento por confirmar">Pagamento por confirmar</SelectItem>
+                <SelectItem value="Pago">Declarados pagos</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -67,22 +86,20 @@ export default function AdminPayouts() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-pending-total">
           <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="w-5 h-5" /></span>
-          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+pending.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Por pagar (conciliado)</p></div>
+          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+pending.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{isBrazil ? "Divisão Connect pendente" : "Por pagar (conciliado)"}</p></div>
         </div>
-        {reportCurrency() === "eur" && (
-          <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-unresolved-total">
+        <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-unresolved-total">
             <span className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
               <Clock className="w-5 h-5" />
             </span>
             <div>
               <p className="font-display text-2xl font-extrabold text-slate-900">{eur(+unresolved.toFixed(2))}</p>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Por reconciliar</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{isBrazil ? "Pagamentos por confirmar" : "Por reconciliar"}</p>
             </div>
-          </div>
-        )}
+        </div>
         <div className="card-soft p-5 flex items-center gap-4" data-testid="payouts-paid-total">
           <span className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center"><Wallet className="w-5 h-5" /></span>
-          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+paid.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Declarado como pago</p></div>
+          <div><p className="font-display text-2xl font-extrabold text-slate-900">{eur(+paid.toFixed(2))}</p><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{isBrazil ? "Transferido para Connect" : "Declarado como pago"}</p></div>
         </div>
       </div>
 
@@ -115,7 +132,9 @@ export default function AdminPayouts() {
                     <td className="py-3 pr-4 text-slate-600">{num(r.count)}</td>
                     <td className="py-3 pr-4 font-bold text-purple-700">{eur(r.commission)}</td>
                     <td className="py-3 pr-4">
-                      {r.status === "Pago"
+                      {r.status === "Transferido para Connect"
+                        ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Transferido para Connect · banco por confirmar</span>
+                        : r.status === "Pago"
                         ? <span data-testid={`payout-status-${key}`} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full"><CheckCircle2 className="w-3 h-3" /> Declarado em {new Date(r.paid_at).toLocaleDateString("pt-PT")} · banco não verificado</span>
                         : <div data-testid={`payout-status-${key}`} className="text-xs text-amber-700">
                             <span className="inline-flex items-center gap-1 font-semibold bg-amber-50 px-2.5 py-1 rounded-full">
@@ -125,7 +144,7 @@ export default function AdminPayouts() {
                           </div>}
                     </td>
                     <td className="py-3 text-right">
-                      {reportCurrency() === "brl" ? <span className="text-xs text-slate-500">Conciliação automática Stripe</span> : r.status === "Pendente"
+                      {reportCurrency() === "brl" ? <span className="text-xs text-slate-500">Sem repasse manual · Stripe Connect</span> : r.status === "Pendente"
                         ? <button data-testid={`mark-paid-${key}`} disabled={busy === key || (reportCurrency() === "eur" && !r.attribution_verified)} onClick={() => markPaid(r)} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-semibold btn-press">Declarar pagamento manual</button>
                         : <button data-testid={`revert-paid-${key}`} disabled={busy === key} onClick={() => revert(r)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold btn-press"><Undo2 className="w-3 h-3" /> Reverter</button>}
                     </td>
