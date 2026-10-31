@@ -119,6 +119,58 @@ class CheckoutCharge(BaseModel):
     email: str | None = None
 
 
+
+
+@router.get("/admin/p5/recipient-diagnostic")
+async def p5_recipient_diagnostic(code: str, user: dict = Depends(require_role("admin"))):
+    """Read-only: explain campaign recipient gates without starting any payment."""
+    campaign = await db.campaigns.find_one({"cupom": code.strip().upper()}, NO_ID)
+    if not campaign:
+        raise HTTPException(404, "Campanha não encontrada")
+    partner = await db.partners.find_one({"id": campaign.get("parceiro_id")}, NO_ID)
+    influencer = await db.influencers.find_one({"id": campaign.get("influencer_id")}, NO_ID)
+    currency = str(campaign.get("currency") or (partner or {}).get("currency") or "eur").lower()
+    result = {
+        "coupon": campaign.get("cupom"), "currency": currency,
+        "campaign_active": campaign.get("status") == "Ativa",
+        "partner_found": bool(partner), "influencer_found": bool(influencer),
+        "currency_enabled": currency_enabled(currency),
+        "checkout_globally_enabled": checkout_globally_enabled(currency),
+        "payment_started": False,
+        "stripe_operation": "read_only",
+    }
+    if currency == "brl":
+        from routes_pix import verify_accounts
+        result["partner_account_linked"] = bool((partner or {}).get("pix_stripe_account_id"))
+        result["influencer_account_linked"] = bool((influencer or {}).get("pix_stripe_account_id"))
+        if partner and influencer and result["partner_account_linked"] and result["influencer_account_linked"]:
+            try:
+                await verify_accounts(partner, influencer)
+                result["recipients_ready"] = True
+                result["reason"] = "ready"
+            except HTTPException as exc:
+                result["recipients_ready"] = False
+                result["reason"] = (exc.headers or {}).get("X-RRClub-Reason") or ("stripe_unavailable" if exc.status_code in (502, 503) else "connect_checks_failed")
+        else:
+            result["recipients_ready"] = False
+            result["reason"] = "missing_recipient_or_account_link"
+    elif currency == "eur":
+        from pt_split import automatic, recipients_ready
+        result["automatic_split_enabled"] = bool(automatic())
+        if partner and influencer:
+            status = await recipients_ready(partner["id"], influencer["id"])
+            result["recipients_ready"] = bool(status.get("ok"))
+            result["reason"] = status.get("reason")
+            result["partner_reason"] = (status.get("partner") or {}).get("reason")
+            result["influencer_reason"] = (status.get("influencer") or {}).get("reason")
+        else:
+            result["recipients_ready"] = False
+            result["reason"] = "missing_recipient"
+    else:
+        result["recipients_ready"] = False
+        result["reason"] = "unsupported_currency"
+    return result
+
 @router.get("/public/p5/config")
 async def p5_config():
     return {
