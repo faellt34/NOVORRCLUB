@@ -1,0 +1,48 @@
+name: Validate P5 diagnostic (no payment calls)
+on:
+  pull_request:
+    paths:
+      - 'backend/p5_checkout.py'
+      - 'backend/routes_pix.py'
+      - 'backend/pt_split.py'
+      - 'backend/payments/pix/checks.py'
+      - '.github/workflows/p5-diagnostic-check.yml'
+  workflow_dispatch:
+jobs:
+  syntax-and-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile P5 and recipient checks without importing modules
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          files = [
+              'backend/p5_checkout.py',
+              'backend/routes_pix.py',
+              'backend/pt_split.py',
+              'backend/payments/pix/checks.py',
+          ]
+          for file in files:
+              ast.parse(Path(file).read_text(encoding='utf-8'), filename=file)
+              print(f'PASS syntax: {file}')
+          PY
+      - name: Verify diagnostic is read-only and admin only
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          module = ast.parse(Path('backend/p5_checkout.py').read_text(encoding='utf-8'))
+          fn = next((node for node in module.body if isinstance(node, ast.AsyncFunctionDef) and node.name == 'p5_recipient_diagnostic'), None)
+          assert fn is not None, 'Diagnostic endpoint missing'
+          src = ast.get_source_segment(Path('backend/p5_checkout.py').read_text(encoding='utf-8'), fn)
+          assert 'Depends(require_role("admin"))' in src, 'Missing admin authentication'
+          forbidden = ['Session.create(', '_checkout(', 'insert_one(', 'update_one(', 'Transfer.create(', 'PaymentIntent.create(']
+          assert not any(x in src for x in forbidden), 'Write/payment side-effect found in diagnostic'
+          assert 'currency == "brl"' in src and 'currency == "eur"' in src, 'Missing currency branch'
+          print('PASS diagnostic security and both currencies')
+          PY
