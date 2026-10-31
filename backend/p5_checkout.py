@@ -169,6 +169,20 @@ async def p5_recipient_diagnostic(code: str, user: dict = Depends(require_role("
     else:
         result["recipients_ready"] = False
         result["reason"] = "unsupported_currency"
+    result["checkout_ready"] = bool(
+        result["campaign_active"] and result["partner_found"]
+        and result["influencer_found"] and result["currency_enabled"]
+        and result["checkout_globally_enabled"] and result["recipients_ready"]
+        and (currency != "eur" or result.get("automatic_split_enabled"))
+    )
+    if not result["checkout_globally_enabled"]:
+        result["blocking_gate"] = "platform_checkout_configuration"
+    elif not result["recipients_ready"]:
+        result["blocking_gate"] = "connected_recipient_verification"
+    elif not result["checkout_ready"]:
+        result["blocking_gate"] = "campaign_or_currency_configuration"
+    else:
+        result["blocking_gate"] = None
     return result
 
 @router.get("/public/p5/config")
