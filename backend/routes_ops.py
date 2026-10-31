@@ -3,6 +3,7 @@ from payment_policy import reporting_currency, currency_query
 import os
 import secrets
 import io
+from decimal import Decimal, ROUND_HALF_UP
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -42,16 +43,70 @@ async def _eur_payout_sources(reds):
     return camps, infs, transactions
 
 
+
+async def _brl_payout_sources(reds):
+    """Dados financeiros já registados pelo webhook Pix; leitura apenas."""
+    keys = sorted({r.get("idempotency_key") for r in reds
+                   if r.get("paid_online") is True and r.get("idempotency_key")})
+    result = {}
+    for pos in range(0, len(keys), 500):
+        cursor = db.payment_transactions.find(
+            {"id": {"$in": keys[pos:pos + 500]}, "kind": "pix_coupon", "currency": "brl"},
+            {"_id": 0, "id": 1, "kind": 1, "currency": 1, "influencer_id": 1,
+             "campaign_id": 1, "partner_id": 1, "coupon": 1, "payment_status": 1,
+             "stripe_payment_intent_id": 1, "split_status": 1,
+             "influencer_transfer_id": 1, "influencer_transfer_status": 1,
+             "influencer_cents": 1, "refunded_cents": 1, "dispute_hold": 1},
+        )
+        async for tx in cursor:
+            result[tx["id"]] = tx
+    return result
+
+
+def _brl_payout_evidence(rec, tx):
+    """Nunca transforma uma redenção manual em comissão pagável."""
+    if rec.get("is_refund") or rec.get("dispute_hold") or rec.get("attribution_hold"):
+        return "review", "Reembolso, contestação ou atribuição em revisão"
+    if rec.get("paid_online") is not True or rec.get("automatic_split") is not True:
+        return "unverified", "Redenção sem pagamento Pix comprovado"
+    if not tx or tx.get("payment_status") != "paid":
+        return "unverified", "Pagamento Pix não confirmado"
+    if (tx.get("influencer_id") != rec.get("influencer_id")
+            or tx.get("campaign_id") != rec.get("campaign_id")
+            or tx.get("partner_id") != rec.get("partner_id")
+            or tx.get("coupon") != rec.get("coupon")):
+        return "unverified", "Pagamento pertence a outro beneficiário ou campanha"
+    if tx.get("dispute_hold") or tx.get("refunded_cents"):
+        return "review", "Pagamento reembolsado ou contestado"
+    if not str(tx.get("stripe_payment_intent_id") or "").startswith("pi_"):
+        return "unverified", "Referência Stripe do pagamento em falta"
+    cents = int((Decimal(str(rec.get("commission") or 0)) * 100).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP))
+    if cents <= 0 or cents != tx.get("influencer_cents"):
+        return "unverified", "Comissão não corresponde ao pagamento Pix"
+    if (tx.get("split_status") == "completed"
+            and tx.get("influencer_transfer_status") == "completed"
+            and str(tx.get("influencer_transfer_id") or "").startswith("tr_")):
+        return "transferred", None
+    return "awaiting_split", "Pix pago; transferência Connect por confirmar"
+
+
 @router.get("/admin/payouts")
 async def payouts_overview(user: dict = Depends(require_role("admin")), currency: str = Depends(reporting_currency)):
     reds = await db.redemptions.find(currency_query({}, currency), {
         "influencer_id": 1, "influencer": 1, "date": 1, "commission": 1,
         "campaign_id": 1, "partner_id": 1, "coupon": 1, "idempotency_key": 1,
-        "attribution_hold": 1,
+        "attribution_hold": 1, "automatic_split": 1,
         "paid_online": 1, "is_refund": 1, "dispute_hold": 1, "_id": 0
     }).to_list(100000)
     camps, infs, txs = await _eur_payout_sources(reds) if currency == "eur" else ({}, {}, {})
-    agg = defaultdict(lambda: {"commission": 0.0, "count": 0, "reasons": set(), "coupons": set()})
+    pix_txs = await _brl_payout_sources(reds) if currency == "brl" else {}
+    agg = defaultdict(lambda: {
+        "commission": 0.0, "count": 0, "reasons": set(), "coupons": set(),
+        "transferred_cents": 0, "awaiting_split_cents": 0,
+        "unverified_cents": 0, "held_cents": 0,
+        "transferred_count": 0, "active_count": 0, "review_count": 0,
+    })
     names = {}
     for r in reds:
         if not r.get("date"):
@@ -68,16 +123,51 @@ async def payouts_overview(user: dict = Depends(require_role("admin")), currency
             reason = payout_evidence(r, camps, infs, txs)
             if reason:
                 entry["reasons"].add(reason)
+        else:
+            category, reason = _brl_payout_evidence(r, pix_txs.get(r.get("idempotency_key")))
+            if reason:
+                entry["reasons"].add(reason)
+            cents = max(0, int((Decimal(str(r.get("commission") or 0)) * 100).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP)))
+            if not r.get("is_refund"):
+                entry["active_count"] += 1
+            if category == "transferred":
+                entry["transferred_cents"] += cents
+                entry["transferred_count"] += 1
+            elif category == "awaiting_split":
+                entry["awaiting_split_cents"] += cents
+            elif category == "review":
+                entry["held_cents"] += cents
+                entry["review_count"] += 1
+            else:
+                entry["unverified_cents"] += cents
     paid = {(p["influencer_id"], p["month"]): p async for p in db.payouts.find(currency_query({}, currency), NO_ID)}
-    # Não devolver IBAN completo ao ecrã. Mostrar apenas os últimos quatro dígitos.
     ibans = {i["id"]: i.get("iban") async for i in db.influencers.find(
         {}, {"id": 1, "iban": 1, "_id": 0}
     )}
     rows = []
     for (inf, month), v in agg.items():
         p = paid.get((inf, month))
-        reasons = sorted(v["reasons"]) if currency == "eur" else []
+        reasons = sorted(v["reasons"])
         resolved_name = infs.get(inf, {}).get("nome") if currency == "eur" else names.get(inf)
+        if currency == "eur":
+            status = payout_status(reasons, has_manual_record=bool(p))
+            audit_reasons = [REASONS.get(reason, reason) for reason in reasons]
+        elif v["review_count"]:
+            status = "Em revisão"
+            audit_reasons = reasons
+        elif v["transferred_count"] == v["active_count"] and v["active_count"]:
+            status = "Transferido para Connect"
+            audit_reasons = reasons
+        elif v["transferred_count"]:
+            status = "Parcialmente conciliado"
+            audit_reasons = reasons
+        elif v["awaiting_split_cents"] and not v["unverified_cents"]:
+            status = "Divisão pendente"
+            audit_reasons = reasons
+        else:
+            status = "Pagamento por confirmar"
+            audit_reasons = reasons
         rows.append({
             "influencer_id": inf,
             "influencer": resolved_name or "Beneficiário por confirmar",
@@ -85,19 +175,24 @@ async def payouts_overview(user: dict = Depends(require_role("admin")), currency
             "commission": round(v["commission"], 2),
             "count": v["count"],
             "coupons": sorted(v["coupons"]),
-            "attribution_verified": not reasons if currency == "eur" else bool(inf),
-            "audit_reasons": [REASONS.get(reason, reason) for reason in reasons],
-            "status": payout_status(reasons, has_manual_record=bool(p)) if currency == "eur"
-                      else ("Pago" if p else "Pendente"),
-            "paid_at": p.get("paid_at") if p else None,
-            "note": p.get("note") if p else None,
+            "attribution_verified": not reasons if currency == "eur"
+                                    else status == "Transferido para Connect",
+            "audit_reasons": audit_reasons,
+            "status": status,
+            "paid_at": p.get("paid_at") if p and currency == "eur" else None,
+            "note": p.get("note") if p and currency == "eur" else None,
             "iban_last4": (ibans.get(inf) or "")[-4:] or None,
-            "settlement_proof": "manual_record_only" if p else "not_verified",
+            "transferred_amount": v["transferred_cents"] / 100 if currency == "brl" else 0,
+            "awaiting_split_amount": v["awaiting_split_cents"] / 100 if currency == "brl" else 0,
+            "unverified_amount": (v["unverified_cents"] + v["held_cents"]) / 100 if currency == "brl" else 0,
+            "settlement_proof": ("stripe_connect_transfer_recorded" if status == "Transferido para Connect"
+                                 else "not_verified") if currency == "brl"
+                                else ("manual_record_only" if p else "not_verified"),
+            "bank_payout_verified": False,
             "currency": currency,
         })
     rows.sort(key=lambda r: (r["month"], r["influencer"]), reverse=True)
     return rows
-
 
 class PayoutIn(BaseModel):
     influencer_id: str
