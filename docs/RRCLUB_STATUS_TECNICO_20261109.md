@@ -7,9 +7,9 @@ Esta é uma **avaliação ponderada de engenharia**, NÃO uma medição automát
 ## Evidências verificadas em GitHub
 
 Branch: `release/rrclub-20261109-predeploy`.
-Testes offline de Python/financeiro/perfis: **105 aprovados + 20 subtestes**; rota de CI:
-`https://github.com/faellt34/NOVORRCLUB/actions/runs/42555124769`.
-React/Jest: **48 testes aprovados em 11 suítes**:
+Testes offline de Python/financeiro/perfis: **127 aprovados + 20 subtestes**; rota de CI:
+`https://github.com/faellt34/NOVORRCLUB/actions/runs/42556319843`.
+React/Jest: **48 testes aprovados em 11 suítes**; proteção do login Google e associações adicionada à bateria Python:
 `https://github.com/faellt34/NOVORRCLUB/actions/runs/42555214677`.
 Build React e verificações estáticas: ver workflow
 `https://github.com/faellt34/NOVORRCLUB/actions/workflows/rrclub-release-20261109.yml`.
@@ -23,7 +23,7 @@ Todos esses testes são executados **sem chaves de produção, cobranças ou rep
 | Código base: contas, campanhas, QR, P5 | 20 | 18 | Código presente; integração total no servidor não verificada |
 | Autenticação, autorização e isolamento | 15 | 12 | Correção preparada, mas uma credencial antiga esteve exposta no histórico Git; rotação e revisão na produção pendentes |
 | Interface e experiência | 15 | 13 | 48 testes React aprovados; aparência/dispositivos reais não avaliados |
-| Qualidade e regressões automatizadas | 20 | 18 | 105 testes Python + 20 subtestes, 48 testes React; não são end-to-end reais |
+| Qualidade e regressões automatizadas | 20 | 18 | 127 testes Python + 20 subtestes, 48 testes React; não são end-to-end reais |
 | Publicação, observabilidade e integração real | 15 | 7 | Artefacto e plano de deploy preparados; commit do workspace Emergent desconhecido |
 | Comprovação de liquidação financeira em produção | 10 | 0 | Sem evidência auditável conjunta de pagamento real + webhook + repasses aos dois destinatários |
 | Recuperação e proteção de versões | 5 | 4 | Backups GitHub confirmados; snapshot do workspace/banco ainda não confirmado |
