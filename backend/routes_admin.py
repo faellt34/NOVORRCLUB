@@ -87,6 +87,8 @@ async def prepare(kind: str, data: dict, creating: bool) -> dict:
             data["avatar"] = data.get("avatar") or f"https://i.pravatar.cc/80?u={data.get('email')}"
             data["created_at"] = now_iso()
         elif pwd:
+            if not re.fullmatch(r"(?=.*[A-Za-z])(?=.*\d).{8,128}", str(pwd)):
+                raise HTTPException(422, "A nova palavra-passe deve ter de 8 a 128 caracteres, com letras e números")
             data["password_hash"] = hash_password(pwd)
     return data
 
