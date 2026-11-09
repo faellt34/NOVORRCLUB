@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, Briefcase } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, Briefcase, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { useT } from "../../context/I18nContext";
@@ -10,6 +10,7 @@ import { FeedbackDialog } from "../FeedbackDialog";
 import { LanguageSwitcher } from "../LanguageSwitcher";
 import { InstallAppButton } from "../InstallAppButton";
 import { GlobeCanvas } from "../GlobeCanvas";
+import ProfilePhotoDialog from "../ProfilePhotoDialog";
 
 const MENUS = {
   influencer: [
@@ -48,6 +49,7 @@ export const SidebarContent = ({ onNavigate }) => {
   const navigate = useNavigate();
   const [referralOpen, setReferralOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const items = MENUS[user.role];
   const RoleIcon = ROLE_ICONS[user.role];
 
@@ -80,6 +82,12 @@ export const SidebarContent = ({ onNavigate }) => {
             <p data-testid="sidebar-user-name" className="text-sm font-semibold text-white truncate">{user.nome}</p>
             <p data-testid="sidebar-user-role" className="text-xs text-indigo-200/70 truncate flex items-center gap-1"><RoleIcon className="w-3 h-3" /> {ROLE_LABEL[user.role]} · {user.handle || user.email}</p>
           </div>
+          {(user.role === "partner" || user.role === "influencer") && (
+            <button type="button" onClick={() => setPhotoOpen(true)}
+              className="shrink-0 p-2 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10"
+              aria-label="Alterar fotografia do perfil" title="Alterar fotografia"
+              data-testid="sidebar-change-avatar"><Camera className="h-4 w-4" /></button>
+          )}
         </div>
       </div>
 
@@ -117,6 +125,7 @@ export const SidebarContent = ({ onNavigate }) => {
             <button data-testid="referral-button" onClick={() => setReferralOpen(true)} className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold btn-press">{t("referNow")}</button>
           </div>
         )}
+        <ProfilePhotoDialog open={photoOpen} onOpenChange={setPhotoOpen} />
         <ReferralDialog open={referralOpen} onOpenChange={setReferralOpen} />
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <div className="flex items-center justify-between gap-2">
