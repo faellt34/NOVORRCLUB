@@ -1,0 +1,77 @@
+name: RRClub release 2026-11-09 predeploy gate
+on:
+  push:
+    branches: [release/rrclub-20261109-predeploy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-image-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only offline test dependencies
+        run: pip install "pillow>=10,<13" "fastapi>=0.110,<1"
+      - name: Run release contract guards (no network payments)
+        run: python scripts/rrclub_release_static_guard.py
+      - name: Validate image format, limits, resize and cover
+        run: |
+          python - <<'PY'
+          import io, ast
+          from pathlib import Path
+          from PIL import Image, ImageOps, UnidentifiedImageError
+          from fastapi import HTTPException
+          source = Path("backend/routes_profile.py").read_text()
+          nodes = ast.parse(source).body
+          fn = next(n for n in nodes if isinstance(n, ast.FunctionDef) and n.name == "prepare_photo")
+          env = dict(
+              io=io, Image=Image, ImageOps=ImageOps,
+              UnidentifiedImageError=UnidentifiedImageError,
+              HTTPException=HTTPException, MAX_UPLOAD=3*1024*1024, MAX_PIXELS=16_000_000,
+          )
+          exec(compile(ast.Module(body=[fn], type_ignores=[]), "isolated", "exec"), env)
+          conv = env["prepare_photo"]
+          for fmt in ("JPEG", "PNG", "WEBP"):
+              img = Image.new("RGB", (1600, 1000), "blue")
+              stream = io.BytesIO()
+              img.save(stream, format=fmt)
+              avatar = conv(stream.getvalue())
+              cover = conv(stream.getvalue(), True)
+              with Image.open(io.BytesIO(avatar)) as x:
+                  assert max(x.size) <= 640 and x.format == "JPEG"
+              with Image.open(io.BytesIO(cover)) as x:
+                  assert x.size == (1200, 675) and x.format == "JPEG"
+          for raw, expected in ((b"bad",415),(b"x"*(3*1024*1024+1),413)):
+              try:
+                  conv(raw)
+              except HTTPException as e:
+                  assert e.status_code == expected
+              else:
+                  raise AssertionError("Unsafe input accepted")
+          print("PASS JPEG/PNG/WEBP, cover, max-size, invalid files")
+          PY
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Build React without real backend
+        env:
+          CI: "false"
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build
