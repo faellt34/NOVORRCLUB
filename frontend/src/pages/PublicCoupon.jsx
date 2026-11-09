@@ -154,6 +154,7 @@ export default function PublicCoupon() {
         {c && (
           <div className="w-full max-w-md fade-up">
             <div className="rounded-3xl bg-white text-slate-900 overflow-hidden shadow-2xl shadow-purple-900/40" data-testid="public-coupon-card">
+              {c.cover_image && <img src={c.cover_image} alt={`Imagem do estabelecimento ${c.parceiro}`} className="w-full h-44 sm:h-52 object-cover" loading="lazy" />}
               <div className="p-6 bg-gradient-to-br from-purple-600 to-purple-800 text-white">
                 <div className="flex items-center gap-3 mb-4">
                   {c.influencer_avatar && <img src={c.influencer_avatar} alt="" className="w-11 h-11 rounded-full border-2 border-white/40 object-cover" />}
