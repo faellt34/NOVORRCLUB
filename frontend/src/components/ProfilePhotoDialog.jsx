@@ -5,8 +5,9 @@ import { api, apiError } from "../lib/api";
 import { useApp } from "../context/AppContext";
 import { toast } from "sonner";
 
-export default function ProfilePhotoDialog({ open, onOpenChange }) {
+export default function ProfilePhotoDialog({ open, onOpenChange, kind = "avatar" }) {
   const { user, refreshUser } = useApp();
+  const cover = kind === "cover";
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,9 +31,9 @@ export default function ProfilePhotoDialog({ open, onOpenChange }) {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post("/profile/avatar", form);
+      await api.post(cover ? "/profile/cover" : "/profile/avatar", form);
       await refreshUser();
-      toast.success("Fotografia atualizada no perfil e nas campanhas");
+      toast.success(cover ? "Capa do estabelecimento atualizada" : "Fotografia atualizada no perfil e nas campanhas");
       setFile(null);
       onOpenChange(false);
     } catch (error) {
@@ -61,20 +62,22 @@ export default function ProfilePhotoDialog({ open, onOpenChange }) {
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="sm:max-w-md" data-testid="profile-photo-dialog">
         <DialogHeader>
-          <DialogTitle>Fotografia do perfil</DialogTitle>
+          <DialogTitle>{cover ? "Capa do estabelecimento" : "Fotografia do perfil"}</DialogTitle>
           <DialogDescription>
-            {user?.role === "partner"
-              ? "Escolha a imagem ou logótipo do estabelecimento. Será apresentada nos cupões associados."
-              : "Escolha a sua fotografia. Será apresentada no perfil e nas campanhas associadas."}
+            {cover
+              ? "Escolha uma fotografia do restaurante, hotel ou estabelecimento para aparecer nas campanhas."
+              : user?.role === "partner"
+                ? "Escolha a imagem ou logótipo do estabelecimento. Será apresentada nos cupões associados."
+                : "Escolha a sua fotografia. Será apresentada no perfil e nas campanhas associadas."}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-3">
           <div className="relative">
-            {preview || user?.avatar ? (
-              <img src={preview || user.avatar} alt="Pré-visualização da fotografia"
-                className="h-28 w-28 rounded-full object-cover ring-4 ring-indigo-100" />
+            {preview || (cover ? user?.cover_image : user?.avatar) ? (
+              <img src={preview || (cover ? user?.cover_image : user?.avatar)} alt="Pré-visualização da fotografia"
+                className={cover ? "h-36 w-full rounded-xl object-cover ring-4 ring-indigo-100" : "h-28 w-28 rounded-full object-cover ring-4 ring-indigo-100"} />
             ) : (
-              <div className="h-28 w-28 rounded-full bg-slate-100 flex items-center justify-center">
+              <div className={cover ? "h-36 w-full rounded-xl bg-slate-100 flex items-center justify-center" : "h-28 w-28 rounded-full bg-slate-100 flex items-center justify-center"}>
                 <Camera className="h-9 w-9 text-slate-400" />
               </div>
             )}
@@ -84,7 +87,7 @@ export default function ProfilePhotoDialog({ open, onOpenChange }) {
             <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
               onChange={choose} disabled={busy} data-testid="profile-photo-input" />
           </label>
-          <p className="text-center text-xs text-slate-500">JPG, PNG ou WebP · até 3 MB · imagem quadrada recomendada</p>
+          <p className="text-center text-xs text-slate-500">{cover ? "JPG, PNG ou WebP · até 3 MB · formato horizontal recomendado" : "JPG, PNG ou WebP · até 3 MB · imagem quadrada recomendada"}</p>
           <button type="button" onClick={upload} disabled={!file || busy}
             data-testid="profile-photo-save"
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-indigo-700">
