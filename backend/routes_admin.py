@@ -81,7 +81,9 @@ async def prepare(kind: str, data: dict, creating: bool) -> dict:
             data["email"] = data["email"].strip().lower()
         pwd = data.pop("password", None)
         if creating:
-            data["password_hash"] = hash_password(pwd or "robson123")
+            if not pwd or not re.fullmatch(r"(?=.*[A-Za-z])(?=.*\\d).{8,128}", str(pwd)):
+                raise HTTPException(422, "Defina uma palavra-passe de 8 a 128 caracteres, com letras e números")
+            data["password_hash"] = hash_password(pwd)
             data["avatar"] = data.get("avatar") or f"https://i.pravatar.cc/80?u={data.get('email')}"
             data["created_at"] = now_iso()
         elif pwd:
