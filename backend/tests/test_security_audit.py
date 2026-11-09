@@ -3,20 +3,33 @@ import os
 import requests
 import pytest
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://robson-dashboard.preview.emergentagent.com").rstrip("/")
+# Explicit staging-only opt-in; never contact the official RRClub domain in CI.
+BASE = os.environ.get("RRCLUB_REMOTE_AUDIT_TEST_URL", "").rstrip("/")
+ALLOW_REMOTE = (
+    os.environ.get("RRCLUB_ENABLE_REMOTE_AUDIT_TESTS") == "yes"
+    and BASE.startswith("https://")
+    and "rrclub.online" not in BASE.lower()
+)
+pytestmark = pytest.mark.skipif(
+    not ALLOW_REMOTE, reason="Remote audit tests require explicit nonproduction opt-in"
+)
 HEADERS_UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
 
 @pytest.fixture(scope="module")
 def admin_token():
-    r = requests.post(f"{BASE}/api/auth/login", json={"email": "faellt@gmail.com", "password": "Robson2026!"}, headers=HEADERS_UA)
+    if not os.environ.get("RRCLUB_TEST_ADMIN_EMAIL") or not os.environ.get("RRCLUB_TEST_ADMIN_PASSWORD"):
+        pytest.skip("No staging admin credentials provided")
+    r = requests.post(f"{BASE}/api/auth/login", json={"email": os.environ["RRCLUB_TEST_ADMIN_EMAIL"], "password": os.environ["RRCLUB_TEST_ADMIN_PASSWORD"]}, headers=HEADERS_UA)
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
 
 @pytest.fixture(scope="module")
 def partner_token():
-    r = requests.post(f"{BASE}/api/auth/login", json={"email": "parceiro.exemplo@club.pt", "password": "parceiro123"}, headers=HEADERS_UA)
+    if not os.environ.get("RRCLUB_TEST_PARTNER_EMAIL") or not os.environ.get("RRCLUB_TEST_PARTNER_PASSWORD"):
+        pytest.skip("No staging partner credentials provided")
+    r = requests.post(f"{BASE}/api/auth/login", json={"email": os.environ["RRCLUB_TEST_PARTNER_EMAIL"], "password": os.environ["RRCLUB_TEST_PARTNER_PASSWORD"]}, headers=HEADERS_UA)
     if r.status_code != 200:
         pytest.skip("partner login failed")
     return r.json()["token"]
