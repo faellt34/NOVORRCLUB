@@ -110,7 +110,8 @@ export default function AdminManage() {
     e.preventDefault();
     const missing = cfg.fields.filter((f) => !f.optional && !String(form[f.key] ?? "").trim());
     if (missing.length) { toast.error(`Preencha: ${missing.map((f) => f.label).join(", ")}`); return; }
-    if (tab === "usuarios" && dialog?.mode === "create" && !/^(?=.*[A-Za-z])(?=.*\d).{8,128}$/.test(String(form.password || ""))) {
+    if (tab === "usuarios" && (dialog?.mode === "create" || String(form.password || "").length > 0)
+      && !/^(?=.*[A-Za-z])(?=.*\d).{8,128}$/.test(String(form.password || ""))) {
       toast.error("Defina uma palavra-passe com pelo menos 8 caracteres, letras e números");
       return;
     }
