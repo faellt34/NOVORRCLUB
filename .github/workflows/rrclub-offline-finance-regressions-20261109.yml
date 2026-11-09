@@ -38,4 +38,4 @@ jobs:
             "mongomock-motor>=0.0.30" "pillow>=10,<13"
       - name: Run mocked Pix, payout, webhook and Portuguese split regressions
         run: |
-          python -m pytest -q tests/test_pix_service.py tests/test_pix_readiness.py tests/test_pt_split.py tests/test_p5_rules.py tests/test_p5_activation_policy.py tests/test_payout_attribution.py tests/test_p5_account_audit_readonly.py tests/test_p5_pt_mbway_checkout_no_downgrade.py tests/test_profile_upload_offline.py
+          python -m pytest -q tests/test_pix_service.py tests/test_pix_readiness.py tests/test_pt_split.py tests/test_p5_rules.py tests/test_p5_activation_policy.py tests/test_payout_attribution.py tests/test_p5_account_audit_readonly.py tests/test_p5_pt_mbway_checkout_no_downgrade.py tests/test_profile_upload_offline.py tests/test_google_login.py tests/test_partner_association_repairs.py
