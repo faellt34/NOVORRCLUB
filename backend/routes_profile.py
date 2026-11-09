@@ -23,7 +23,7 @@ ENTITY_ID = re.compile(r"^[A-Za-z0-9_-]{2,80}$")
 PHOTO_ID = re.compile(r"^[a-f0-9]{32}$")
 
 
-def prepare_photo(data: bytes) -> bytes:
+def prepare_photo(data: bytes, cover: bool = False) -> bytes:
     if not data or len(data) > MAX_UPLOAD:
         raise HTTPException(413, "Fotografia demasiado grande (máximo 3 MB)")
     try:
@@ -34,7 +34,10 @@ def prepare_photo(data: bytes) -> bytes:
                 raise HTTPException(413, "Dimensões da imagem demasiado grandes")
             source.load()
             photo = ImageOps.exif_transpose(source).convert("RGB")
-            photo.thumbnail((640, 640), Image.Resampling.LANCZOS)
+            if cover:
+                photo = ImageOps.fit(photo, (1200, 675), Image.Resampling.LANCZOS)
+            else:
+                photo.thumbnail((640, 640), Image.Resampling.LANCZOS)
             output = io.BytesIO()
             photo.save(output, format="JPEG", quality=85, optimize=True)
             return output.getvalue()
@@ -144,12 +147,7 @@ async def update_cover(
     await rate_limit("cover:" + user["id"], 6, 3600)
     data = await file.read(MAX_UPLOAD + 1)
     await file.close()
-    validated = await asyncio.to_thread(prepare_photo, data)
-    with Image.open(io.BytesIO(validated)) as source:
-        cover = ImageOps.fit(source, (1200, 675), Image.Resampling.LANCZOS)
-        output = io.BytesIO()
-        cover.save(output, format="JPEG", quality=85, optimize=True)
-        image = output.getvalue()
+    image = await asyncio.to_thread(prepare_photo, data, True)
 
     partner_id = user.get("partner_id")
     if not partner_id or not ENTITY_ID.fullmatch(partner_id):
