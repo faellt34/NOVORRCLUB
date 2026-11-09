@@ -391,7 +391,7 @@ async def public_coupon(code: str, request: Request):
     claims = await db.coupon_claims.count_documents({"campaign_id": c["id"]})
     p5_eligible = bool(c.get("influencer_id")) and float(c.get("desconto", -1)) == 5 and float(c.get("comissao", -1)) == 5
     return {"p5_eligible": p5_eligible, "cupom": c["cupom"], "campanha": c["nome"], "desconto": c["desconto"], "validade": c["validade"], "status": c["status"],
-            "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"),
+            "parceiro": partner.get("nome", "—"), "categoria": partner.get("categoria", ""), "cidade": partner.get("cidade", ""), "avatar": partner.get("avatar"), "cover_image": partner.get("cover_image"),
             "influencer": inf.get("nome", "—"), "influencer_handle": inf.get("handle", ""), "influencer_avatar": inf.get("avatar"), "claims": claims, "claim_id": claim_id, "currency": c.get("currency", partner.get("currency", "eur"))}
 
 
