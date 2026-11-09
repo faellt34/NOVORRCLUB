@@ -17,7 +17,7 @@ const CONFIG = {
     fields: [
       { key: "nome", label: "Nome" },
       { key: "email", label: "Email" },
-      { key: "password", label: "Palavra-passe", hideInTable: true, optional: true, placeholder: "deixe vazio para manter / padrão robson123" },
+      { key: "password", label: "Palavra-passe", hideInTable: true, optional: true, placeholder: "obrigatória ao criar · deixe vazio na edição para manter" },
       { key: "papel", label: "Papel", type: "select", options: ["Influencer", "Parceiro", "Admin"] },
       { key: "status", label: "Status", type: "select", options: ["Ativo", "Pendente", "Suspenso"] },
     ],
@@ -110,6 +110,10 @@ export default function AdminManage() {
     e.preventDefault();
     const missing = cfg.fields.filter((f) => !f.optional && !String(form[f.key] ?? "").trim());
     if (missing.length) { toast.error(`Preencha: ${missing.map((f) => f.label).join(", ")}`); return; }
+    if (tab === "usuarios" && dialog?.mode === "create" && !/^(?=.*[A-Za-z])(?=.*\\d).{8,128}$/.test(String(form.password || ""))) {
+      toast.error("Defina uma palavra-passe com pelo menos 8 caracteres, letras e números");
+      return;
+    }
     setBusy(true);
     try {
       const payload = Object.fromEntries(cfg.fields.map((f) => [f.key, form[f.key]]).filter(([k, v]) => !(k === "password" && !v)));
