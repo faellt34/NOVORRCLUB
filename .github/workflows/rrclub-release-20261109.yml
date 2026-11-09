@@ -70,6 +70,10 @@ jobs:
       - run: |
           npm install --legacy-peer-deps --no-audit --no-fund
           npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Test new partner cover behavior without backend
+        env:
+          CI: "true"
+        run: npm test -- --watch=false --runInBand src/pages/PublicCoupon.test.jsx --testNamePattern="partner cover image"
       - name: Build React without real backend
         env:
           CI: "false"
