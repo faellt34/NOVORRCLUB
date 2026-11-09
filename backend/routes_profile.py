@@ -116,3 +116,20 @@ async def public_avatar(role: str, entity_id: str, photo_id: str):
         "Cache-Control": "public, max-age=31536000, immutable",
         "X-Content-Type-Options": "nosniff",
     })
+
+
+@router.get("/admin/system/version")
+async def release_version(user: dict = Depends(require_role("admin"))):
+    """Diagnóstico da versão publicada; nunca assume a branch a partir do domínio."""
+    commit = (os.environ.get("RRCLUB_RELEASE_SHA") or os.environ.get("RENDER_GIT_COMMIT")
+              or os.environ.get("GITHUB_SHA") or os.environ.get("COMMIT_SHA") or "").strip()
+    if not re.fullmatch(r"[a-fA-F0-9]{7,40}", commit):
+        commit = None
+    return {
+        "application": "RRClub",
+        "release_sha": commit,
+        "release_identified": bool(commit),
+        "source": "runtime_environment" if commit else "unavailable",
+        "message": ("Identificador informado pelo ambiente; confirme no painel de deploy."
+                    if commit else "Versão não identificada; não inferir GitHub = produção."),
+    }
