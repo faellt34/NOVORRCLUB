@@ -98,3 +98,17 @@ test("paid receipt remains confirmed when internal transfers are pending and nev
   expect(container.querySelector('[data-testid="public-pay-polling"]')).toBeNull();
   expect(api.post).not.toHaveBeenCalled();
 });
+
+test("partner cover image is displayed without hiding the existing campaign QR", async () => {
+  api.get.mockImplementation((path) => Promise.resolve({
+    data: path.startsWith("/public/coupon/")
+      ? { ...coupon, cover_image: "https://rrclub.online/api/public/covers/partner/p-test/0123456789abcdef0123456789abcdef.jpg" }
+      : { payment_status: "pending", coupon: "ROBSON", currency: "brl" },
+  }));
+  await act(async () => { root.render(<PublicCoupon />); });
+  await flush();
+  const picture = container.querySelector('img[alt="Imagem do estabelecimento Loja"]');
+  expect(picture).not.toBeNull();
+  expect(picture.getAttribute("src")).toContain("/public/covers/partner/");
+  expect(container.querySelector('[data-testid="public-coupon-qr"]')).not.toBeNull();
+});
