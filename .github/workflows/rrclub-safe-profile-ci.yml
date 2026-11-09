@@ -1,0 +1,75 @@
+name: RRClub safe profile and campaign verification
+on:
+  push:
+    branches:
+      - safe/rrclub-profile-security-version-20261109
+  workflow_dispatch:
+jobs:
+  python-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "pillow>=10,<13" "fastapi>=0.110,<1"
+      - name: Verify Python syntax and photo parsing without services
+        run: |
+          python -m py_compile backend/routes_profile.py backend/routes_admin.py backend/routes_data.py backend/server.py backend/p5_checkout.py
+          python - <<'PY'
+          import ast
+          import io
+          from pathlib import Path
+          from PIL import Image, ImageOps, UnidentifiedImageError
+          from fastapi import HTTPException
+          source = Path("backend/routes_profile.py").read_text(encoding="utf-8")
+          tree = ast.parse(source)
+          node = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "prepare_photo")
+          scope = {
+              "io": io, "Image": Image, "ImageOps": ImageOps,
+              "UnidentifiedImageError": UnidentifiedImageError,
+              "HTTPException": HTTPException,
+              "MAX_UPLOAD": 3 * 1024 * 1024, "MAX_PIXELS": 16_000_000,
+          }
+          exec(compile(ast.Module(body=[node], type_ignores=[]), "<isolated-photo>", "exec"), scope)
+          photo = scope["prepare_photo"]
+          source_image = Image.new("RGB", (1600, 1000), "blue")
+          buffer = io.BytesIO()
+          source_image.save(buffer, format="PNG")
+          avatar = photo(buffer.getvalue())
+          cover = photo(buffer.getvalue(), True)
+          with Image.open(io.BytesIO(avatar)) as result:
+              assert max(result.size) <= 640 and result.format == "JPEG"
+          with Image.open(io.BytesIO(cover)) as result:
+              assert result.size == (1200, 675) and result.format == "JPEG"
+          for invalid, expected in ((b"not-an-image", 415), (b"x" * (3 * 1024 * 1024 + 1), 413)):
+              try:
+                  photo(invalid)
+                  raise AssertionError("Invalid image accepted")
+              except HTTPException as exc:
+                  assert exc.status_code == expected
+          code = Path("backend/routes_admin.py").read_text(encoding="utf-8")
+          assert "robson123" not in code
+          assert "password_hash" in code
+          print("PASS: image validation, sizing, password default removed")
+          PY
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install existing dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Compile existing React app with the photo enhancements
+        env:
+          CI: "false"
+          REACT_APP_BACKEND_URL: https://example.invalid
+        run: npm run build
