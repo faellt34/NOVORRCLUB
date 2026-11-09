@@ -75,7 +75,12 @@ def check_auth() -> None:
     require('elif pwd:', backend, "Password change option missing")
     require("if not re.fullmatch", backend, "Password change validation missing")
     require('dialog?.mode === "create"', ui, "Admin form creation validation missing")
-    print("PASS password policy")
+    legacy = source("backend/tests/test_security_audit.py")
+    if '"password": "' in legacy:
+        raise AssertionError("Embedded login password in remote audit tests")
+    if "RRCLUB_ENABLE_REMOTE_AUDIT_TESTS" not in legacy:
+        raise AssertionError("Remote audit tests need explicit staging-only opt-in")
+    print("PASS password policy and no embedded remote test credentials")
 
 
 def check_financial_isolation() -> None:
