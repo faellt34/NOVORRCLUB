@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink, useNavigate, Link } from "react-router-dom";
-import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, Briefcase, Camera } from "lucide-react";
+import { LayoutDashboard, Megaphone, MessageSquare, BookOpen, QrCode, Gift, Crown, ShieldCheck, FileText, Settings, LogOut, Bell, Wallet, Lightbulb, SlidersHorizontal, Briefcase, Camera, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "../../context/AppContext";
 import { useT } from "../../context/I18nContext";
@@ -50,6 +50,7 @@ export const SidebarContent = ({ onNavigate }) => {
   const [referralOpen, setReferralOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
   const items = MENUS[user.role];
   const RoleIcon = ROLE_ICONS[user.role];
 
@@ -87,6 +88,12 @@ export const SidebarContent = ({ onNavigate }) => {
               className="shrink-0 p-2 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10"
               aria-label="Alterar fotografia do perfil" title="Alterar fotografia"
               data-testid="sidebar-change-avatar"><Camera className="h-4 w-4" /></button>
+          )}
+          {user.role === "partner" && (
+            <button type="button" onClick={() => setCoverOpen(true)}
+              className="shrink-0 p-2 rounded-lg text-indigo-200 hover:text-white hover:bg-white/10"
+              aria-label="Alterar capa do estabelecimento" title="Alterar capa"
+              data-testid="sidebar-change-cover"><ImageIcon className="h-4 w-4" /></button>
           )}
         </div>
       </div>
@@ -126,6 +133,7 @@ export const SidebarContent = ({ onNavigate }) => {
           </div>
         )}
         <ProfilePhotoDialog open={photoOpen} onOpenChange={setPhotoOpen} />
+        {user.role === "partner" && <ProfilePhotoDialog kind="cover" open={coverOpen} onOpenChange={setCoverOpen} />}
         <ReferralDialog open={referralOpen} onOpenChange={setReferralOpen} />
         <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
         <div className="flex items-center justify-between gap-2">
