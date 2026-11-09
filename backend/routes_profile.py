@@ -133,3 +133,74 @@ async def release_version(user: dict = Depends(require_role("admin"))):
         "message": ("Identificador informado pelo ambiente; confirme no painel de deploy."
                     if commit else "Versão não identificada; não inferir GitHub = produção."),
     }
+
+
+@router.post("/profile/cover")
+async def update_cover(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_role("partner")),
+):
+    """Capa comercial do estabelecimento, separada da fotografia do login."""
+    await rate_limit("cover:" + user["id"], 6, 3600)
+    data = await file.read(MAX_UPLOAD + 1)
+    await file.close()
+    validated = await asyncio.to_thread(prepare_photo, data)
+    with Image.open(io.BytesIO(validated)) as source:
+        cover = ImageOps.fit(source, (1200, 675), Image.Resampling.LANCZOS)
+        output = io.BytesIO()
+        cover.save(output, format="JPEG", quality=85, optimize=True)
+        image = output.getvalue()
+
+    partner_id = user.get("partner_id")
+    if not partner_id or not ENTITY_ID.fullmatch(partner_id):
+        raise HTTPException(409, "Conta comercial não associada")
+    entity = await db.partners.find_one({"id": partner_id, "user_id": user["id"]}, NO_ID)
+    if not entity:
+        raise HTTPException(409, "Associação do estabelecimento não confirmada")
+    origin = (os.environ.get("FRONTEND_URL") or "").rstrip("/")
+    if not origin.startswith("https://"):
+        raise HTTPException(503, "Domínio público da RRClub não configurado")
+    photo_id = uuid.uuid4().hex
+    path = f"covers/partner/{partner_id}/{photo_id}.jpg"
+    url = f"{origin}/api/public/covers/partner/{partner_id}/{photo_id}.jpg"
+    try:
+        await asyncio.to_thread(put_object, path, image, "image/jpeg")
+    except Exception as exc:
+        raise HTTPException(503, "Não foi possível guardar a capa") from exc
+
+    old_cover = entity.get("cover_image")
+    saved = await db.partners.update_one(
+        {"id": partner_id, "user_id": user["id"], "cover_image": old_cover},
+        {"$set": {"cover_image": url, "cover_updated_at": now_iso()}},
+    )
+    if not saved.matched_count:
+        raise HTTPException(409, "O estabelecimento foi atualizado noutro local")
+    try:
+        updated = await db.users.update_one(
+            {"id": user["id"], "role": "partner", "partner_id": partner_id},
+            {"$set": {"cover_image": url}},
+        )
+        if not updated.matched_count:
+            raise RuntimeError("Utilizador associado não encontrado")
+    except Exception as exc:
+        await db.partners.update_one(
+            {"id": partner_id, "user_id": user["id"], "cover_image": url},
+            {"$set": {"cover_image": old_cover}},
+        )
+        raise HTTPException(503, "Não foi possível sincronizar a capa") from exc
+    await audit("CAPA", "Imagem comercial do parceiro atualizada", user, partner_id)
+    return {"ok": True, "cover_image": url}
+
+
+@router.get("/public/covers/partner/{entity_id}/{photo_id}.jpg")
+async def public_cover(entity_id: str, photo_id: str):
+    if not ENTITY_ID.fullmatch(entity_id) or not PHOTO_ID.fullmatch(photo_id):
+        raise HTTPException(404, "Capa não encontrada")
+    try:
+        data, _ = await asyncio.to_thread(get_object, f"covers/partner/{entity_id}/{photo_id}.jpg")
+    except Exception as exc:
+        raise HTTPException(404, "Capa não encontrada") from exc
+    return Response(content=data, media_type="image/jpeg", headers={
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+    })
