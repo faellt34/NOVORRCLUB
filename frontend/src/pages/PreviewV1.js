@@ -101,6 +101,7 @@ export default function PreviewV1() {
             {!complete && <div className="flex items-center gap-2 text-xs text-slate-500 mt-6"><Circle size={12}/> Aguardando próxima etapa</div>}
           </div>
         </div>
+        <div className="mt-7 bg-[#203047] text-white p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4"><div><h2 className="font-bold text-xl">Entrar nos painéis de demonstração</h2><p className="text-sm text-blue-100 mt-1">Acessos fictícios para administrador, influenciador, parceiro e seguidor, sem password ou dados reais.</p></div><a href="#/demo-contas" className="inline-flex rounded-xl bg-white text-[#203047] px-5 py-3 font-bold">Abrir contas de teste</a></div>
         <div className="mt-7"><h2 className="text-xl font-bold mb-3">Aceder aos módulos existentes</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{destinations.map(item => <a key={item.path} href={"#" + item.path} className="block rounded-xl bg-white border border-slate-200 hover:border-blue-400 p-4"><div className="font-semibold">{item.title}</div><p className="text-sm text-slate-500 mt-1">{item.detail}</p><p className="text-xs text-blue-700 mt-3">{item.path}</p></a>)}</div></div>
       </section>
     </main>
