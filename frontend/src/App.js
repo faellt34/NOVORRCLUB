@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AppProvider, useApp } from "@/context/AppContext";
 import { I18nProvider } from "@/context/I18nContext";
 import Privacy from "@/pages/Privacy";
+import PreviewV1 from "@/pages/PreviewV1";
 import Register from "@/pages/Register";
 import PublicCoupon from "@/pages/PublicCoupon";
 import AppLayout from "@/components/layout/AppLayout";
@@ -57,6 +58,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/privacidade" element={<Privacy />} />
+          <Route path="/preview-v1" element={<PreviewV1 />} />
           <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
             <Route path="/login" element={<Login />} />
