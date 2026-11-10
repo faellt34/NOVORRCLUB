@@ -6,6 +6,7 @@ import { I18nProvider } from "@/context/I18nContext";
 import Privacy from "@/pages/Privacy";
 import PreviewV1 from "@/pages/PreviewV1";
 import PreviewAccounts from "@/pages/PreviewAccounts";
+import PreviewApproval from "@/pages/PreviewApproval";
 import Register from "@/pages/Register";
 import PublicCoupon from "@/pages/PublicCoupon";
 import AppLayout from "@/components/layout/AppLayout";
@@ -62,6 +63,7 @@ function App() {
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/preview-v1" element={<PreviewV1 />} />
           {process.env.REACT_APP_PREVIEW_MODE === "true" && <Route path="/demo-contas" element={<PreviewAccounts />} />}
+          {process.env.REACT_APP_PREVIEW_MODE === "true" && <Route path="/aprovacao-visual" element={<PreviewApproval />} />}
           {process.env.REACT_APP_PREVIEW_MODE === "true" && <Route path="/" element={<Navigate to="/preview-v1" replace />} />}
           <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
