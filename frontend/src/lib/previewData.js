@@ -8,7 +8,7 @@ export const DEMO_STATUSES = Object.freeze({
   checkout: "checkout_simulated",
 });
 export const initialDemoEvents = () => [
-  {id:"seed-campaign",operationId:"campaign-demo-inverno",eventType:DEMO_STATUSES.campaign,role:"influencer",label:"Campanha DEMO-INVERNO criada",status:"Demonstração",country:"PT",source:DEMO_SOURCE,occurredAt:null},
+  ...["PT","BR"].map(country=>({id:"seed-campaign-"+country,operationId:"campaign-demo-inverno-"+country,eventType:DEMO_STATUSES.campaign,role:"influencer",label:"Campanha DEMO-INVERNO criada",status:"Demonstração",country,source:DEMO_SOURCE,occurredAt:null})),
 ];
 export function makeDemoEvent({ id, operationId, eventType, role, label, status, country, amountMinor = null, discountMinor = null, currency = null }) {
   if (!Object.values(DEMO_STATUSES).includes(eventType)) throw new Error("Tipo de evento inválido");
