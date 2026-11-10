@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { BrandLogo } from "../components/BrandLogo";
+import PreviewInsights from "../components/PreviewInsights";
 import { ArrowLeft, BadgeCheck, BarChart3, Building2, CheckCircle2, ClipboardList, CreditCard, LogOut, QrCode, ShieldCheck, Smartphone, Users } from "lucide-react";
 
 const ROLES = [
@@ -62,6 +63,7 @@ export default function PreviewAccounts() {
           {["PT","BR"].map(x=><button type="button" key={x} aria-pressed={country===x} onClick={()=>{setCountry(x);setMessage("");}} className={"px-4 py-2 rounded-xl border text-sm font-semibold "+(country===x?"bg-[#203047] text-white":"bg-white")}>{x==="PT"?"Portugal":"Brasil"}</button>)}
         </div>
       </div>
+      <div className="mb-5"><PreviewInsights events={events} country={country}/></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">{ROLES.map(r=><button key={r.id} type="button" aria-pressed={role===r.id} onClick={()=>enter(r.id)}
         className={"text-left rounded-2xl border p-4 min-h-[140px] transition-colors "+(role===r.id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE] hover:border-[#477FAE]")}>
         <div className="font-bold text-lg">{r.name}</div><div className={"text-xs mt-1 "+(role===r.id?"text-blue-100":"text-slate-500")}>{r.alias}</div>
@@ -85,10 +87,16 @@ export default function PreviewAccounts() {
             <button onClick={()=>{add("Campanha fictícia divulgada","influencer","Demonstração");setMessage("Partilha registada apenas no navegador.");}} className="rounded-xl bg-[#203047] text-white py-3 px-5 font-semibold">Simular divulgação do QR</button>
           </div>}
           {role==="partner"&&<div className="space-y-4">
+            <div className="bg-[#F4F7FB] rounded-xl px-4 py-3 flex items-center justify-between gap-2">
+              <div><p className="text-xs text-slate-500">Turno demonstrativo</p><p className="font-extrabold text-emerald-700">Pronto para validar</p></div>
+              <div className="text-right"><p className="text-xs text-slate-500">QR válidos nesta sessão</p><p className="text-lg font-extrabold">{counts.scans}</p></div>
+            </div>
             <p className="text-sm text-slate-600">Validação simulada do QR e do montante introduzido pelo estabelecimento. Não ativa câmara, Stripe ou API.</p>
             <label className="block text-sm font-semibold">Código QR fictício<input value={coupon} onChange={e=>setCoupon(e.target.value)} placeholder="DEMO-INVERNO" className="block w-full border rounded-xl p-3 mt-2"/></label>
             <label className="block text-sm font-semibold">Valor da venda ({currency})<input value={amount} inputMode="decimal" onChange={e=>setAmount(e.target.value)} className="block w-full border rounded-xl p-3 mt-2"/></label>
-            <button onClick={validate} className="rounded-xl bg-[#203047] text-white py-3 px-5 font-semibold inline-flex items-center gap-2"><QrCode size={18}/> Validar QR de demonstração</button>
+            <div className="flex flex-wrap gap-2"><button onClick={validate} className="rounded-xl bg-[#203047] text-white min-h-12 py-3 px-5 font-semibold inline-flex items-center gap-2"><QrCode size={18}/> Validar QR de demonstração</button>
+              <button type="button" onClick={()=>{setCoupon("DEMO-INVERNO");setMessage("QR fictício carregado. Introduz o valor e valida.");}} className="rounded-xl border border-slate-200 min-h-12 px-4 text-sm font-bold">Carregar QR demo</button></div>
+              <div className="bg-[#F4F7FB] rounded-xl p-4 text-sm"><p className="font-semibold mb-2">Resumo demonstrativo</p><div className="flex justify-between"><span>Valor</span><strong>{fmt(valid?val:0)}</strong></div><div className="flex justify-between mt-1"><span>Benefício ilustrativo</span><span>{fmt(discount)}</span></div><div className="border-t mt-2 pt-2 flex justify-between font-extrabold"><span>Total ilustrativo</span><span>{fmt(valid?val-discount:0)}</span></div><p className="text-xs text-slate-500 mt-2">Não representa os repasses financeiros reais.</p></div>
           </div>}
           {role==="follower"&&<div className="space-y-4">
             <p className="text-sm text-slate-600">Cupom fictício <strong>DEMO-INVERNO</strong>. Valores apenas ilustrativos; regras de distribuição não validadas.</p>
