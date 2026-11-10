@@ -22,26 +22,26 @@ export default function AppLayout() {
   const handleRoleNavigate = () => setMobileOpen(false);
 
   return (
-    <div className="min-h-screen bg-[#F3F5FB]">
+    <div className="min-h-[100dvh] bg-[#F3F5FB] min-w-0">
       <aside className="hidden lg:block fixed inset-y-0 left-0 w-[268px] z-40">
         <SidebarContent onNavigate={handleRoleNavigate} />
       </aside>
 
-      <header className="lg:hidden sticky top-0 z-50 bg-[#070B1F] text-white flex items-center justify-between px-4 h-14">
+      <header className="lg:hidden sticky top-0 z-50 bg-[#070B1F] text-white flex items-center justify-between gap-2 px-3 sm:px-4 h-14">
         <BrandLogo size="sm" />
         <div className="flex items-center gap-1 shrink-0">
           <button type="button" data-testid="mobile-logout-button" aria-label="Terminar sessão" title="Terminar sessão" onClick={handleLogout}
             className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2.5 py-2 text-[11px] font-semibold text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white btn-press">
             <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" /> Terminar sessão
           </button>
-          <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} className="p-2 rounded-lg hover:bg-white/10 btn-press">
+          <button data-testid="mobile-menu-toggle" onClick={() => setMobileOpen(!mobileOpen)} aria-label={mobileOpen ? "Fechar menu" : "Abrir menu"} aria-expanded={mobileOpen} className="p-2 rounded-lg hover:bg-white/10 btn-press focus-visible:outline-2 focus-visible:outline-white">
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </header>
 
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 top-14 z-40">
+        <div className="lg:hidden fixed inset-0 top-14 z-40" role="presentation">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-[280px]" data-testid="mobile-sidebar">
             <SidebarContent onNavigate={handleRoleNavigate} />
@@ -49,11 +49,11 @@ export default function AppLayout() {
         </div>
       )}
 
-      <main className="lg:pl-[268px] pb-24 lg:pb-0">
-        <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          <div className="flex justify-end mb-4">
+      <main className="lg:pl-[268px] min-w-0 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <div className="max-w-[1240px] min-w-0 mx-auto px-3 sm:px-6 lg:px-8 py-5 lg:py-8">
+          <div className="flex justify-end mb-4 min-w-0">
             <label className="text-xs text-slate-600">Moeda dos relatórios
-              <select aria-label="Moeda dos relatórios" className="ml-2 rounded-lg border p-2 bg-white" value={reportCurrency()} onChange={(e) => { localStorage.setItem("rrclub_currency", e.target.value); window.location.reload(); }}>
+              <select aria-label="Moeda dos relatórios" className="ml-2 max-w-[58vw] rounded-lg border px-2 py-2 bg-white text-xs sm:text-sm" value={reportCurrency()} onChange={(e) => { localStorage.setItem("rrclub_currency", e.target.value); window.location.reload(); }}>
                 <option value="eur">EUR · Portugal</option><option value="brl">BRL · Brasil</option>
               </select>
             </label>
