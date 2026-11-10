@@ -84,7 +84,8 @@ export default function PreviewAccounts() {
         <p className="text-sm text-slate-600 mt-3">Abre uma sessão local de demonstração e alterna entre Administrador, Influenciador, Parceiro e Seguidor num único lugar.</p>
         <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mt-5 text-xs text-amber-900"><strong>Atenção:</strong> este acesso serve apenas para revisão visual. Não é um login seguro, não autentica pessoas e não dá acesso a dados ou operações reais.</div>
         <button type="button" onClick={beginReview} className="mt-5 w-full min-h-12 rounded-xl bg-[#203047] text-white font-bold">Entrar no ambiente de demonstração</button>
-        <a href="#/preview-v1" className="block text-center text-sm text-[#477FAE] mt-4 font-semibold">Voltar à apresentação</a>
+        <a href="#/aprovacao-visual" className="block text-center text-sm text-[#477FAE] mt-4 font-semibold">Ver proposta visual dos dashboards</a>
+        <a href="#/preview-v1" className="block text-center text-xs text-slate-500 mt-3 font-semibold">Voltar à apresentação</a>
       </div>
     </div>
   </main>;
@@ -96,7 +97,7 @@ export default function PreviewAccounts() {
       </div>
     </header>
     <div className="max-w-6xl mx-auto px-4 py-7">
-      <a href="#/preview-v1" className="inline-flex items-center gap-2 text-sm text-[#477FAE] font-semibold mb-5"><ArrowLeft size={17}/> Centro de operações</a>
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-5"><a href="#/preview-v1" className="inline-flex items-center gap-2 text-sm text-[#477FAE] font-semibold"><ArrowLeft size={17}/> Centro de operações</a><a href="#/aprovacao-visual" className="inline-flex items-center gap-2 rounded-xl bg-[#203047] text-white px-4 py-3 text-sm font-bold"><BarChart3 size={17}/> Prévia de aprovação visual</a></div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div><p className="text-xs font-bold uppercase tracking-widest text-[#477FAE]">Acessos de demonstração</p><h1 className="text-3xl font-extrabold mt-1">Painéis RRClub V1</h1>
         <p className="text-slate-600 text-sm mt-2 max-w-2xl">Acesso de revisão centralizado: alterna livremente entre os quatro perfis demonstrativos. Não são contas autenticadas nem dashboards operacionais oficiais.</p></div>
