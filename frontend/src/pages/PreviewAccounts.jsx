@@ -26,6 +26,7 @@ const loadDemoEvents = () => {
 
 export default function PreviewAccounts() {
   const [role,setRole] = useState(null);
+  const [reviewerAccess,setReviewerAccess] = useState(() => { try { return window.sessionStorage.getItem("rrclub_preview_reviewer") === "active"; } catch { return false; } });
   const [tab,setTab] = useState("overview");
   const [country,setCountry] = useState("PT");
   const [events,setEvents] = useState(loadDemoEvents);
@@ -50,6 +51,8 @@ export default function PreviewAccounts() {
     setEvents(old=>[...old,event]);
   };
   const enter = r => {setRole(r);setTab("overview");setMessage("");};
+  const beginReview = () => { try { window.sessionStorage.setItem("rrclub_preview_reviewer","active"); } catch {} setReviewerAccess(true); setRole("admin"); };
+  const endReview = () => { try { window.sessionStorage.removeItem("rrclub_preview_reviewer"); } catch {} setRole(null); setReviewerAccess(false); };
   const validate = () => {
     if (!valid || coupon.trim().toUpperCase()!=="DEMO-INVERNO") {
       setMessage("Usa o cupom DEMO-INVERNO e um valor válido maior que zero.");
@@ -70,18 +73,32 @@ export default function PreviewAccounts() {
     setMessage("Checkout simulado sem cobrar, guardar cartão ou contactar Stripe.");
   };
   const card = "rounded-2xl border border-[#DCE6EE] bg-white p-5 shadow-sm";
+  if (!reviewerAccess) return <main className="min-h-screen bg-[#F4F7FB] text-[#203047]">
+    <header className="bg-[#203047] p-5 text-white"><div className="max-w-5xl mx-auto"><BrandLogo size="sm" tagline/></div></header>
+    <div className="max-w-md mx-auto px-5 pt-12">
+      <div className="rounded-2xl border border-[#DCE6EE] bg-white p-6 shadow-sm">
+        <div className="w-12 h-12 rounded-2xl bg-[#E9F1F8] flex items-center justify-center mb-4"><ShieldCheck size={25} className="text-[#315F83]"/></div>
+        <p className="text-xs uppercase tracking-widest font-bold text-[#477FAE]">Central de revisão · Ambiente isolado</p>
+        <h1 className="text-2xl font-extrabold mt-2">Acesso único aos painéis</h1>
+        <p className="text-sm text-slate-600 mt-3">Abre uma sessão local de demonstração e alterna entre Administrador, Influenciador, Parceiro e Seguidor num único lugar.</p>
+        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mt-5 text-xs text-amber-900"><strong>Atenção:</strong> este acesso serve apenas para revisão visual. Não é um login seguro, não autentica pessoas e não dá acesso a dados ou operações reais.</div>
+        <button type="button" onClick={beginReview} className="mt-5 w-full min-h-12 rounded-xl bg-[#203047] text-white font-bold">Entrar no ambiente de demonstração</button>
+        <a href="#/preview-v1" className="block text-center text-sm text-[#477FAE] mt-4 font-semibold">Voltar à apresentação</a>
+      </div>
+    </div>
+  </main>;
   return <main className="min-h-screen bg-[#F4F7FB] text-[#203047]" data-testid="rrclub-demo-accounts">
     <header className="bg-[#203047] text-white">
       <div className="max-w-6xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-3">
         <BrandLogo tagline size="sm"/>
-        <span className="text-xs font-bold bg-white/10 rounded-full px-3 py-2 flex items-center gap-2"><ShieldCheck size={15}/> AMBIENTE DEMO · SEM DADOS REAIS</span>
+        <div className="flex gap-3 items-center"><span className="text-xs font-bold bg-white/10 rounded-full px-3 py-2 flex items-center gap-2"><ShieldCheck size={15}/> GESTOR DE TESTES · DEMO</span><button type="button" onClick={endReview} className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold">Terminar acesso</button></div>
       </div>
     </header>
     <div className="max-w-6xl mx-auto px-4 py-7">
       <a href="#/preview-v1" className="inline-flex items-center gap-2 text-sm text-[#477FAE] font-semibold mb-5"><ArrowLeft size={17}/> Centro de operações</a>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div><p className="text-xs font-bold uppercase tracking-widest text-[#477FAE]">Acessos de demonstração</p><h1 className="text-3xl font-extrabold mt-1">Painéis RRClub V1</h1>
-        <p className="text-slate-600 text-sm mt-2 max-w-2xl">Escolhe um perfil de teste para explorar fluxos com dados fictícios. Estes acessos NÃO são contas de autenticação nem os dashboards operacionais oficiais.</p></div>
+        <p className="text-slate-600 text-sm mt-2 max-w-2xl">Acesso de revisão centralizado: alterna livremente entre os quatro perfis demonstrativos. Não são contas autenticadas nem dashboards operacionais oficiais.</p></div>
         <div className="flex gap-2">
           {["PT","BR"].map(x=><button type="button" key={x} aria-pressed={country===x} onClick={()=>{setCountry(x);setMessage("");}} className={"px-4 py-2 rounded-xl border text-sm font-semibold "+(country===x?"bg-[#203047] text-white":"bg-white")}>{x==="PT"?"Portugal":"Brasil"}</button>)}
         </div>
