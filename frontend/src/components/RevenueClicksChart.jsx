@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity } from "lucide-react";
+import { dashboardMoney } from "../lib/api";
 
-const fmtDay = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+const fmtDay = (d) => typeof d === "string" && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "—";
 const RANGES = [["7", "7 dias"], ["30", "30 dias"]];
 
 export const RevenueClicksChart = ({ series = [] }) => {
@@ -30,9 +31,9 @@ export const RevenueClicksChart = ({ series = [] }) => {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#EEF0F6" vertical={false} />
             <XAxis dataKey="dia" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-            <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => `€ ${v}`} />
+            <YAxis yAxisId="l" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={(v) => dashboardMoney(v)} />
             <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} formatter={(v, n) => [n === "receita" ? `€ ${Number(v).toFixed(2)}` : v, n === "receita" ? "Receita" : "Cliques"]} />
+            <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E2E8F0", fontSize: 12 }} formatter={(v, n) => [n === "receita" ? dashboardMoney(v) : v, n === "receita" ? "Receita" : "Cliques"]} />
             <Area yAxisId="l" type="monotone" dataKey="receita" stroke="#4F46E5" strokeWidth={2.5} fill="url(#gRec)" dot={false} activeDot={{ r: 4 }} />
             <Area yAxisId="r" type="monotone" dataKey="cliques" stroke="#38BDF8" strokeWidth={2} fill="url(#gClk)" dot={false} activeDot={{ r: 4 }} />
           </AreaChart>
