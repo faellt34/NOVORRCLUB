@@ -1,16 +1,11 @@
-import React, { useMemo } from "react";
+import React from "react";
+import { deriveDemoMetrics, DEMO_SOURCE } from "../lib/previewData";
 import { Activity, ArrowDownToLine, BarChart3, CheckCheck, CircleDollarSign, MousePointerClick, QrCode, Smartphone, Users } from "lucide-react";
 
 const csvCell = (s) => '"' + String(s ?? "").replace(/"/g, '""').replace(/^[=+@-]/, "'$&") + '"';
 
 export default function PreviewInsights({ events, country = "PT" }) {
-  const metrics = useMemo(() => {
-    const shares = events.filter(e => e.role === "influencer" && e.label.includes("divulgada")).length;
-    const scans = events.filter(e => e.role === "partner" && e.status === "Validado").length;
-    const checkouts = events.filter(e => e.status === "Checkout simulado").length;
-    const campaignCount = 1;
-    return { shares, scans, checkouts, campaignCount, pending: Math.max(0, scans - checkouts) };
-  }, [events]);
+  const metrics = deriveDemoMetrics(events,country);
   const numbers = [
     { label: "Campanhas demo", value: metrics.campaignCount, Icon: BarChart3 },
     { label: "Divulgações", value: metrics.shares, Icon: MousePointerClick },
@@ -22,7 +17,7 @@ export default function PreviewInsights({ events, country = "PT" }) {
 
   const exportCsv = () => {
     // Gerado somente a partir dos eventos locais e fictícios, sem comunicar com servidores.
-    const rows = [["ID", "Perfil", "Descrição", "Estado", "Mercado"], ...events.map(e => [e.id,e.role,e.label,e.status,country])]
+    const rows = [["ID", "Perfil", "Descrição", "Estado", "Mercado"], ...events.filter(e=>e.country===country&&e.source===DEMO_SOURCE).map(e => [e.id,e.role,e.label,e.status,country])]
       .map(row => row.map(csvCell).join(";"));
     const blob = new Blob(["\uFEFF" + rows.join("\r\n")], { type:"text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -54,7 +49,16 @@ export default function PreviewInsights({ events, country = "PT" }) {
       <div role="progressbar" aria-valuenow={ratio} aria-valuemin={0} aria-valuemax={100} aria-label="Conversão simulada" className="h-2.5 bg-[#E8EFF6] rounded-full overflow-hidden">
         <div style={{width: ratio + "%"}} className="h-full rounded-full bg-[#477FAE] transition-all duration-300"/>
       </div>
-      <p className="text-[11px] text-slate-500 mt-2">Uma validação fictícia pode produzir apenas um checkout fictício. Sem dinheiro, conta Stripe, nem receções reais.</p>
+      <p className="text-[11px] text-slate-500 mt-2">Cada operação de checkout está ligada ao identificador da respetiva validação. Não significa receita real.</p>
+      <div className="mt-4 border-t border-slate-100 pt-4 flex flex-wrap gap-2 text-xs">
+        <span className={"px-3 py-2 rounded-full font-semibold "+(metrics.qualityOk?"bg-emerald-50 text-emerald-800":"bg-amber-50 text-amber-800")}>
+          Integridade local: {metrics.qualityOk?"Sem anomalias":"Rever anomalias"}
+        </span>
+        <span className="px-3 py-2 rounded-full bg-slate-100 text-slate-700">Duplicados: {metrics.duplicates}</span>
+        <span className="px-3 py-2 rounded-full bg-slate-100 text-slate-700">Checkouts sem QR: {metrics.orphan}</span>
+        <span className="px-3 py-2 rounded-full bg-slate-100 text-slate-700">Campos incompletos: {metrics.invalid}</span>
+      </div>
+      <p className="text-xs text-slate-500 mt-3">Pagamentos liquidados, receita verificada e comissões: <strong>não disponíveis</strong> neste ambiente.</p>
     </div>
   </section>;
 }
