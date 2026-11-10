@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { BrandLogo } from "../components/BrandLogo";
 import PreviewInsights from "../components/PreviewInsights";
+import PreviewReports from "../components/PreviewReports";
+import PreviewQrCard from "../components/PreviewQrCard";
 import { ArrowLeft, BadgeCheck, BarChart3, Building2, CheckCircle2, ClipboardList, CreditCard, LogOut, QrCode, ShieldCheck, Smartphone, Users } from "lucide-react";
 
 const ROLES = [
@@ -16,6 +18,7 @@ const seed = [
 
 export default function PreviewAccounts() {
   const [role,setRole] = useState(null);
+  const [tab,setTab] = useState("overview");
   const [country,setCountry] = useState("PT");
   const [events,setEvents] = useState(seed);
   const [amount,setAmount] = useState("100");
@@ -30,7 +33,7 @@ export default function PreviewAccounts() {
   const counts = useMemo(() => ({campaigns:1, events:events.length, shares:events.filter(e=>e.role==="influencer"&&e.status==="Demonstração").length, scans:events.filter(e=>e.role==="partner"&&e.status==="Validado").length, checkouts:events.filter(e=>e.status==="Checkout simulado").length}),[events]);
   const hasValidatedScan = counts.scans > counts.checkouts;
   const add = (name,by,status) => setEvents(old=>[...old,{id:old.length+1,role:by,label:name,status}]);
-  const enter = r => {setRole(r);setMessage("");};
+  const enter = r => {setRole(r);setTab("overview");setMessage("");};
   const validate = () => {
     if (!valid || coupon.trim().toUpperCase()!=="DEMO-INVERNO") {
       setMessage("Usa o cupom DEMO-INVERNO e um valor válido maior que zero.");
@@ -63,11 +66,27 @@ export default function PreviewAccounts() {
           {["PT","BR"].map(x=><button type="button" key={x} aria-pressed={country===x} onClick={()=>{setCountry(x);setMessage("");}} className={"px-4 py-2 rounded-xl border text-sm font-semibold "+(country===x?"bg-[#203047] text-white":"bg-white")}>{x==="PT"?"Portugal":"Brasil"}</button>)}
         </div>
       </div>
-      <div className="mb-5"><PreviewInsights events={events} country={country}/></div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">{ROLES.map(r=><button key={r.id} type="button" aria-pressed={role===r.id} onClick={()=>enter(r.id)}
-        className={"text-left rounded-2xl border p-4 min-h-[140px] transition-colors "+(role===r.id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE] hover:border-[#477FAE]")}>
+      <div className="flex overflow-x-auto gap-2 mb-4 pb-1" role="tablist" aria-label="Áreas de gestão">
+        {[["overview","Visão geral"],["qr","QR & campanhas"],["payments","Pagamentos"],["reports","Relatórios"]].map(([id,label])=><button type="button" key={id}
+          role="tab" aria-selected={tab===id} onClick={()=>setTab(id)} className={"whitespace-nowrap rounded-xl border px-4 py-3 text-sm font-bold min-h-12 "+(tab===id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE]")}>{label}</button>)}
+      </div>
+      {tab==="overview"&&<div className="mb-5"><PreviewInsights events={events} country={country}/></div>}
+      {tab==="qr"&&<div className="mb-5"><PreviewQrCard country={country}/></div>}
+      {tab==="payments"&&<div className="mb-5 rounded-2xl border border-[#DCE6EE] bg-white p-5 sm:p-6 shadow-sm">
+        <p className="text-[11px] uppercase tracking-widest font-bold text-[#477FAE]">Estados de pagamento · demonstração</p>
+        <h2 className="text-xl font-extrabold mt-1">Acompanhamento financeiro</h2>
+        <p className="text-sm text-slate-600 mt-2">O fluxo atual é visual e nunca cria cobranças. Não há montantes liquidados nem repasses reais nesta prévia.</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+          {[[ "QR validados",counts.scans ],["Aguardam checkout",Math.max(0,counts.scans-counts.checkouts)],["Checkouts simulados",counts.checkouts],["Pagamentos confirmados","—"]].map(([label,n])=>
+            <div key={label} className="rounded-xl bg-[#F4F7FB] p-4 min-h-[104px]"><div className="text-xs text-slate-600">{label}</div><div className="text-2xl font-extrabold mt-3">{n}</div></div>)}
+        </div>
+        <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-900 text-xs p-4 mt-5">Os estados “Checkout simulado” e “QR validado” não significam pagamento recebido. Para validação P5 real será necessário um backend de homologação com Stripe Test Mode.</div>
+      </div>}
+      {tab==="reports"&&<div className="mb-5"><PreviewReports events={events} country={country}/></div>}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-6">{ROLES.map(r=><button key={r.id} type="button" aria-pressed={role===r.id} onClick={()=>enter(r.id)}
+        className={"text-left rounded-2xl border p-3 sm:p-4 min-h-[132px] transition-colors "+(role===r.id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE] hover:border-[#477FAE]")}>
         <div className="font-bold text-lg">{r.name}</div><div className={"text-xs mt-1 "+(role===r.id?"text-blue-100":"text-slate-500")}>{r.alias}</div>
-        <div className={"text-sm mt-3 "+(role===r.id?"text-blue-100":"text-slate-600")}>{r.description}</div>
+        <div className={"text-xs sm:text-sm mt-3 "+(role===r.id?"text-blue-100":"text-slate-600")}>{r.description}</div>
       </button>)}</div>
       {role===null?<div className={card}><h2 className="font-bold">Escolhe o teu perfil</h2><p className="text-sm text-slate-600 mt-2">A demonstração abre imediatamente, sem senha, e nunca utiliza contas verdadeiras. Para criar contas autenticadas será necessário um backend de homologação independente.</p></div>:
       <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(270px,1fr)] gap-5">
