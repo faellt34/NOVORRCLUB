@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, TrendingUp, AlertTriangle, ShieldAlert, Info, ArrowRight } from "lucide-react";
-import { api } from "../lib/api";
+import { api, dashboardMoney } from "../lib/api";
 
 const ICON = { error: ShieldAlert, warn: AlertTriangle, info: Info, ok: TrendingUp };
 const TONE = { error: "bg-red-50 text-red-600", warn: "bg-amber-50 text-amber-600", info: "bg-indigo-50 text-indigo-600", ok: "bg-emerald-50 text-emerald-600" };
@@ -11,14 +11,16 @@ export const Recommendations = ({ refreshKey }) => {
   const navigate = useNavigate();
   useEffect(() => { api.get("/diretor/briefing").then((r) => setB(r.data)).catch(() => setB(null)); }, [refreshKey]);
   if (!b) return null;
-  const items = b.alertas.slice(0, 4).map((a) => ({ ...a, tipo: a.nivel }));
-  if (items.length < 4) b.top_campanhas.slice(0, 4 - items.length).forEach((c) => items.push({ tipo: "ok", titulo: `${c.nome}: € ${c.receita} em ${c.vendas} venda(s)`, detalhe: `Conversão ${c.conversao_pct}% nos últimos 30 dias`, acao: `analisa a campanha ${c.nome} e diz como escalar` }));
-  if (!items.length) items.push({ tipo: "ok", titulo: "Sem anomalias detetadas", detalhe: "O Diretor continua a vigiar logs, Stripe e campanhas.", acao: null });
+  const alerts = Array.isArray(b.alertas) ? b.alertas : [];
+  const campaigns = Array.isArray(b.top_campanhas) ? b.top_campanhas : [];
+  const items = alerts.slice(0, 4).map((a) => ({ ...a, tipo: a.nivel }));
+  if (items.length < 4) campaigns.slice(0, 4 - items.length).forEach((c) => items.push({ tipo: "ok", titulo: `${c.nome}: ${dashboardMoney(c.receita)} em ${c.vendas} venda(s)`, detalhe: `Conversão ${c.conversao_pct}% nos últimos 30 dias`, acao: `analisa a campanha ${c.nome} e diz como escalar` }));
+  if (!items.length) items.push({ tipo: "ok", titulo: "Sem anomalias detetadas", detalhe: "Não há alertas neste resumo. A ausência de alertas não confirma o estado da Stripe ou dos pagamentos.", acao: null });
   return (
     <div className="card-soft p-5" data-testid="recommendations-card">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles className="w-5 h-5 text-indigo-600" /><h3 className="text-lg font-semibold text-slate-900">Recomendações</h3>
-        <span data-testid="recommendations-count" className="ml-auto text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{b.alertas.length}</span>
+        <span data-testid="recommendations-count" className="ml-auto text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{alerts.length}</span>
       </div>
       <div className="divide-y divide-slate-100">
         {items.map((it, i) => { const I = ICON[it.tipo] || Info; return (
