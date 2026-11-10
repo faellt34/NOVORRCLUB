@@ -1,0 +1,38 @@
+name: RRClub Preview — Integridade de Dados
+
+on:
+  push:
+    branches:
+      - 'preview/rrclub-v1-isolado-20261110'
+    paths:
+      - 'frontend/src/lib/previewData.js'
+      - 'frontend/src/lib/previewData.test.js'
+      - 'frontend/src/pages/PreviewAccounts.jsx'
+      - 'frontend/src/components/PreviewInsights.jsx'
+      - 'frontend/src/components/PreviewReports.jsx'
+      - '.github/workflows/rrclub-preview-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  data-quality:
+    name: Testes isolados do contrato de dados
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependências de frontend
+        run: npm install --no-audit --no-fund
+      - name: Validar cálculos, isolamento e fluxo QR
+        run: npm run test -- --watchAll=false --runInBand --runTestsByPath src/lib/previewData.test.js
+        env:
+          CI: 'true'
+          REACT_APP_PREVIEW_MODE: 'true'
