@@ -184,7 +184,7 @@ export default function PartnerDashboard() {
   return (
     <div className="space-y-6">
       <CosmicHeader testId="partner-header">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <span className="h-12 w-12 shrink-0 rounded-2xl bg-white/10 grid place-items-center font-bold text-xl" aria-hidden="true">{String(user.nome || "P").charAt(0)}</span>
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-[0.14em] text-white/50 font-semibold">Parceiro</p>
@@ -192,7 +192,7 @@ export default function PartnerDashboard() {
           </div>
           {live && <span data-testid="partner-live-badge" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-400/20 px-3 py-1 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot" /> ao vivo</span>}
         </div>
-        <div className="grid grid-cols-3 gap-3 mt-6">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 sm:gap-3 mt-5 sm:mt-6">
           <HeaderStat testId="partner-stat-count" label="Redenções" value={num(totals.count || 0)} sub="registadas" />
           <HeaderStat testId="partner-stat-revenue" label="Valor registado" value={eur(Math.round(totals.revenue || 0))} sub="não conciliado" />
           <HeaderStat testId="partner-stat-share" label="Parcela teórica" value="80%" sub={eur(Math.round((totals.revenue || 0) * 0.8))} accent />
@@ -202,7 +202,7 @@ export default function PartnerDashboard() {
 
       <PartnerOnboarding currency={data.partner?.currency || "eur"} hasIban={!!data.partner?.iban} connect={connect} hasCampaign={campaigns.some((c) => c.status === "Ativa")} onIban={() => { setIban(data.partner?.iban || ""); setIbanEdit(true); document.getElementById("partner-iban-card")?.scrollIntoView({ behavior: "smooth" }); }} onConnect={startConnect} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
         <KpiCard id="receita-atribuida" icon={Euro} label="Valor de resgates registados" live={totals.revenue} format={(v) => eur(Math.round(v))} flash={flash.revenue} trend={trend.revenue} />
         <KpiCard id="redencoes" icon={Ticket} label="Redenções" live={totals.count} format={num} flash={flash.count} trend={trend.count} />
         <KpiCard id="descontos" icon={BadgePercent} label="Descontos Concedidos" live={totals.discounts} format={(v) => eur(Math.round(v))} flash={flash.discounts} />
@@ -210,7 +210,7 @@ export default function PartnerDashboard() {
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket Médio" live={totals.ticket} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
 
-      {data.partner?.currency !== "brl" && <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {data.partner?.currency !== "brl" && <div data-testid="partner-iban-card" id="partner-iban-card" className="card-soft p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center"><Landmark className="w-5 h-5" /></span>
           <div>
@@ -219,8 +219,8 @@ export default function PartnerDashboard() {
           </div>
         </div>
         {ibanEdit ? (
-          <form onSubmit={saveIban} className="flex gap-2">
-            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono w-[280px]" />
+          <form onSubmit={saveIban} className="flex flex-col min-[420px]:flex-row gap-2">
+            <Input data-testid="partner-iban-input" value={iban} onChange={(e) => setIban(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" className="rounded-xl bg-slate-50 font-mono min-w-0 w-full min-[420px]:w-[280px] text-base" />
             <button type="submit" data-testid="partner-iban-save" className="px-3 py-2 rounded-xl bg-purple-600 text-white text-xs font-semibold btn-press">Guardar</button>
           </form>
         ) : (
