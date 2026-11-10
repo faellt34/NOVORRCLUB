@@ -101,7 +101,7 @@ export default function PreviewV1() {
             {!complete && <div className="flex items-center gap-2 text-xs text-slate-500 mt-6"><Circle size={12}/> Aguardando próxima etapa</div>}
           </div>
         </div>
-        <div className="mt-7"><h2 className="text-xl font-bold mb-3">Aceder aos módulos existentes</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{destinations.map(item => <a key={item.path} href={item.path} className="block rounded-xl bg-white border border-slate-200 hover:border-blue-400 p-4"><div className="font-semibold">{item.title}</div><p className="text-sm text-slate-500 mt-1">{item.detail}</p><p className="text-xs text-blue-700 mt-3">{item.path}</p></a>)}</div></div>
+        <div className="mt-7"><h2 className="text-xl font-bold mb-3">Aceder aos módulos existentes</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{destinations.map(item => <a key={item.path} href={"#" + item.path} className="block rounded-xl bg-white border border-slate-200 hover:border-blue-400 p-4"><div className="font-semibold">{item.title}</div><p className="text-sm text-slate-500 mt-1">{item.detail}</p><p className="text-xs text-blue-700 mt-3">{item.path}</p></a>)}</div></div>
       </section>
     </main>
   );
