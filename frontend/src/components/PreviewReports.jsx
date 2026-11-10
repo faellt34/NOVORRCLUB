@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ArrowDownToLine, FileText, Search, ShieldCheck } from "lucide-react";
+import { DEMO_SOURCE } from "../lib/previewData";
 
 const safeCell = v => '"' + String(v ?? "").replace(/"/g,'""').replace(/^[=+@-]/, "'$&") + '"';
 const roleLabels = { admin:"Admin", partner:"Parceiro", influencer:"Influenciador", follower:"Seguidor" };
@@ -10,15 +11,15 @@ export default function PreviewReports({ events = [], country = "PT" }) {
   const [query, setQuery] = useState("");
   const [onlyState, setOnlyState] = useState("all");
   const [visible, setVisible] = useState(10);
-  const filtered = useMemo(() => events.filter(event => {
+  const filtered = useMemo(() => events.filter(event => event.country === country && event.source === DEMO_SOURCE).filter(event => {
     const role = filter === "all" || event.role === filter;
     const status = onlyState === "all" || event.status === onlyState;
     const search = (event.label + " " + event.status + " " + (roleLabels[event.role]||event.role)).toLowerCase().includes(query.trim().toLowerCase());
     return role && status && search;
   }).slice().reverse(), [events,filter,onlyState,query]);
-  const statusOptions = [...new Set(events.map(e=>e.status))];
+  const statusOptions = [...new Set(events.filter(e=>e.country===country&&e.source===DEMO_SOURCE).map(e=>e.status))];
   const exportFile = () => {
-    const rows = [["ID","Perfil","Evento","Estado","Mercado","Origem"],...filtered.map(e=>[e.id,roleLabels[e.role]||e.role,e.label,e.status,country,"SIMULACAO LOCAL"])].map(row=>row.map(safeCell).join(";")).join("\r\n");
+    const rows = [["ID","Operacao","Momento UTC","Perfil","Evento","Estado","Mercado","Origem","Valor em centimos"],...filtered.map(e=>[e.id,e.operationId,e.occurredAt||"",roleLabels[e.role]||e.role,e.label,e.status,e.country,e.source,e.amountMinor??""])].map(row=>row.map(safeCell).join(";")).join("\r\n");
     const blob = new Blob(["\uFEFF"+rows],{type:"text/csv;charset=utf-8"});
     const url = URL.createObjectURL(blob);const a=document.createElement("a");
     a.href=url;a.download="rrclub-preview-relatorio-filtrado.csv";a.click();URL.revokeObjectURL(url);
@@ -59,7 +60,7 @@ export default function PreviewReports({ events = [], country = "PT" }) {
           <th scope="col" className="px-4 py-3">Evento</th><th scope="col" className="px-4 py-3">Perfil</th><th scope="col" className="px-4 py-3">Estado</th><th scope="col" className="px-4 py-3">Mercado</th>
         </tr></thead>
         <tbody>{filtered.slice(0,visible).map(e=><tr key={e.id} className="border-t border-slate-100 align-top">
-          <td className="px-4 py-3"><strong className="text-[#203047] font-semibold">{e.label}</strong><p className="text-xs text-slate-400 mt-1">#{e.id} · origem: demo local</p></td>
+          <td className="px-4 py-3"><strong className="text-[#203047] font-semibold">{e.label}</strong><p className="text-xs text-slate-400 mt-1">Operação: {e.operationId} · {e.occurredAt ? new Date(e.occurredAt).toLocaleString("pt-PT") : "Evento inicial"}</p></td>
           <td className="px-4 py-3 text-slate-600">{roleLabels[e.role]||e.role}</td>
           <td className="px-4 py-3"><span className="inline-block rounded-full bg-[#E8F2FA] text-[#315F83] px-2.5 py-1 text-xs font-semibold">{statusNames[e.status]||e.status}</span></td>
           <td className="px-4 py-3 text-slate-600">{country}</td>
