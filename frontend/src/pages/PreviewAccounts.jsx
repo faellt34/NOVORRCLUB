@@ -3,6 +3,7 @@ import { BrandLogo } from "../components/BrandLogo";
 import PreviewInsights from "../components/PreviewInsights";
 import PreviewReports from "../components/PreviewReports";
 import PreviewQrCard from "../components/PreviewQrCard";
+import { DEMO_SOURCE, DEMO_STATUSES, deriveDemoMetrics, getPendingDemoOperation, initialDemoEvents, makeDemoEvent, toMinorUnits } from "../lib/previewData";
 import { ArrowLeft, BadgeCheck, BarChart3, Building2, CheckCircle2, ClipboardList, CreditCard, LogOut, QrCode, ShieldCheck, Smartphone, Users } from "lucide-react";
 
 const ROLES = [
@@ -11,42 +12,50 @@ const ROLES = [
   { id:"partner", name:"Parceiro", alias:"Parceiro de teste", description:"Leitura QR, validação, vendas e histórico" },
   { id:"follower", name:"Seguidor", alias:"Seguidor de teste", description:"Cupom, desconto ilustrativo e meios de pagamento" },
 ];
-const seed = [
-  {id:1, role:"influencer", label:"Campanha DEMO-INVERNO criada", status:"Demonstração"},
-  {id:2, role:"partner", label:"QR fictício pronto para teste", status:"Pendente"},
-];
+const seed = initialDemoEvents();
 
 export default function PreviewAccounts() {
   const [role,setRole] = useState(null);
   const [tab,setTab] = useState("overview");
   const [country,setCountry] = useState("PT");
-  const [events,setEvents] = useState(seed);
+  const [events,setEvents] = useState(initialDemoEvents);
   const [amount,setAmount] = useState("100");
   const [coupon,setCoupon] = useState("DEMO-INVERNO");
   const [pay,setPay] = useState("");
   const [message,setMessage] = useState("");
   const currency = country === "BR" ? "BRL" : "EUR";
   const fmt = n => new Intl.NumberFormat(country === "BR" ? "pt-BR" : "pt-PT",{style:"currency",currency}).format(Number(n)||0);
-  const val = Number(String(amount).replace(",","."));
-  const valid = Number.isFinite(val)&&val>0&&val<=100000;
-  const discount = valid ? Math.round(val*5)/100 : 0;
-  const counts = useMemo(() => ({campaigns:1, events:events.length, shares:events.filter(e=>e.role==="influencer"&&e.status==="Demonstração").length, scans:events.filter(e=>e.role==="partner"&&e.status==="Validado").length, checkouts:events.filter(e=>e.status==="Checkout simulado").length}),[events]);
-  const hasValidatedScan = counts.scans > counts.checkouts;
-  const add = (name,by,status) => setEvents(old=>[...old,{id:old.length+1,role:by,label:name,status}]);
+  const amountMinor = toMinorUnits(amount);
+  const valid = amountMinor !== null;
+  const val = valid ? amountMinor / 100 : 0;
+  const discountMinor = valid ? Math.round(amountMinor * 0.05) : 0;
+  const discount = discountMinor / 100;
+  const counts = useMemo(() => deriveDemoMetrics(events,country),[events,country]);
+  const pendingOperation = getPendingDemoOperation(events,country);
+  const hasValidatedScan = Boolean(pendingOperation);
+  const add = ({eventType,by,status,label,operationId,amountMinor:minor=null,discountMinor:disc=null}) => {
+    const id = "demo-" + (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+    const event = makeDemoEvent({id,operationId,eventType,role:by,label,status,country,amountMinor:minor,discountMinor:disc,currency});
+    setEvents(old=>[...old,event]);
+  };
   const enter = r => {setRole(r);setTab("overview");setMessage("");};
   const validate = () => {
     if (!valid || coupon.trim().toUpperCase()!=="DEMO-INVERNO") {
       setMessage("Usa o cupom DEMO-INVERNO e um valor válido maior que zero.");
       return;
     }
-    add("QR DEMO-INVERNO validado: "+fmt(val)+"; desconto ilustrativo de "+fmt(discount),"partner","Validado");
+    add({eventType:DEMO_STATUSES.scan,by:"partner",status:"Validado",
+      label:"QR DEMO-INVERNO validado: "+fmt(val)+"; desconto ilustrativo de "+fmt(discount),
+      operationId:"sale-"+(crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)),amountMinor,discountMinor});
     setPay("");
     setMessage("Validação fictícia registada no monitor. Nenhuma API foi chamada.");
   };
   const checkout = () => {
     if (!hasValidatedScan) {setMessage("Primeiro valida o QR DEMO-INVERNO no painel do parceiro.");return;}
     if (!pay) {setMessage("Seleciona uma opção de pagamento fictícia.");return;}
-    add("Escolha fictícia: "+pay+"; sem transação real","follower","Checkout simulado");
+    add({eventType:DEMO_STATUSES.checkout,by:"follower",status:"Checkout simulado",
+      label:"Escolha fictícia: "+pay+"; sem transação real",operationId:pendingOperation.operationId,
+      amountMinor:pendingOperation.amountMinor,discountMinor:pendingOperation.discountMinor});
     setMessage("Checkout simulado sem cobrar, guardar cartão ou contactar Stripe.");
   };
   const card = "rounded-2xl border border-[#DCE6EE] bg-white p-5 shadow-sm";
@@ -70,14 +79,14 @@ export default function PreviewAccounts() {
         {[["overview","Visão geral"],["qr","QR & campanhas"],["payments","Pagamentos"],["reports","Relatórios"]].map(([id,label])=><button type="button" key={id}
           role="tab" aria-selected={tab===id} onClick={()=>setTab(id)} className={"whitespace-nowrap rounded-xl border px-4 py-3 text-sm font-bold min-h-12 "+(tab===id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE]")}>{label}</button>)}
       </div>
-      {tab==="overview"&&<div className="mb-5"><PreviewInsights events={events} country={country}/></div>}
+      {tab==="overview"&&<div className="mb-5"><PreviewInsights events={events} country={country} metrics={counts}/></div>}
       {tab==="qr"&&<div className="mb-5"><PreviewQrCard country={country}/></div>}
       {tab==="payments"&&<div className="mb-5 rounded-2xl border border-[#DCE6EE] bg-white p-5 sm:p-6 shadow-sm">
         <p className="text-[11px] uppercase tracking-widest font-bold text-[#477FAE]">Estados de pagamento · demonstração</p>
         <h2 className="text-xl font-extrabold mt-1">Acompanhamento financeiro</h2>
         <p className="text-sm text-slate-600 mt-2">O fluxo atual é visual e nunca cria cobranças. Não há montantes liquidados nem repasses reais nesta prévia.</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
-          {[[ "QR validados",counts.scans ],["Aguardam checkout",Math.max(0,counts.scans-counts.checkouts)],["Checkouts simulados",counts.checkouts],["Pagamentos confirmados","—"]].map(([label,n])=>
+          {[[ "QR validados",counts.scans ],["Aguardam checkout",Math.max(0,counts.pending)],["Checkouts simulados",counts.checkouts],["Pagamentos confirmados","Não verificado"]].map(([label,n])=>
             <div key={label} className="rounded-xl bg-[#F4F7FB] p-4 min-h-[104px]"><div className="text-xs text-slate-600">{label}</div><div className="text-2xl font-extrabold mt-3">{n}</div></div>)}
         </div>
         <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-900 text-xs p-4 mt-5">Os estados “Checkout simulado” e “QR validado” não significam pagamento recebido. Para validação P5 real será necessário um backend de homologação com Stripe Test Mode.</div>
@@ -94,7 +103,7 @@ export default function PreviewAccounts() {
           <div className="flex justify-between items-center gap-2 mb-5"><div><p className="text-xs text-slate-500">Área selecionada</p><h2 className="text-xl font-extrabold">{ROLES.find(r=>r.id===role).name} · Demo</h2></div><button type="button" onClick={()=>enter(null)} className="inline-flex gap-1 items-center text-sm border rounded-xl px-3 py-2"><LogOut size={16}/> Sair</button></div>
           {role==="admin"&&<div>
             <div className="grid grid-cols-2 gap-3 mb-5">
-              {[["Campanhas",counts.campaigns],["Divulgações",counts.shares],["QR validados",counts.scans],["Checkouts fictícios",counts.checkouts]].map(([k,n])=><div key={k} className="rounded-xl bg-[#F4F7FB] p-4"><p className="text-xs text-slate-500">{k}</p><p className="text-2xl font-bold mt-1">{n}</p></div>)}
+              {[["Campanhas",counts.campaignCount],["Divulgações",counts.shares],["QR validados",counts.scans],["Checkouts fictícios",counts.checkouts]].map(([k,n])=><div key={k} className="rounded-xl bg-[#F4F7FB] p-4"><p className="text-xs text-slate-500">{k}</p><p className="text-2xl font-bold mt-1">{n}</p></div>)}
             </div>
             <p className="text-sm text-slate-600 mb-4">Indicadores calculados exclusivamente a partir dos eventos desta demonstração. Receita e comissões reais não estão disponíveis.</p>
             <h3 className="font-bold">Funções existentes no dashboard oficial</h3>
@@ -103,7 +112,8 @@ export default function PreviewAccounts() {
           {role==="influencer"&&<div>
             <div className="rounded-xl bg-[#F4F7FB] p-4 mb-4"><p className="text-xs text-slate-500">Campanha fictícia</p><h3 className="font-bold text-xl mt-1">DEMO-INVERNO</h3><p className="text-sm text-slate-600 mt-2">Exemplo de divulgação para uma campanha. Nenhum cupom real foi criado.</p></div>
             <div className="grid grid-cols-2 gap-3 mb-4"><div className="bg-white border rounded-xl p-4"><p className="text-xs text-slate-500">Cliques</p><strong>0</strong></div><div className="bg-white border rounded-xl p-4"><p className="text-xs text-slate-500">Comissões reais</p><strong>—</strong></div></div>
-            <button onClick={()=>{add("Campanha fictícia divulgada","influencer","Demonstração");setMessage("Partilha registada apenas no navegador.");}} className="rounded-xl bg-[#203047] text-white py-3 px-5 font-semibold">Simular divulgação do QR</button>
+            <button onClick={()=>{add({eventType:DEMO_STATUSES.share,by:"influencer",status:"Demonstração",
+    label:"Campanha fictícia divulgada",operationId:"share-"+(crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2))});setMessage("Partilha registada apenas no navegador.");}} className="rounded-xl bg-[#203047] text-white py-3 px-5 font-semibold">Simular divulgação do QR</button>
           </div>}
           {role==="partner"&&<div className="space-y-4">
             <div className="bg-[#F4F7FB] rounded-xl px-4 py-3 flex items-center justify-between gap-2">
@@ -129,7 +139,7 @@ export default function PreviewAccounts() {
         <aside className={card}>
           <div className="flex items-center gap-2 mb-4"><ClipboardList size={19} className="text-[#477FAE]"/><h2 className="font-extrabold">Monitor de testes</h2></div>
           <p className="text-xs text-slate-500 mb-4">Os eventos são partilhados entre os quatro perfis nesta sessão, mas não saem deste navegador.</p>
-          <button type="button" className="text-xs font-semibold text-[#477FAE] underline mb-4" onClick={()=>{setEvents(seed);setPay("");setCoupon("DEMO-INVERNO");setAmount("100");setMessage("Simulação reiniciada sem afetar nenhum utilizador.");}}>Reiniciar dados de demonstração</button>
+          <button type="button" className="text-xs font-semibold text-[#477FAE] underline mb-4" onClick={()=>{setEvents(initialDemoEvents());setPay("");setCoupon("DEMO-INVERNO");setAmount("100");setMessage("Simulação reiniciada sem afetar nenhum utilizador.");}}>Reiniciar dados de demonstração</button>
           <ol className="space-y-4">{events.slice().reverse().map(e=><li key={e.id} className="flex items-start gap-3 text-sm"><CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-1"/><div><strong>{e.label}</strong><p className="text-xs text-slate-500 mt-1">{e.role} · {e.status}</p></div></li>)}</ol>
         </aside>
       </div>}
