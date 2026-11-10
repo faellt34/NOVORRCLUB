@@ -12,13 +12,24 @@ const ROLES = [
   { id:"partner", name:"Parceiro", alias:"Parceiro de teste", description:"Leitura QR, validação, vendas e histórico" },
   { id:"follower", name:"Seguidor", alias:"Seguidor de teste", description:"Cupom, desconto ilustrativo e meios de pagamento" },
 ];
-const seed = initialDemoEvents();
+const DEMO_STORAGE_KEY = "rrclub_preview_v1_local_events";
+const loadDemoEvents = () => {
+  try {
+    const raw = window.sessionStorage.getItem(DEMO_STORAGE_KEY);
+    if (!raw) return initialDemoEvents();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length > 300) return initialDemoEvents();
+    const validated = parsed.filter(e => e && e.source === "local_demo" && ["PT","BR"].includes(e.country) && typeof e.id === "string" && typeof e.operationId === "string" && typeof e.eventType === "string" && typeof e.label === "string" && e.id.length < 120 && e.operationId.length < 120 && e.label.length < 350);
+    return validated.length === parsed.length ? validated : initialDemoEvents();
+  } catch { return initialDemoEvents(); }
+};
 
 export default function PreviewAccounts() {
   const [role,setRole] = useState(null);
   const [tab,setTab] = useState("overview");
   const [country,setCountry] = useState("PT");
-  const [events,setEvents] = useState(initialDemoEvents);
+  const [events,setEvents] = useState(loadDemoEvents);
+  React.useEffect(() => { try { window.sessionStorage.setItem(DEMO_STORAGE_KEY,JSON.stringify(events)); } catch {} },[events]);
   const [amount,setAmount] = useState("100");
   const [coupon,setCoupon] = useState("DEMO-INVERNO");
   const [pay,setPay] = useState("");
@@ -138,8 +149,8 @@ export default function PreviewAccounts() {
         </section>
         <aside className={card}>
           <div className="flex items-center gap-2 mb-4"><ClipboardList size={19} className="text-[#477FAE]"/><h2 className="font-extrabold">Monitor de testes</h2></div>
-          <p className="text-xs text-slate-500 mb-4">Os eventos são partilhados entre os quatro perfis nesta sessão, mas não saem deste navegador.</p>
-          <button type="button" className="text-xs font-semibold text-[#477FAE] underline mb-4" onClick={()=>{setEvents(initialDemoEvents());setPay("");setCoupon("DEMO-INVERNO");setAmount("100");setMessage("Simulação reiniciada sem afetar nenhum utilizador.");}}>Reiniciar dados de demonstração</button>
+          <p className="text-xs text-slate-500 mb-4">Os eventos fictícios ficam guardados apenas neste separador durante a sessão, sobrevivem à atualização da página e não são enviados para servidores.</p>
+          <button type="button" className="text-xs font-semibold text-[#477FAE] underline mb-4" onClick={()=>{setEvents(initialDemoEvents());try { window.sessionStorage.removeItem(DEMO_STORAGE_KEY); } catch {} setPay("");setCoupon("DEMO-INVERNO");setAmount("100");setMessage("Simulação reiniciada sem afetar nenhum utilizador.");}}>Reiniciar dados de demonstração</button>
           <ol className="space-y-4">{events.slice().reverse().map(e=><li key={e.id} className="flex items-start gap-3 text-sm"><CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-1"/><div><strong>{e.label}</strong><p className="text-xs text-slate-500 mt-1">{e.role} · {e.status}</p></div></li>)}</ol>
         </aside>
       </div>}
