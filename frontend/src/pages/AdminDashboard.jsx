@@ -117,8 +117,8 @@ export default function AdminDashboard() {
       <p data-testid="admin-historical-notice" role="note" className="text-xs text-slate-600">Os indicadores financeiros exibem apenas resgates associados a pagamentos Stripe confirmados em modo real. O histórico de testes e registos anteriores continua preservado, mas não integra estes totais. Comissões calculadas não comprovam repasses bancários. O estado da ligação em tempo real não certifica pagamentos, webhooks nem transferências.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KpiCard id="receita-sistema" icon={Euro} label="Valor de compras reais confirmadas" live={stats.receita} format={(v) => eur(Math.round(v))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
-        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões calculadas (não conciliadas)" live={stats.comissoes} format={(v) => eur(Math.round(v))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
+        <KpiCard id="receita-sistema" icon={Euro} label="Valor de compras reais confirmadas" live={stats.receita} format={(v) => eur(Number(v.toFixed(2)))} flash={flash.receita} trend={data.trend.revenue} period="últimos 30d vs anteriores" />
+        <KpiCard id="comissoes-agregadas" icon={HandCoins} label="Comissões calculadas (não conciliadas)" live={stats.comissoes} format={(v) => eur(Number(v.toFixed(2)))} flash={flash.comissoes} trend={data.trend.commission} period="últimos 30d vs anteriores" />
         <KpiCard id="influencers-ativos" icon={Users} label="Influencers Ativos" live={stats.influencers} />
         <KpiCard id="parceiros-ativos" icon={Store} label="Parceiros Ativos" live={stats.parceiros} flash={flash.parceiros} />
         <KpiCard id="campanhas-ativas" icon={Megaphone} label="Campanhas Ativas" live={stats.campanhas} flash={flash.campanhas} />
@@ -127,7 +127,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <KpiCard id="cupons-usados" icon={Ticket} label="Resgates com pagamento real" live={stats.usos} flash={flash.usos} trend={data.trend.count} period="últimos 30d vs anteriores" />
         <KpiCard id="cliques-total" icon={MousePointerClick} label="Cliques no cupom" live={stats.cliques} flash={flash.cliques} />
-        <KpiCard id="nao-utilizaram" icon={UserX} label="Clicaram e não usaram" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
+        <KpiCard id="nao-utilizaram" icon={UserX} label="Diferença entre cliques e resgates" live={Math.max(stats.cliques - stats.usos, 0)} flash={flash.naousou} />
         <KpiCard id="taxa-conversao" icon={Percent} label="Taxa de Conversão" live={stats.cliques ? stats.usos / stats.cliques * 100 : 0} format={(v) => `${v.toFixed(1).replace(".", ",")}%`} flash={flash.conv} />
         <KpiCard id="ticket-medio" icon={Receipt} label="Ticket médio dos resgates" live={stats.usos ? stats.receita / stats.usos : 0} format={(v) => eur(+v.toFixed(2))} flash={flash.ticket} />
       </div>
