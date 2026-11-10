@@ -4,12 +4,27 @@ export const reportCurrency = () => localStorage.getItem("rrclub_currency") === 
 export const moneyIn = (v, currency = "eur") => new Intl.NumberFormat(currency === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: currency.toUpperCase() }).format(Number(v) || 0);
 export const dashboardMoney = (v) => new Intl.NumberFormat(reportCurrency() === "brl" ? "pt-BR" : "pt-PT", { style: "currency", currency: reportCurrency().toUpperCase() }).format(Number(v) || 0);
 
-const TOKEN_KEY = "robson_token";
+const PREVIEW_MODE = process.env.REACT_APP_PREVIEW_MODE === "true";
+const TOKEN_KEY = PREVIEW_MODE ? "rrclub_preview_token" : "robson_token";
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
 
-export const api = axios.create({ baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`, withCredentials: true });
+// Em homologação, falhar de forma segura: não enviar pedidos para qualquer backend
+// até existir um serviço de teste independente, auditado e explicitamente configurado.
+export const api = axios.create({
+  baseURL: PREVIEW_MODE ? "/api" : `${process.env.REACT_APP_BACKEND_URL}/api`,
+  withCredentials: !PREVIEW_MODE,
+});
+
+api.interceptors.request.use((config) => {
+  if (PREVIEW_MODE) {
+    return Promise.reject(Object.assign(new Error("Modo de prévia: API desativada para proteger os dados oficiais."), {
+      code: "RRCLUB_PREVIEW_API_DISABLED",
+    }));
+  }
+  return config;
+});
 
 api.interceptors.request.use((config) => {
   config.headers["X-Currency"] = reportCurrency();
