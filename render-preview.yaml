@@ -1,0 +1,18 @@
+# Blueprint exclusivo para o protótipo RRClub V1.
+# Este ficheiro NÃO cria nem publica serviços automaticamente.
+# Rever custos/plano disponível antes de ativar no Render.
+services:
+  - type: web
+    name: rrclub-preview-v1
+    runtime: static
+    repo: https://github.com/faellt34/NOVORRCLUB
+    branch: preview/rrclub-v1-isolado-20261110
+    buildCommand: cd frontend && npm install --no-audit --no-fund && npm run build:preview
+    staticPublishPath: frontend/build
+    envVars:
+      - key: REACT_APP_PREVIEW_MODE
+        value: "true"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
