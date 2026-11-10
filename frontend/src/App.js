@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AppProvider, useApp } from "@/context/AppContext";
 import { I18nProvider } from "@/context/I18nContext";
@@ -52,13 +52,15 @@ const PublicOnly = () => {
 };
 
 function App() {
+  const Router = process.env.REACT_APP_PREVIEW_MODE === "true" ? HashRouter : BrowserRouter;
   return (
     <I18nProvider>
     <AppProvider>
-      <BrowserRouter>
+      <Router>
         <Routes>
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/preview-v1" element={<PreviewV1 />} />
+          {process.env.REACT_APP_PREVIEW_MODE === "true" && <Route path="/" element={<Navigate to="/preview-v1" replace />} />}
           <Route path="/c/:code" element={<PublicCoupon />} />
           <Route element={<PublicOnly />}>
             <Route path="/login" element={<Login />} />
@@ -92,7 +94,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
+      </Router>
       <Toaster position="top-right" richColors />
     </AppProvider>
     </I18nProvider>
