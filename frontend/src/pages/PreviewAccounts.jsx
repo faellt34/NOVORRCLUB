@@ -28,6 +28,7 @@ export default function PreviewAccounts() {
   const [role,setRole] = useState(null);
   const [reviewerAccess,setReviewerAccess] = useState(() => { try { return window.sessionStorage.getItem("rrclub_preview_reviewer") === "active"; } catch { return false; } });
   const [tab,setTab] = useState("overview");
+  const [auditOpen,setAuditOpen] = useState(false);
   const [country,setCountry] = useState("PT");
   const [events,setEvents] = useState(loadDemoEvents);
   React.useEffect(() => { try { window.sessionStorage.setItem(DEMO_STORAGE_KEY,JSON.stringify(events)); } catch {} },[events]);
@@ -120,15 +121,34 @@ export default function PreviewAccounts() {
         <div className="rounded-xl bg-amber-50 border border-amber-100 text-amber-900 text-xs p-4 mt-5">Os estados “Checkout simulado” e “QR validado” não significam pagamento recebido. Para validação P5 real será necessário um backend de homologação com Stripe Test Mode.</div>
       </div>}
       {tab==="reports"&&<div className="mb-5"><PreviewReports events={events} country={country}/></div>}
+      <div className="rounded-2xl border border-[#DCE6EE] bg-white p-4 sm:p-5 mb-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="text-[11px] font-bold uppercase tracking-widest text-[#477FAE]">Revisão dos dashboards originais</p>
+            <h2 className="text-lg font-extrabold mt-1">Mapa de funcionalidades e validação</h2>
+            <p className="text-xs text-slate-500 mt-1">Inventário verificado no código da RRClub. Não significa que as funcionalidades foram testadas ponta a ponta.</p></div>
+          <button type="button" aria-expanded={auditOpen} onClick={()=>setAuditOpen(v=>!v)} className="rounded-xl border border-[#B7CCE0] px-4 py-2.5 text-sm font-bold">{auditOpen?"Ocultar revisão":"Ver revisão"}</button>
+        </div>
+        {auditOpen&&<div className="grid md:grid-cols-3 gap-3 mt-5">
+          {[
+            ["Administrador",["Indicadores e evolução","Origem dos cliques","Gestão de campanhas","Auditoria de operações","Relatórios e pagamentos"]],
+            ["Parceiro",["Validar QR e valores","Atividade de QR","Histórico de operações","Campanhas disponíveis","Recebimento e integração Stripe"]],
+            ["Influenciador",["Campanhas e QR","Divulgação e materiais","Indicadores e cliques","Histórico de comissões","Pagamentos P5 verificados"]]
+          ].map(([heading,items])=><div key={heading} className="rounded-xl bg-[#F4F7FB] p-4">
+            <h3 className="font-extrabold text-[#203047]">{heading}</h3>
+            <ul className="mt-3 space-y-2">{items.map(item=><li key={item} className="text-sm text-slate-600 flex items-start gap-2"><CheckCircle2 size={15} className="mt-0.5 text-[#477FAE] shrink-0"/>{item}</li>)}</ul>
+            <p className="text-xs text-amber-800 mt-4">Código existente · validação operacional pendente</p>
+          </div>)}
+        </div>}
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-6">{ROLES.map(r=><button key={r.id} type="button" aria-pressed={role===r.id} onClick={()=>enter(r.id)}
         className={"text-left rounded-2xl border p-3 sm:p-4 min-h-[132px] transition-colors "+(role===r.id?"bg-[#203047] text-white border-[#203047]":"bg-white text-[#203047] border-[#DCE6EE] hover:border-[#477FAE]")}>
-        <div className="font-bold text-lg">{r.name}</div><div className={"text-xs mt-1 "+(role===r.id?"text-blue-100":"text-slate-500")}>{r.alias}</div>
+        <div className="font-bold text-lg">{r.name}</div>{role===r.id&&<div className="text-[11px] mt-1 font-bold uppercase tracking-wide">Painel selecionado</div>}<div className={"text-xs mt-1 "+(role===r.id?"text-blue-100":"text-slate-500")}>{r.alias}</div>
         <div className={"text-xs sm:text-sm mt-3 "+(role===r.id?"text-blue-100":"text-slate-600")}>{r.description}</div>
       </button>)}</div>
       {role===null?<div className={card}><h2 className="font-bold">Escolhe o teu perfil</h2><p className="text-sm text-slate-600 mt-2">A demonstração abre imediatamente, sem senha, e nunca utiliza contas verdadeiras. Para criar contas autenticadas será necessário um backend de homologação independente.</p></div>:
       <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(270px,1fr)] gap-5">
         <section className={card}>
-          <div className="flex justify-between items-center gap-2 mb-5"><div><p className="text-xs text-slate-500">Área selecionada</p><h2 className="text-xl font-extrabold">{ROLES.find(r=>r.id===role).name} · Demo</h2></div><button type="button" onClick={()=>enter(null)} className="inline-flex gap-1 items-center text-sm border rounded-xl px-3 py-2"><LogOut size={16}/> Sair</button></div>
+          <div className="flex justify-between items-center gap-2 mb-5"><div><p className="text-xs text-slate-500">Área selecionada · {country==="PT"?"Portugal":"Brasil"}</p><h2 className="text-xl font-extrabold">{ROLES.find(r=>r.id===role).name} · Demo</h2></div><button type="button" onClick={()=>enter(null)} className="inline-flex gap-1 items-center text-sm border rounded-xl px-3 py-2"><LogOut size={16}/> Sair</button></div>
           {role==="admin"&&<div>
             <div className="grid grid-cols-2 gap-3 mb-5">
               {[["Campanhas",counts.campaignCount],["Divulgações",counts.shares],["QR validados",counts.scans],["Checkouts fictícios",counts.checkouts]].map(([k,n])=><div key={k} className="rounded-xl bg-[#F4F7FB] p-4"><p className="text-xs text-slate-500">{k}</p><p className="text-2xl font-bold mt-1">{n}</p></div>)}
