@@ -43,8 +43,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-[#F8F9FC] relative">
-      <div className="lg:hidden absolute inset-0 overflow-hidden" data-testid="login-hero-mobile" style={{ background: "radial-gradient(ellipse 120% 90% at 50% 20%, #5B21B6 0%, #5B21B6 40%, #2A1064 60%, #08061A 80%, #08061A 100%)" }}>
+    <div className="min-h-[100dvh] grid lg:grid-cols-2 bg-[#F8F9FC] relative">
+      <div className="lg:hidden absolute inset-0 overflow-hidden pointer-events-none" data-testid="login-hero-mobile" style={{ background: "radial-gradient(ellipse 120% 90% at 50% 20%, #5B21B6 0%, #5B21B6 40%, #2A1064 60%, #08061A 80%, #08061A 100%)" }}>
         <GlobeCanvas interactive={false} />
       </div>
       <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" data-testid="login-hero" style={{ background: "radial-gradient(ellipse 85% 120% at 15% 45%, #5B21B6 0%, #5B21B6 48%, #2A1064 62%, #08061A 78%, #08061A 100%)" }}>
@@ -59,25 +59,25 @@ export default function Login() {
         <div className="relative flex items-center justify-between"><p className="text-xs text-purple-200/70">© 2026 RRclub · Lisboa · Porto · Algarve · Douro · Internacional</p><Link to="/privacidade" data-testid="login-privacy-link" className="text-xs text-slate-400 hover:text-white">{t("privacy")}</Link></div>
       </div>
 
-      <div className="flex items-center justify-center p-6 sm:p-12 relative">
-        <div className="w-full max-w-md bg-white/85 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none rounded-3xl lg:rounded-none p-6 lg:p-0 shadow-2xl lg:shadow-none mt-24 lg:mt-0" data-testid="login-panel">
+      <div className="flex items-center justify-center px-3 py-5 sm:p-12 relative">
+        <div className="w-full max-w-md bg-white/95 lg:bg-transparent backdrop-blur-md lg:backdrop-blur-none rounded-[28px] lg:rounded-none px-5 py-6 sm:p-7 lg:p-0 shadow-2xl lg:shadow-none my-8 sm:my-14 lg:my-0 border border-white/70 lg:border-0" data-testid="login-panel">
           <div className="flex justify-end mb-4"><LanguageSwitcher /></div>
-          <BrandLogo dark className="lg:hidden mb-8" />
+          <BrandLogo dark className="lg:hidden mb-5" />
           <h2 data-testid="login-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">{t("loginTitle")}</h2>
-          <p className="text-sm text-slate-500 mt-1 mb-8">{t("loginSub")}</p>
+          <p className="text-sm text-slate-500 mt-1 mb-6">{t("loginSub")}</p>
 
           <GoogleSignIn />
           <p className="text-xs text-slate-400 text-center my-4">ou entre com email</p>
           <form onSubmit={submit} className="space-y-4" data-testid="login-form">
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("email")}</label>
-              <Input data-testid="login-email-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@rrclub.online" className="h-11 rounded-xl bg-white" />
+              <Input data-testid="login-email-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@rrclub.online" className="h-12 rounded-xl bg-white text-base" />
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{t("password")}</label>
               <div className="relative">
-                <Input data-testid="login-password-input" type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="h-11 rounded-xl bg-white pr-11" />
-                <button type="button" data-testid="toggle-password-visibility" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700">
+                <Input data-testid="login-password-input" type={show ? "text" : "password"} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="h-12 rounded-xl bg-white pr-12 text-base" />
+                <button type="button" data-testid="toggle-password-visibility" onClick={() => setShow(!show)} aria-label={show ? "Ocultar palavra-passe" : "Mostrar palavra-passe"} className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 inline-flex items-center justify-center text-slate-500 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-purple-600 rounded-lg">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -86,7 +86,7 @@ export default function Login() {
             <div className="flex justify-end">
               <Link to="/esqueci-password" data-testid="forgot-password-link" className="text-xs font-semibold text-purple-700 hover:underline">{t("forgot")}</Link>
             </div>
-            <button type="submit" disabled={loading} data-testid="login-submit-button" className="w-full h-11 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press">
+            <button type="submit" disabled={loading} data-testid="login-submit-button" className="w-full h-12 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 btn-press">
               <LogIn className="w-4 h-4" /> {loading ? t("entering") : t("enter")}
             </button>
           </form>
