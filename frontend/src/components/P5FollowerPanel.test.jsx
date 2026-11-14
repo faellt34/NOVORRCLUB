@@ -90,3 +90,41 @@ test("P5 displays awaiting Stripe onboarding, not a platform error", async () =>
   expect(div.textContent).toContain("MB WAY / cartão");
   expect(api.post).toHaveBeenCalledTimes(1);
 });
+
+test("P5 continues polling after five minutes while the session remains valid", async () => {
+  jest.useFakeTimers();
+  try {
+    api.post.mockResolvedValueOnce({ data: {
+      scan_ref: "safe_scan_reference_12345678901234",
+      session_token: "private_session_token_12345678901234567",
+      expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+    } });
+    api.get.mockResolvedValue({ data: { status: "none" } });
+    await act(async () => { root.render(<P5FollowerPanel code="RR-LATE" currency="eur" />); });
+    const before = api.get.mock.calls.length;
+    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60 * 1000 + 5000); });
+    expect(api.get.mock.calls.length).toBeGreaterThan(before + 2);
+    api.get.mockResolvedValueOnce({ data: {
+      status: "pending", charge_id: "p5_late_confirmation",
+      gross_minor: 1000, discount_minor: 50, net_minor: 950, currency: "eur",
+    } });
+    await act(async () => { await jest.advanceTimersByTimeAsync(3000); });
+    expect(div.textContent).toContain("9.5 eur");
+    expect(div.querySelector('[data-testid="p5-pay-button"]')).not.toBeNull();
+    expect(api.post).toHaveBeenCalledTimes(1);
+  } finally { jest.useRealTimers(); }
+});
+
+test("P5 rechecks when the follower returns to the tab", async () => {
+  api.post.mockResolvedValueOnce({ data: {
+    scan_ref: "safe_scan_reference_12345678901234",
+    session_token: "private_session_token_12345678901234567",
+    expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+  } });
+  api.get.mockResolvedValue({ data: { status: "none" } });
+  await act(async () => { root.render(<P5FollowerPanel code="RR-RETURN" currency="eur" />); });
+  const previous = api.get.mock.calls.length;
+  await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
+  expect(api.get.mock.calls.length).toBeGreaterThanOrEqual(previous);
+  expect(api.post).toHaveBeenCalledTimes(1);
+});
