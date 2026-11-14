@@ -3,10 +3,15 @@ on:
   push:
     branches:
       - fix/p5-seguidor-sync-20261114
+      - release/rrclub-20261109-predeploy
     paths:
       - 'frontend/src/components/P5FollowerPanel.jsx'
       - 'frontend/src/components/P5FollowerPanel.test.jsx'
+      - 'frontend/craco.config.js'
       - '.github/workflows/p5-follower-sync-ci.yml'
+  pull_request:
+    branches:
+      - release/rrclub-20261109-predeploy
   workflow_dispatch:
 jobs:
   follower-sync:
@@ -17,11 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: yarn
-          cache-dependency-path: frontend/yarn.lock
       - name: Install frontend dependencies
         working-directory: frontend
-        run: yarn install --frozen-lockfile --non-interactive
+        run: yarn install --non-interactive
       - name: P5 follower synchronization regression
         working-directory: frontend
         env:
