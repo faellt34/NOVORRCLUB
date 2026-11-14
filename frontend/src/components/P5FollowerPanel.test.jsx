@@ -102,13 +102,15 @@ test("P5 continues polling after five minutes while the session remains valid", 
     api.get.mockResolvedValue({ data: { status: "none" } });
     await act(async () => { root.render(<P5FollowerPanel code="RR-LATE" currency="eur" />); });
     const before = api.get.mock.calls.length;
-    await act(async () => { await jest.advanceTimersByTimeAsync(5 * 60 * 1000 + 5000); });
+    for (let i = 0; i < 123; i += 1) {
+      await act(async () => { jest.advanceTimersByTime(2500); await Promise.resolve(); });
+    }
     expect(api.get.mock.calls.length).toBeGreaterThan(before + 2);
     api.get.mockResolvedValueOnce({ data: {
       status: "pending", charge_id: "p5_late_confirmation",
       gross_minor: 1000, discount_minor: 50, net_minor: 950, currency: "eur",
     } });
-    await act(async () => { await jest.advanceTimersByTimeAsync(3000); });
+    await act(async () => { jest.advanceTimersByTime(3000); await Promise.resolve(); });
     expect(div.textContent).toContain("9.5 eur");
     expect(div.querySelector('[data-testid="p5-pay-button"]')).not.toBeNull();
     expect(api.post).toHaveBeenCalledTimes(1);
