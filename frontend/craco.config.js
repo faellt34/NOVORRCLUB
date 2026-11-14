@@ -4,7 +4,10 @@ require("dotenv").config();
 
 // Check if we're in development/preview mode (not production build)
 // Craco sets NODE_ENV=development for start, NODE_ENV=production for build
-const isDevServer = process.env.NODE_ENV !== "production";
+// A hosted build can inherit NODE_ENV=development from the service configuration.
+// The build CLI must never load development-only React Refresh visual-edit plugins.
+const isBuildCommand = process.argv.includes("build") || process.env.npm_lifecycle_event === "build";
+const isDevServer = process.env.NODE_ENV !== "production" && !isBuildCommand;
 
 // Environment variable overrides
 const config = {

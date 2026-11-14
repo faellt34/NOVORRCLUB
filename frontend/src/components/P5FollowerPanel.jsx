@@ -57,8 +57,20 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
     if (!session?.session_token) return;
     let cancelled = false;
     let timer;
-    const started = Date.now();
+    let inFlight = false;
+    const expiresAt = Date.parse(session.expires_at);
+    const terminal = new Set(["paid", "refunded", "disputed", "failed", "expired"]);
     async function check() {
+      if (cancelled || inFlight) return;
+      // The P5 QR session lives longer than five minutes. Keep checking until
+      // the actual session expiry; otherwise a delayed merchant confirmation
+      // never reaches the follower screen.
+      if (Number.isFinite(expiresAt) && Date.now() >= expiresAt) {
+        setError("Sessão P5 expirada. Crie um novo QR para continuar.");
+        return;
+      }
+      inFlight = true;
+      let done = false;
       try {
         const { data } = await api.get(
           "/public/p5/charges/current",
@@ -67,18 +79,34 @@ export default function P5FollowerPanel({ code, currency, onPaymentStart, checko
         if (cancelled) return;
         setStatus(data);
         setError("");
-        if (["paid", "refunded", "disputed", "failed", "expired"].includes(data?.status)) return;
+        done = terminal.has(data?.status);
       } catch (e) {
         if (cancelled) return;
         setError(apiError(e));
+      } finally {
+        inFlight = false;
       }
-      if (!cancelled && Date.now() - started < 300000) {
+      if (!cancelled && !done) {
+        clearTimeout(timer);
         timer = setTimeout(check, 2500);
       }
     }
+    // Browser background tabs can throttle timers. Recheck immediately when
+    // the follower returns, without starting a duplicate concurrent request.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        clearTimeout(timer);
+        check();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
     check();
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [session?.session_token, code, pollVersion]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [session?.session_token, session?.expires_at, code, pollVersion]);
 
   const checkout = async () => {
     if (busyRef.current || !session?.session_token || !status?.charge_id) return;
