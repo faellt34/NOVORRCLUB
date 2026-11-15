@@ -1,0 +1,45 @@
+name: RRClub admin Connect sync - no-payment tests
+on:
+  push:
+    branches: [fix/rrclub-connect-sync-20261115]
+  pull_request:
+    branches: [release/rrclub-20261109-predeploy]
+    paths:
+      - 'backend/routes_admin.py'
+      - 'backend/stripe_connect_sync.py'
+      - 'backend/tests/test_stripe_connect_sync.py'
+      - '.github/workflows/rrclub-connect-sync-20261115.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-and-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile Python without importing production backend
+        run: python -m py_compile backend/routes_admin.py backend/stripe_connect_sync.py backend/tests/test_stripe_connect_sync.py
+      - name: Run isolated recipient-identity and state tests
+        run: python -m unittest discover -s backend/tests -p 'test_stripe_connect_sync.py' -v
+      - name: Assert admin role, no financial actions in sync handler
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          source = Path('backend/routes_admin.py').read_text()
+          module = ast.parse(source)
+          f = next((n for n in module.body if isinstance(n, ast.AsyncFunctionDef) and n.name == 'sync_partner_stripe'), None)
+          assert f is not None, 'sync endpoint missing'
+          body = ast.get_source_segment(source, f)
+          assert 'Depends(require_role("admin"))' in body
+          assert 'stripe.Account.retrieve' in body
+          assert 'verified_snapshot' in body and 'audit(' in body
+          assert not any(x in body for x in ['stripe.Transfer.create', 'stripe.PaymentIntent.create', 'stripe.Account.modify'])
+          print('PASS: admin only; read account; snapshot guard; audit; no Stripe payments or transfers')
+          PY
