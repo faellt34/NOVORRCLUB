@@ -210,3 +210,63 @@ async def associate_partner_account(partner_id: str, body: PartnerAccountIn, adm
         detalhe += " · reparação: " + "; ".join(notas)
     await audit('ASSOCIAÇÃO', detalhe, admin, partner_id)
     return {'ok': True, 'partner_id': partner_id, 'user_id': account['id'], 'reparacoes': notas}
+
+
+@router.post("/parceiros/{partner_id}/sync-stripe")
+async def sync_partner_stripe(partner_id: str, admin: dict = Depends(require_role("admin"))):
+    """Reconsult Stripe and refresh a *verified* partner cache; no financial writes."""
+    import asyncio
+    import os
+    import stripe
+    from stripe_connect_sync import ConnectSyncError, resolve_target, verified_snapshot
+
+    partner = await db.partners.find_one({"id": partner_id}, NO_ID)
+    if not partner:
+        raise HTTPException(status_code=404, detail="Parceiro não encontrado")
+    try:
+        account_field, account_id, key, country, currency = resolve_target(partner, os.environ)
+    except ConnectSyncError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    try:
+        # The existing account identifier comes from MongoDB, not the client.
+        account = await asyncio.wait_for(
+            asyncio.to_thread(stripe.Account.retrieve, account_id, api_key=key),
+            timeout=20,
+        )
+    except (stripe.error.StripeError, asyncio.TimeoutError) as exc:
+        # Never overwrite the cache with false/NULL after a temporary outage.
+        raise HTTPException(status_code=502, detail="Não foi possível consultar a Stripe. Nenhum estado foi alterado.") from exc
+
+    checked_at = now_iso()
+    try:
+        snapshot = verified_snapshot(partner, account, account_id, country, checked_at)
+    except ConnectSyncError as exc:
+        # Ownership/country mismatch is a hard stop; never auto-assign accounts.
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+    updated = await db.partners.update_one(
+        {"id": partner_id, account_field: account_id},
+        {"$set": snapshot},
+    )
+    if not updated.matched_count:
+        raise HTTPException(status_code=409, detail="A associação do parceiro mudou durante a verificação. Atualize a página.")
+    await audit(
+        "VERIFICAÇÃO STRIPE CONNECT",
+        f"Parceiro {partner_id}; moeda {currency}; conta {account_id};"
+        f" recebimentos prontos={snapshot['connect_ready_cached']}; sem transferência ou cobrança",
+        admin, partner_id,
+    )
+    return {
+        "ok": True,
+        "partner_id": partner_id,
+        "currency": currency,
+        "account_id": account_id,
+        "charges_enabled": snapshot["charges_enabled_cached"],
+        "payouts_enabled": snapshot["payouts_enabled_cached"],
+        "transfers_enabled": snapshot["transfers_enabled_cached"],
+        "receiving_ready": snapshot["connect_ready_cached"],
+        "last_verified_at": checked_at,
+        "payments_started": False,
+        "transfers_created": False,
+    }
