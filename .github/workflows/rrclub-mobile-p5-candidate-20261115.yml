@@ -1,0 +1,36 @@
+name: RRClub mobile P5 candidate - offline quality gate
+on:
+  push:
+    branches: [release/rrclub-mobile-p5-20261115]
+  pull_request:
+    branches: [release/rrclub-20261109-predeploy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  react-regression-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: "true"
+      REACT_APP_BACKEND_URL: https://example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install offline test dependencies
+        run: |
+          npm install --legacy-peer-deps --no-audit --no-fund
+          npm install --no-save --legacy-peer-deps --no-audit --no-fund ajv@8.17.1
+      - name: Run all frontend regression tests (no real payments)
+        run: npm test -- --watch=false --runInBand
+      - name: Compile React for pre-release review
+        env:
+          CI: "false"
+        run: npm run build
